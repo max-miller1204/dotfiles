@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# Install every CLI tool these dotfiles expect. Runs exactly once per
+# unique content hash (rerun only if this script changes).
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+{{- if eq .chezmoi.os "darwin" }}
+
+# ---- macOS --------------------------------------------------------
+if ! command -v brew >/dev/null 2>&1; then
+    log "Installing Homebrew"
+    NONINTERACTIVE=1 /bin/bash -c \
+        "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+if [[ -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -x /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+fi
+
+log "Installing packages via Homebrew"
+brew install \
+    fish git tmux neovim eza fzf zoxide starship bat fd ripgrep jq \
+    atuin mise pfetch gh gum \
+    lua-language-server marksman
+
+brew install --cask ghostty aerospace || true
+brew install --cask karabiner-elements || true
+
+{{- else if eq .chezmoi.os "linux" }}
+
+# ---- Ubuntu / Debian ----------------------------------------------
+if ! command -v apt-get >/dev/null 2>&1; then
+    echo "This bootstrap only supports apt-based Linux (Ubuntu/Debian)." >&2
+    exit 1
+fi
+
+log "Updating apt"
+sudo apt-get update -y
+
+log "Installing base apt packages"
+sudo apt-get install -y \
+    fish git tmux neovim fzf zoxide bat ripgrep jq curl wget \
+    fd-find ca-certificates gnupg build-essential clangd
+
+# Ubuntu names them batcat/fdfind — symlink to the canonical names.
+mkdir -p "$HOME/.local/bin"
+if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
+    ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+fi
+if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
+    ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+fi
+
+# eza — not in default apt repos on older Ubuntu.
+if ! command -v eza >/dev/null 2>&1; then
+    log "Installing eza from its apt repo"
+    sudo mkdir -p /etc/apt/keyrings
+    wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
+        | sudo tee /etc/apt/sources.list.d/gierens.list >/dev/null
+    sudo apt-get update -y
+    sudo apt-get install -y eza
+fi
+
+# starship
+if ! command -v starship >/dev/null 2>&1; then
+    log "Installing starship"
+    curl -sS https://starship.rs/install.sh | sh -s -- -y
+fi
+
+# atuin
+if ! command -v atuin >/dev/null 2>&1 && [[ ! -x "$HOME/.atuin/bin/atuin" ]]; then
+    log "Installing atuin"
+    curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh
+fi
+
+# mise
+if ! command -v mise >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/mise" ]]; then
+    log "Installing mise"
+    curl https://mise.run | sh
+fi
+
+# gh (GitHub CLI) — used by the gitconfig credential helper
+if ! command -v gh >/dev/null 2>&1; then
+    log "Installing gh"
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+    sudo apt-get update -y
+    sudo apt-get install -y gh
+fi
+
+# gum — used by the git worktree fish functions for confirmations
+if ! command -v gum >/dev/null 2>&1; then
+    log "Installing gum"
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    wget -qO- https://repo.charm.sh/apt/gpg.key \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+        | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+    sudo apt-get update -y
+    sudo apt-get install -y gum
+fi
+
+# marksman — markdown LSP, prebuilt linux binary from GitHub releases
+if ! command -v marksman >/dev/null 2>&1; then
+    log "Installing marksman"
+    curl -fsSL -o "$HOME/.local/bin/marksman" \
+        https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-x64
+    chmod +x "$HOME/.local/bin/marksman"
+fi
+{{- end }}
+
+# ---- Bun ----------------------------------------------------------
+if ! command -v bun >/dev/null 2>&1 && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
+    log "Installing bun"
+    curl -fsSL https://bun.sh/install | bash
+fi
+
+# ---- mise toolchains (node needed for npx / MCP / npm globals) ----
+MISE_BIN=""
+if command -v mise >/dev/null 2>&1; then
+    MISE_BIN="$(command -v mise)"
+elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    MISE_BIN="$HOME/.local/bin/mise"
+fi
+if [[ -n "$MISE_BIN" ]]; then
+    log "Installing language toolchains via mise (node, python, rust, go)"
+    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest
+fi
+
+# ---- Global npm packages (Claude Code + LSP servers) --------------
+if [[ -n "$MISE_BIN" ]]; then
+    log "Installing Claude Code + npm-based LSP servers"
+    "$MISE_BIN" exec node@lts -- npm install -g --silent \
+        @anthropic-ai/claude-code \
+        typescript-language-server \
+        pyright \
+        vscode-langservers-extracted
+fi
+
+# ---- rust-analyzer via rustup (installed by mise rust) ------------
+if [[ -n "$MISE_BIN" ]]; then
+    if "$MISE_BIN" exec rust@latest -- rustup --version >/dev/null 2>&1; then
+        log "Installing rust-analyzer (rustup component)"
+        "$MISE_BIN" exec rust@latest -- rustup component add rust-analyzer || true
+    fi
+fi
+
+# ---- Secrets directory (MCP runners read keys from here) ----------
+log "Preparing ~/.config/secrets (mode 700)"
+mkdir -p "$HOME/.config/secrets"
+chmod 700 "$HOME/.config/secrets"
+
+# ---- Make fish a login shell --------------------------------------
+FISH_PATH="$(command -v fish || true)"
+if [[ -n "$FISH_PATH" ]]; then
+    if ! grep -qx "$FISH_PATH" /etc/shells 2>/dev/null; then
+        log "Adding $FISH_PATH to /etc/shells"
+        echo "$FISH_PATH" | sudo tee -a /etc/shells >/dev/null
+    fi
+    if [[ "${SHELL:-}" != "$FISH_PATH" ]]; then
+        log "Setting fish as default shell (you may be prompted for your password)"
+        chsh -s "$FISH_PATH" || true
+    fi
+fi

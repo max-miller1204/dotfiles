@@ -26,7 +26,7 @@ if status is-interactive
     # Utilities
     alias decompress 'tar -xzf'
     alias t 'tmux attach || tmux new -s Work'
-    alias tmux-help 'bat ~/.config/tmux/cheatsheet.md'
+    alias tmux-help 'bat ~/.config/tmux/keybinds.md'
 
     # eza replaces ls if installed
     if type -q eza
@@ -49,11 +49,16 @@ if status is-interactive
     set -gx BAT_THEME ansi
 
     # -- PATH ------------------------------------------------------------
-    # ~/.bun/bin and /opt/homebrew/bin are handled by bun's and brew's own
-    # installers (they write fish integration into ~/.config/fish/conf.d/ or
-    # via shellenv). Don't duplicate them here.
 
-    fish_add_path --prepend ~/.local/bin
+    fish_add_path --prepend ~/.local/bin ~/.atuin/bin ~/.bun/bin
+
+    {{- if eq .chezmoi.os "darwin" }}
+    if test -x /opt/homebrew/bin/brew
+        /opt/homebrew/bin/brew shellenv | source
+    else if test -x /usr/local/bin/brew
+        /usr/local/bin/brew shellenv | source
+    end
+    {{- end }}
 
     # mise (cross-platform version manager for node, python, etc.)
     # Install: `brew install mise` on macOS, `curl https://mise.run | sh` on Ubuntu.

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Plain-file secret, managed outside chezmoi. On NixOS the nix flake writes it
-# via sops-nix; on Ubuntu/Mac you drop the raw key here yourself.
+# Plain-file secret, managed outside chezmoi — drop the raw key in yourself.
 secret_file="${HOME}/.config/secrets/context7_api_key"
 if [[ ! -r "$secret_file" ]]; then
   echo "Missing context7 key at $secret_file" >&2

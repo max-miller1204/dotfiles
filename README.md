@@ -1,58 +1,75 @@
 # dotfiles
 
-Chezmoi-managed dotfiles for Max. Used on Ubuntu and macOS.
-NixOS is managed separately via [myNixOS](https://github.com/max-miller1204/myNixOs).
+Chezmoi-managed dotfiles for Max. Targets **Ubuntu** and **macOS**.
+
+On first `chezmoi apply`, a `run_once_before` script installs every CLI these
+dotfiles expect (fish, tmux, neovim, eza, fzf, zoxide, starship, bat, fd,
+ripgrep, jq, atuin, mise, gh, plus Homebrew on macOS / an apt repo for eza on
+Ubuntu). A `run_once_after` script clones TPM and installs the tmux plugins.
 
 ## Bootstrap a new machine
 
-1. Install prerequisites:
-   - **Ubuntu:** `sudo apt install fish git tmux neovim eza fzf zoxide starship bat fd-find ripgrep jq atuin && curl https://mise.run | sh && curl -sfL https://get.chezmoi.io | sh`
-   - **macOS:** `brew install chezmoi fish git tmux neovim eza fzf zoxide starship bat fd ripgrep jq atuin mise pfetch`
+```sh
+# macOS: install chezmoi (brings curl along for the ride)
+brew install chezmoi
+# Ubuntu: one-liner from the chezmoi site
+sh -c "$(curl -fsSL https://get.chezmoi.io)"
 
-2. Initialize from this repo:
-   ```
-   chezmoi init max-miller1204/dotfiles
-   chezmoi apply
-   ```
+chezmoi init --apply max-miller1204/dotfiles
+```
 
-3. Set fish as default shell:
-   ```
-   chsh -s $(which fish)
-   ```
+That's it — the install scripts run during `apply` and handle the rest:
 
-4. Install tmux plugins (first run only):
-   ```
-   git clone https://github.com/tmux-plugins/tpm ~/.config/tmux/plugins/tpm
-   tmux new -s Work   # then press prefix + I to install plugins
-   ```
+- installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, neovim, eza,
+  fzf, zoxide, starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, plus
+  ghostty/aerospace/karabiner on macOS and clangd on Ubuntu
+- installs **bun** (needed for fast JS tooling and Claude Code plugins)
+- installs **language toolchains via mise**: `node@lts`, `python@latest`,
+  `rust@latest`, `go@latest`
+- installs **npm globals**: `@anthropic-ai/claude-code`,
+  `typescript-language-server`, `pyright`, `vscode-langservers-extracted`
+  (HTML/CSS/JSON/eslint LSPs)
+- installs `rust-analyzer` via rustup, plus `marksman` / `lua-language-server`
+  (Mac: brew; Linux: GitHub release binary for marksman)
+- creates `~/.config/secrets` (mode 700) for the context7 API key
+- adds fish to `/etc/shells` and sets it as your login shell
+- clones TPM, installs tmux plugins, and persists the fish Catppuccin theme to
+  universal variables
 
-5. Install fish catppuccin theme (first run only):
-   ```
-   fish -c "curl -L https://raw.githubusercontent.com/catppuccin/fish/main/themes/Catppuccin%20Mocha.theme -o ~/.config/fish/themes/Catppuccin\\ Mocha.theme; and fish_config theme save 'Catppuccin Mocha'"
-   ```
+Open a new terminal after the first run so fish picks up. You may need to log
+out/in for the shell change to take effect. If `chsh` was skipped (it can
+silently fail inside some TTYs), run it manually:
 
-## Updating
+```sh
+chsh -s "$(command -v fish)"
+```
 
-- Edit files under `~/.local/share/chezmoi/` (or wherever chezmoi's source dir is)
-- `chezmoi diff` to preview, `chezmoi apply` to write them
-- `chezmoi cd` drops you into the source repo for committing changes
+## Secrets
+
+The context7 MCP runner reads its API key from a plain file. Chezmoi does not
+manage it — drop it in yourself:
+
+```sh
+mkdir -p ~/.config/secrets && chmod 700 ~/.config/secrets
+echo -n '<context7-key>' > ~/.config/secrets/context7_api_key
+chmod 600 ~/.config/secrets/context7_api_key
+```
 
 ## What's here
 
 Cross-platform:
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
-- `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init, PATH-resolved tools)
-- `dot_config/fish/functions/*.fish` — 19 custom fish functions (compress, ga, gwf, n, open, ...)
-- `dot_config/fish/themes/catppuccin-mocha.theme`
+- `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
+- `dot_config/fish/functions/*.fish` — custom fish functions
+- `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/ghostty/config` + `themes/catppuccin-mocha`
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
-- `dot_config/stt-nix/config.toml` — hold-to-talk transcription (needs nix-installed stt-nix)
 - `dot_config/claude-code/mcp-servers.json.tmpl` + `dot_config/codex/mcp-servers.toml.tmpl` — MCP runners
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/executable_run-context7.sh` + `executable_run-youtube.sh` — MCP server launchers
+- `dot_claude/executable_run-context7.sh` — context7 MCP launcher
 - `dot_claude/plugins/lsp-servers/` — Claude Code LSP plugin manifest
 - `dot_claude/skills/spec/` — Claude skills
 
@@ -60,21 +77,12 @@ macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
 - `dot_config/aerospace/aerospace.toml`
 
-## Secrets
+Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl`
+- `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl`
 
-The MCP runner scripts read API keys from plain files at `~/.config/secrets/`:
+## Updating
 
-```
-mkdir -p ~/.config/secrets && chmod 700 ~/.config/secrets
-echo -n '<context7-key>' > ~/.config/secrets/context7_api_key && chmod 600 ~/.config/secrets/context7_api_key
-echo -n '<youtube-key>'  > ~/.config/secrets/youtube_api_key  && chmod 600 ~/.config/secrets/youtube_api_key
-```
-
-On NixOS, these are managed by sops-nix separately (keys live at `~/.config/sops-nix/secrets/`). If you want the same workflow on Ubuntu/Mac, install sops + age manually and encrypt a secrets file.
-
-## Nix coexistence
-
-This repo only manages dotfiles. Package installation and dev environments stay with Nix:
-- `nix shell nixpkgs#<pkg>` for one-off tools
-- Project flakes (`flake.nix` in a project dir) for dev environments
-- `direnv` + `nix-direnv` for auto-loading project envs
+- `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
+- `chezmoi diff` to preview, `chezmoi apply` to write changes
+- The install script is `run_once` — it only reruns if its content changes

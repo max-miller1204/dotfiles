@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Post-apply finalization: TPM + tmux plugin install, fish theme persist.
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# ---- TPM + tmux plugins -------------------------------------------
+TPM_DIR="${HOME}/.config/tmux/plugins/tpm"
+if [[ ! -d "$TPM_DIR" ]]; then
+    log "Cloning TPM"
+    git clone --depth 1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
+fi
+if command -v tmux >/dev/null 2>&1; then
+    log "Installing tmux plugins"
+    "$TPM_DIR/bin/install_plugins" >/dev/null 2>&1 || true
+fi
+
+# ---- Fish catppuccin theme: persist to universal variables --------
+FISH_PATH="$(command -v fish || true)"
+THEME_FILE="$HOME/.config/fish/themes/Catppuccin Mocha.theme"
+if [[ -n "$FISH_PATH" && -f "$THEME_FILE" ]]; then
+    log "Saving fish theme to universal variables"
+    "$FISH_PATH" -c "fish_config theme save 'Catppuccin Mocha'" || true
+fi

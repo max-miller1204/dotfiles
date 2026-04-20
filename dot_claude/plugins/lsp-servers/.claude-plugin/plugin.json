@@ -3,13 +3,6 @@
   "description": "Global language server configurations",
   "version": "1.0.0",
   "lspServers": {
-    "nix": {
-      "command": "nixd",
-      "args": [],
-      "extensionToLanguage": {
-        ".nix": "nix"
-      }
-    },
     "typescript": {
       "command": "typescript-language-server",
       "args": ["--stdio"],

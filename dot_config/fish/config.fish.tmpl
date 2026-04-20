@@ -48,6 +48,13 @@ if status is-interactive
     set -gx VISUAL nvim
     set -gx BAT_THEME ansi
 
+    # GUI password prompt for sudo -A (useful when no TTY, e.g. Claude Code `!`)
+    # Requires: ssh-askpass-gnome (Linux) — installed by bootstrap script
+    if test -x /usr/bin/ssh-askpass
+        set -gx SUDO_ASKPASS /usr/bin/ssh-askpass
+        alias sudoa 'sudo -A'
+    end
+
     # -- PATH ------------------------------------------------------------
 
     fish_add_path --prepend ~/.local/bin ~/.atuin/bin ~/.bun/bin

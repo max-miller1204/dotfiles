@@ -41,8 +41,9 @@ sudo apt-get update -y
 
 log "Installing base apt packages"
 sudo apt-get install -y \
-    fish git tmux neovim fzf zoxide bat ripgrep jq curl wget \
-    fd-find ca-certificates gnupg build-essential
+    fish git tmux zoxide bat ripgrep jq curl wget \
+    fd-find ca-certificates gnupg build-essential \
+    ssh-askpass-gnome
 
 # Ubuntu names them batcat/fdfind — symlink to the canonical names.
 mkdir -p "$HOME/.local/bin"
@@ -108,6 +109,12 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
+# neovim — snap gives us a current release; apt's is years behind
+if ! command -v nvim >/dev/null 2>&1 && command -v snap >/dev/null 2>&1; then
+    log "Installing nvim via snap (--classic)"
+    sudo snap install nvim --classic
+fi
+
 {{- end }}
 
 # ---- Bun ----------------------------------------------------------
@@ -124,8 +131,8 @@ elif [[ -x "$HOME/.local/bin/mise" ]]; then
     MISE_BIN="$HOME/.local/bin/mise"
 fi
 if [[ -n "$MISE_BIN" ]]; then
-    log "Installing language toolchains via mise (node, python, rust, go)"
-    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest
+    log "Installing toolchains via mise (node, python, rust, go, fzf)"
+    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest fzf@latest
 fi
 
 # ---- Claude Code (native installer, not npm) ----------------------

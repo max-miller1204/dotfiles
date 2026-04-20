@@ -4,8 +4,9 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu** and **macOS**.
 
 On first `chezmoi apply`, a `run_once_before` script installs every CLI these
 dotfiles expect (fish, tmux, neovim, eza, fzf, zoxide, starship, bat, fd,
-ripgrep, jq, atuin, mise, gh, plus Homebrew on macOS / an apt repo for eza on
-Ubuntu). A `run_once_after` script clones TPM and installs the tmux plugins.
+ripgrep, jq, atuin, mise, gh, plus Homebrew on macOS / an apt repo for eza
+on Ubuntu). A `run_once_after` script clones TPM and installs the tmux
+plugins.
 
 ## Bootstrap a new machine
 
@@ -22,15 +23,13 @@ That's it — the install scripts run during `apply` and handle the rest:
 
 - installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, neovim, eza,
   fzf, zoxide, starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, plus
-  ghostty/aerospace/karabiner on macOS and clangd on Ubuntu
+  ghostty/aerospace/karabiner on macOS
 - installs **bun** (needed for fast JS tooling and Claude Code plugins)
 - installs **language toolchains via mise**: `node@lts`, `python@latest`,
   `rust@latest`, `go@latest`
-- installs **npm globals**: `@anthropic-ai/claude-code`,
-  `typescript-language-server`, `pyright`, `vscode-langservers-extracted`
-  (HTML/CSS/JSON/eslint LSPs)
-- installs `rust-analyzer` via rustup, plus `marksman` / `lua-language-server`
-  (Mac: brew; Linux: GitHub release binary for marksman)
+- installs **Claude Code** via the official installer
+  (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
+  `~/.local/bin/claude` and self-updates in the background
 - creates `~/.config/secrets` (mode 700) for the context7 API key
 - adds fish to `/etc/shells` and sets it as your login shell
 - clones TPM, installs tmux plugins, and persists the fish Catppuccin theme to
@@ -70,7 +69,6 @@ Cross-platform:
 - `dot_config/claude-code/mcp-servers.json.tmpl` + `dot_config/codex/mcp-servers.toml.tmpl` — MCP runners
 - `dot_claude/settings.json` + `executable_statusline.sh`
 - `dot_claude/executable_run-context7.sh` — context7 MCP launcher
-- `dot_claude/plugins/lsp-servers/` — Claude Code LSP plugin manifest
 - `dot_claude/skills/spec/` — Claude skills
 
 macOS-only (gated via `.chezmoiignore`):

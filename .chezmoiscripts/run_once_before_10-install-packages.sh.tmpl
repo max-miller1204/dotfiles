@@ -23,8 +23,7 @@ fi
 log "Installing packages via Homebrew"
 brew install \
     fish git tmux neovim eza fzf zoxide starship bat fd ripgrep jq \
-    atuin mise pfetch gh gum \
-    lua-language-server marksman
+    atuin mise pfetch gh gum
 
 brew install --cask ghostty aerospace || true
 brew install --cask karabiner-elements || true
@@ -43,7 +42,7 @@ sudo apt-get update -y
 log "Installing base apt packages"
 sudo apt-get install -y \
     fish git tmux neovim fzf zoxide bat ripgrep jq curl wget \
-    fd-find ca-certificates gnupg build-essential clangd
+    fd-find ca-certificates gnupg build-essential
 
 # Ubuntu names them batcat/fdfind — symlink to the canonical names.
 mkdir -p "$HOME/.local/bin"
@@ -109,13 +108,6 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# marksman — markdown LSP, prebuilt linux binary from GitHub releases
-if ! command -v marksman >/dev/null 2>&1; then
-    log "Installing marksman"
-    curl -fsSL -o "$HOME/.local/bin/marksman" \
-        https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-x64
-    chmod +x "$HOME/.local/bin/marksman"
-fi
 {{- end }}
 
 # ---- Bun ----------------------------------------------------------
@@ -124,7 +116,7 @@ if ! command -v bun >/dev/null 2>&1 && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
     curl -fsSL https://bun.sh/install | bash
 fi
 
-# ---- mise toolchains (node needed for npx / MCP / npm globals) ----
+# ---- mise toolchains (node needed for npx / MCP runners) ---------
 MISE_BIN=""
 if command -v mise >/dev/null 2>&1; then
     MISE_BIN="$(command -v mise)"
@@ -136,22 +128,10 @@ if [[ -n "$MISE_BIN" ]]; then
     "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest
 fi
 
-# ---- Global npm packages (Claude Code + LSP servers) --------------
-if [[ -n "$MISE_BIN" ]]; then
-    log "Installing Claude Code + npm-based LSP servers"
-    "$MISE_BIN" exec node@lts -- npm install -g --silent \
-        @anthropic-ai/claude-code \
-        typescript-language-server \
-        pyright \
-        vscode-langservers-extracted
-fi
-
-# ---- rust-analyzer via rustup (installed by mise rust) ------------
-if [[ -n "$MISE_BIN" ]]; then
-    if "$MISE_BIN" exec rust@latest -- rustup --version >/dev/null 2>&1; then
-        log "Installing rust-analyzer (rustup component)"
-        "$MISE_BIN" exec rust@latest -- rustup component add rust-analyzer || true
-    fi
+# ---- Claude Code (native installer, not npm) ----------------------
+if ! command -v claude >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/claude" ]]; then
+    log "Installing Claude Code via official installer"
+    curl -fsSL https://claude.ai/install.sh | bash
 fi
 
 # ---- Secrets directory (MCP runners read keys from here) ----------

@@ -55,7 +55,6 @@ Cross-platform:
 - `dot_claude/executable_run-context7.sh` + `executable_run-youtube.sh` — MCP server launchers
 - `dot_claude/plugins/lsp-servers/` — Claude Code LSP plugin manifest
 - `dot_claude/skills/spec/` — Claude skills
-- `dot_npmrc.tmpl` — npm global prefix (home-dir templated)
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`

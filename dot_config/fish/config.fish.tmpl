@@ -49,18 +49,16 @@ if status is-interactive
     set -gx BAT_THEME ansi
 
     # -- PATH ------------------------------------------------------------
+    # ~/.bun/bin and /opt/homebrew/bin are handled by bun's and brew's own
+    # installers (they write fish integration into ~/.config/fish/conf.d/ or
+    # via shellenv). Don't duplicate them here.
 
-    fish_add_path --prepend ~/.bun/bin
     fish_add_path --prepend ~/.local/bin
 
 {{- if eq .chezmoi.os "darwin" }}
 
-    # macOS: Homebrew on Apple Silicon
-    if test -d /opt/homebrew/bin
-        fish_add_path --prepend /opt/homebrew/bin
-    end
-
-    # mise (version manager, brew-installed on macOS)
+    # mise (version manager, brew-installed on macOS) — no PATH add, just
+    # shell activation. Installed via: brew install mise
     if type -q mise
         mise activate fish | source
     end

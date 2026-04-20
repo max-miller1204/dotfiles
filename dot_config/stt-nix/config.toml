@@ -1,0 +1,11 @@
+[hotkey]
+enabled = true
+key = "capslock"
+mode = "hold"
+
+[output]
+paste_key = "ctrl+shift+v"
+
+[transcription]
+backend = "groq"
+language = "en"

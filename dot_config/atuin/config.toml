@@ -1,0 +1,7 @@
+auto_sync = false
+inline_height = 10
+style = "compact"
+update_check = false
+
+[theme]
+name = "catppuccin-mocha-mauve"

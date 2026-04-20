@@ -1,0 +1,9 @@
+[mcp_servers.context7]
+command = "{{ .chezmoi.homeDir }}/.claude/run-context7.sh"
+
+[mcp_servers.nixos]
+command = "nix"
+args = ["run", "github:utensils/mcp-nixos", "--"]
+
+[mcp_servers.youtube]
+command = "{{ .chezmoi.homeDir }}/.claude/run-youtube.sh"

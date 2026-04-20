@@ -1,14 +1,42 @@
 [user]
 	email = maxmiller1204@outlook.com
-	name = Max
+	name = max
+
+[alias]
+	br = branch
+	ci = commit
+	co = checkout
+	st = status
+	sync = !git stash push -u -m "wip: pre-sync" && git pull --rebase && git stash pop && git restore --source=HEAD -- flake.lock
+
+[branch]
+	sort = -committerdate
+
+[column]
+	ui = auto
+
+[commit]
+	verbose = true
+
 [credential "https://github.com"]
 	helper = !gh auth git-credential
-[credential "https://gist.github.com"]
-	helper =
-	helper = !gh auth git-credential
+
+[diff]
+	algorithm = histogram
+	colorMoved = plain
+
 [init]
 	defaultBranch = main
+
 [pull]
-	rebase = false
+	rebase = true
+
 [push]
 	autoSetupRemote = true
+
+[rerere]
+	autoupdate = true
+	enabled = true
+
+[tag]
+	sort = -version:refname

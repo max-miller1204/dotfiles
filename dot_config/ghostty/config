@@ -1,0 +1,9 @@
+background-opacity = 0.750000
+confirm-close-surface = false
+copy-on-select = clipboard
+cursor-style = block
+font-family = JetBrainsMono Nerd Font
+font-size = 13
+mouse-hide-while-typing = true
+theme = catppuccin-mocha
+window-decoration = false

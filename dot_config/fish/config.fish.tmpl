@@ -1,0 +1,103 @@
+if status is-interactive
+    # -- Aliases ---------------------------------------------------------
+
+    # Navigation
+    alias .. 'cd ..'
+    alias ... 'cd ../..'
+    alias .... 'cd ../../..'
+
+    # Git
+    alias g git
+    alias gs 'git status'
+    alias gc 'git commit'
+    alias gcm 'git commit -m'
+    alias gcam 'git commit -a -m'
+    alias gcad 'git commit -a --amend'
+    alias gl 'git log --oneline'
+    alias gp 'git push'
+
+    # Claude Code
+    alias c 'claude --plugin-dir ~/.claude/plugins/lsp-servers'
+    alias cx 'clear; claude --dangerously-skip-permissions --plugin-dir ~/.claude/plugins/lsp-servers'
+
+    # Docker
+    alias d docker
+
+    # Utilities
+    alias decompress 'tar -xzf'
+    alias t 'tmux attach || tmux new -s Work'
+    alias tmux-help 'bat ~/.config/tmux/cheatsheet.md'
+
+    # eza replaces ls if installed
+    if type -q eza
+        alias ls 'eza -lh --group-directories-first --icons=auto'
+        alias la 'ls -a'
+        alias ll 'ls -la'
+        alias lsa 'eza -lah --group-directories-first --icons=auto'
+        alias lt 'eza --tree --level=2 --long --icons --git'
+        alias lta 'eza --tree --level=2 --long --icons --git -a'
+    else
+        alias la 'ls -a'
+        alias ll 'ls -la'
+    end
+
+    # -- Environment -----------------------------------------------------
+
+    set -g fish_greeting
+    set -gx EDITOR nvim
+    set -gx VISUAL nvim
+    set -gx BAT_THEME ansi
+
+    # -- PATH ------------------------------------------------------------
+
+    fish_add_path --prepend ~/.bun/bin
+    fish_add_path --prepend ~/.npm-global/bin
+    fish_add_path --prepend ~/.local/bin
+
+{{- if eq .chezmoi.os "darwin" }}
+
+    # macOS: Homebrew on Apple Silicon
+    if test -d /opt/homebrew/bin
+        fish_add_path --prepend /opt/homebrew/bin
+    end
+
+    # mise (version manager, brew-installed on macOS)
+    if type -q mise
+        mise activate fish | source
+    end
+{{- end }}
+
+    # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----
+
+    if type -q starship
+        if test "$TERM" != dumb
+            starship init fish | source
+        end
+    end
+
+    if type -q zoxide
+        zoxide init fish | source
+    end
+
+    if type -q fzf
+        fzf --fish | source
+    end
+
+    if type -q atuin
+        atuin init fish | source
+    end
+
+    if type -q pfetch
+        pfetch
+    end
+
+    # Theme (install once via bootstrap step; see README)
+    if test -f ~/.config/fish/themes/Catppuccin\ Mocha.theme
+        fish_config theme choose "Catppuccin Mocha"
+    end
+
+    # Ghostty shell integration (set when running inside ghostty)
+    if set -q GHOSTTY_RESOURCES_DIR
+        source "$GHOSTTY_RESOURCES_DIR/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish"
+    end
+end

@@ -6,8 +6,8 @@ NixOS is managed separately via [myNixOS](https://github.com/max-miller1204/myNi
 ## Bootstrap a new machine
 
 1. Install prerequisites:
-   - **Ubuntu:** `sudo apt install fish git tmux neovim eza fzf zoxide starship bat fd-find ripgrep jq && curl -sfL https://get.chezmoi.io | sh`
-   - **macOS:** `brew install chezmoi fish git tmux neovim eza fzf zoxide starship bat fd ripgrep jq atuin pfetch`
+   - **Ubuntu:** `sudo apt install fish git tmux neovim eza fzf zoxide starship bat fd-find ripgrep jq atuin && curl https://mise.run | sh && curl -sfL https://get.chezmoi.io | sh`
+   - **macOS:** `brew install chezmoi fish git tmux neovim eza fzf zoxide starship bat fd ripgrep jq atuin mise pfetch`
 
 2. Initialize from this repo:
    ```

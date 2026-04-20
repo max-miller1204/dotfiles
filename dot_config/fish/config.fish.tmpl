@@ -55,14 +55,11 @@ if status is-interactive
 
     fish_add_path --prepend ~/.local/bin
 
-{{- if eq .chezmoi.os "darwin" }}
-
-    # mise (version manager, brew-installed on macOS) — no PATH add, just
-    # shell activation. Installed via: brew install mise
+    # mise (cross-platform version manager for node, python, etc.)
+    # Install: `brew install mise` on macOS, `curl https://mise.run | sh` on Ubuntu.
     if type -q mise
         mise activate fish | source
     end
-{{- end }}
 
     # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----
 

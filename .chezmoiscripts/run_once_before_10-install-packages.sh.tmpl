@@ -125,12 +125,17 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# neovim — stable PPA has a current release; apt's default is years behind
-if ! command -v nvim >/dev/null 2>&1; then
-    log "Installing nvim from neovim-ppa/stable"
-    sudo add-apt-repository -y ppa:neovim-ppa/stable
-    sudo apt-get update -y
-    sudo apt-get install -y neovim
+# neovim — download the official stable release tarball. Ubuntu's apt nvim is
+# years behind LazyVim's minimum, and neovim-ppa/stable currently has no noble
+# builds, so fetching the upstream tarball is the only reliable fresh source.
+if ! command -v nvim >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/nvim" ]]; then
+    log "Installing nvim from the official stable release tarball"
+    NVIM_TARBALL="$(mktemp --suffix=.tar.gz)"
+    curl -fsSL -o "$NVIM_TARBALL" \
+        "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+    mkdir -p "$HOME/.local"
+    tar -xzf "$NVIM_TARBALL" -C "$HOME/.local" --strip-components=1
+    rm -f "$NVIM_TARBALL"
 fi
 
 # ghostty — PPA has a current release; not in default apt repos
@@ -150,8 +155,9 @@ if ! command -v discord >/dev/null 2>&1; then
     rm -f "$DISCORD_DEB"
 fi
 
-# voquill — vendor apt repo + package install
-if ! command -v voquill >/dev/null 2>&1; then
+# voquill — vendor apt repo + package install. The installed binary is
+# voquill-desktop, so guard on the dpkg package state rather than a command name.
+if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
     log "Installing voquill"
     curl -fsSL https://voquill.github.io/apt/install.sh | bash
 fi

@@ -125,19 +125,6 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# neovim — download the official stable release tarball. Ubuntu's apt nvim is
-# years behind LazyVim's minimum, and neovim-ppa/stable currently has no noble
-# builds, so fetching the upstream tarball is the only reliable fresh source.
-if ! command -v nvim >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/nvim" ]]; then
-    log "Installing nvim from the official stable release tarball"
-    NVIM_TARBALL="$(mktemp --suffix=.tar.gz)"
-    curl -fsSL -o "$NVIM_TARBALL" \
-        "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
-    mkdir -p "$HOME/.local"
-    tar -xzf "$NVIM_TARBALL" -C "$HOME/.local" --strip-components=1
-    rm -f "$NVIM_TARBALL"
-fi
-
 # ghostty — PPA has a current release; not in default apt repos
 if ! command -v ghostty >/dev/null 2>&1; then
     log "Installing ghostty from mkasberg/ghostty-ubuntu"
@@ -217,8 +204,10 @@ elif [[ -x "$HOME/.local/bin/mise" ]]; then
     MISE_BIN="$HOME/.local/bin/mise"
 fi
 if [[ -n "$MISE_BIN" ]]; then
-    log "Installing toolchains via mise (node, python, rust, go, fzf, bun)"
-    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest fzf@latest bun@latest
+    log "Installing toolchains via mise (node, python, rust, go, fzf, bun, neovim)"
+    "$MISE_BIN" use -g \
+        node@lts python@latest rust@latest go@latest \
+        fzf@latest bun@latest neovim@latest
 fi
 
 # ---- Nix (Determinate installer) ----------------------------------

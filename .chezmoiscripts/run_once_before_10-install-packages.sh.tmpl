@@ -43,7 +43,7 @@ log "Installing base apt packages"
 sudo apt-get install -y \
     fish git tmux zoxide bat ripgrep jq curl wget \
     fd-find ca-certificates gnupg build-essential \
-    zenity
+    software-properties-common zenity
 
 # Ubuntu names them batcat/fdfind — symlink to the canonical names.
 mkdir -p "$HOME/.local/bin"
@@ -117,10 +117,12 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# neovim — snap gives us a current release; apt's is years behind
-if ! command -v nvim >/dev/null 2>&1 && command -v snap >/dev/null 2>&1; then
-    log "Installing nvim via snap (--classic)"
-    sudo snap install nvim --classic
+# neovim — stable PPA has a current release; apt's default is years behind
+if ! command -v nvim >/dev/null 2>&1; then
+    log "Installing nvim from neovim-ppa/stable"
+    sudo add-apt-repository -y ppa:neovim-ppa/stable
+    sudo apt-get update -y
+    sudo apt-get install -y neovim
 fi
 
 # voquill — vendor apt repo + package install
@@ -131,12 +133,6 @@ fi
 
 {{- end }}
 
-# ---- Bun ----------------------------------------------------------
-if ! command -v bun >/dev/null 2>&1 && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-    log "Installing bun"
-    curl -fsSL https://bun.sh/install | bash
-fi
-
 # ---- mise toolchains (node needed for npx / MCP runners) ---------
 MISE_BIN=""
 if command -v mise >/dev/null 2>&1; then
@@ -145,8 +141,8 @@ elif [[ -x "$HOME/.local/bin/mise" ]]; then
     MISE_BIN="$HOME/.local/bin/mise"
 fi
 if [[ -n "$MISE_BIN" ]]; then
-    log "Installing toolchains via mise (node, python, rust, go, fzf)"
-    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest fzf@latest
+    log "Installing toolchains via mise (node, python, rust, go, fzf, bun)"
+    "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest fzf@latest bun@latest
 fi
 
 # ---- Nix (Determinate installer) ----------------------------------

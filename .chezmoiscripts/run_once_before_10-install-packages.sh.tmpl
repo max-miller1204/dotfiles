@@ -97,6 +97,14 @@ if ! command -v gh >/dev/null 2>&1; then
     sudo apt-get install -y gh
 fi
 
+# pfetch — tiny system info fetcher printed at fish startup
+if ! command -v pfetch >/dev/null 2>&1; then
+    log "Installing pfetch"
+    curl -fsSL https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch \
+        -o "$HOME/.local/bin/pfetch"
+    chmod +x "$HOME/.local/bin/pfetch"
+fi
+
 # gum — used by the git worktree fish functions for confirmations
 if ! command -v gum >/dev/null 2>&1; then
     log "Installing gum"
@@ -133,6 +141,12 @@ fi
 if [[ -n "$MISE_BIN" ]]; then
     log "Installing toolchains via mise (node, python, rust, go, fzf)"
     "$MISE_BIN" use -g node@lts python@latest rust@latest go@latest fzf@latest
+fi
+
+# ---- Nix (Determinate installer) ----------------------------------
+if ! command -v nix >/dev/null 2>&1 && [[ ! -d /nix ]]; then
+    log "Installing Nix via Determinate installer"
+    curl -fsSL https://install.determinate.systems/nix | sh -s -- install --no-confirm
 fi
 
 # ---- Claude Code (native installer, not npm) ----------------------

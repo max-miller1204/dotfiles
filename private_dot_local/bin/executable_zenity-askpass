@@ -1,0 +1,4 @@
+#!/bin/sh
+# Minimal askpass wrapper using zenity. No keyboard grab → no GNOME
+# "Allow inhibiting shortcuts" prompt. Used via SUDO_ASKPASS.
+exec zenity --password --title="${*:-sudo password}" 2>/dev/null

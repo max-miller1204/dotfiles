@@ -43,7 +43,7 @@ log "Installing base apt packages"
 sudo apt-get install -y \
     fish git tmux zoxide bat ripgrep jq curl wget \
     fd-find ca-certificates gnupg build-essential \
-    ssh-askpass-gnome
+    zenity
 
 # Ubuntu names them batcat/fdfind — symlink to the canonical names.
 mkdir -p "$HOME/.local/bin"

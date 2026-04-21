@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Sync managed [mcp_servers.*] sections into ~/.codex/config.toml.
+# Strips any existing managed sections, then appends the staging TOML.
+#
+# staging hash: {{ include "dot_config/codex/mcp-servers.toml.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+CODEX_CONFIG="${HOME}/.codex/config.toml"
+MCP_SOURCE="${HOME}/.config/codex/mcp-servers.toml"
+MANAGED_RE="{{ .managedMcpNames | join "|" }}"
+
+[ -r "$MCP_SOURCE" ] || { echo "staging file missing: $MCP_SOURCE" >&2; exit 1; }
+
+mkdir -p "$(dirname "$CODEX_CONFIG")"
+[ -f "$CODEX_CONFIG" ] || : > "$CODEX_CONFIG"
+
+awk -v re="^\\[mcp_servers\\.(${MANAGED_RE})\\]$" '
+  BEGIN { skip = 0 }
+  $0 ~ re { skip = 1; next }
+  /^\[/   { skip = 0 }
+  !skip   { print }
+' "$CODEX_CONFIG" > "$CODEX_CONFIG.tmp"
+
+# Ensure a blank line between existing content and our appended sections.
+if [ -s "$CODEX_CONFIG.tmp" ] && [ -n "$(tail -c1 "$CODEX_CONFIG.tmp")" ]; then
+  printf '\n' >> "$CODEX_CONFIG.tmp"
+fi
+
+cat "$MCP_SOURCE" >> "$CODEX_CONFIG.tmp"
+mv "$CODEX_CONFIG.tmp" "$CODEX_CONFIG"
+
+echo "Synced MCP servers into ~/.codex/config.toml"

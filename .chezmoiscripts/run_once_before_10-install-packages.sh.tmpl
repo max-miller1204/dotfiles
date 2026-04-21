@@ -30,6 +30,7 @@ brew install --cask karabiner-elements || true
 brew install --cask discord || true
 brew install --cask zed || true
 brew install --cask voquill/voquill/voquill-desktop || true
+brew install --cask zoom || true
 
 {{- else if eq .chezmoi.os "linux" }}
 
@@ -155,6 +156,15 @@ fi
 if ! command -v zed >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/zed" ]]; then
     log "Installing zed via the official installer"
     curl -f https://zed.dev/install.sh | sh
+fi
+
+# zoom — no apt repo; grab the latest .deb and let apt resolve deps
+if ! command -v zoom >/dev/null 2>&1; then
+    log "Installing zoom from the official .deb"
+    ZOOM_DEB="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$ZOOM_DEB" "https://zoom.us/client/latest/zoom_amd64.deb"
+    sudo apt-get install -y "$ZOOM_DEB"
+    rm -f "$ZOOM_DEB"
 fi
 
 {{- end }}

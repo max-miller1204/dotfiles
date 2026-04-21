@@ -4,9 +4,6 @@ on:
   push:
   pull_request:
 
-env:
-  CHEZMOI_SOURCE_DIR: ${{ github.workspace }}
-
 jobs:
   shellcheck:
     runs-on: ubuntu-latest
@@ -18,16 +15,16 @@ jobs:
       - name: Shellcheck plain scripts
         run: |
           set -euo pipefail
-          shellcheck -s bash \
+          shellcheck --severity=error -s bash \
             dot_claude/executable_run-context7.sh \
             dot_claude/executable_statusline.sh
-          shellcheck -s sh private_dot_local/bin/executable_zenity-askpass
+          shellcheck --severity=error -s sh private_dot_local/bin/executable_zenity-askpass
       - name: Shellcheck rendered script templates
         run: |
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            chezmoi execute-template < "$f" | shellcheck -s bash -
+            chezmoi execute-template < "$f" | shellcheck --severity=error -s bash -
             echo "::endgroup::"
           done < <(find .chezmoiscripts -name '*.sh.tmpl' -print0)
 

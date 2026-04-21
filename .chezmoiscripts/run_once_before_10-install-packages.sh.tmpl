@@ -27,6 +27,7 @@ brew install \
 
 brew install --cask ghostty aerospace || true
 brew install --cask karabiner-elements || true
+brew install --cask discord || true
 
 {{- else if eq .chezmoi.os "linux" }}
 
@@ -131,6 +132,15 @@ if ! command -v ghostty >/dev/null 2>&1; then
     sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu
     sudo apt-get update -y
     sudo apt-get install -y ghostty
+fi
+
+# discord — no official apt repo; grab the latest .deb and let apt resolve deps
+if ! command -v discord >/dev/null 2>&1; then
+    log "Installing discord from the official .deb"
+    DISCORD_DEB="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
+    sudo apt-get install -y "$DISCORD_DEB"
+    rm -f "$DISCORD_DEB"
 fi
 
 # voquill — vendor apt repo + package install

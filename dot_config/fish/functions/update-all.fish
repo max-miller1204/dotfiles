@@ -1,0 +1,26 @@
+function update-all --description 'Update every package source this dotfiles repo installs'
+    set -l section (set_color --bold cyan)
+    set -l reset (set_color normal)
+
+    echo "$section==> apt$reset"
+    sudo apt update
+    and sudo apt upgrade -y
+    and sudo apt autoremove -y
+
+    echo "$section==> mise$reset"
+    mise upgrade
+
+    if command -q flatpak
+        echo "$section==> flatpak$reset"
+        flatpak update -y
+    end
+
+    echo "$section==> chezmoi$reset"
+    chezmoi upgrade
+    and chezmoi update
+
+    if test -x "$HOME/.atuin/bin/atuin-update"
+        echo "$section==> atuin$reset"
+        "$HOME/.atuin/bin/atuin-update"
+    end
+end

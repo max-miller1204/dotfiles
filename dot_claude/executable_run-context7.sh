@@ -9,5 +9,6 @@ if [[ ! -r "$secret_file" ]]; then
   exit 1
 fi
 
-export CONTEXT7_API_KEY="$(tr -d '\n' < "$secret_file")"
+CONTEXT7_API_KEY="$(tr -d '\n' < "$secret_file")"
+export CONTEXT7_API_KEY
 exec npx -y @upstash/context7-mcp "$@"

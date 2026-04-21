@@ -25,10 +25,15 @@ runs:
         mkdir -p "$HOME/.config/chezmoi"
         age-keygen -o "$HOME/.config/chezmoi/age-key.txt"
 
-    - name: Initialize chezmoi config from source
+    - name: Symlink workspace as chezmoi source dir
       shell: bash
-      env:
-        CHEZMOI_SOURCE_DIR: ${{ github.workspace }}
       run: |
         set -euo pipefail
-        "$HOME/.local/bin/chezmoi" init --source="$GITHUB_WORKSPACE"
+        mkdir -p "$HOME/.local/share"
+        ln -sfn "$GITHUB_WORKSPACE" "$HOME/.local/share/chezmoi"
+
+    - name: Initialize chezmoi config
+      shell: bash
+      run: |
+        set -euo pipefail
+        chezmoi init

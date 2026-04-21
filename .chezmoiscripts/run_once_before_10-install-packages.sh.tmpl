@@ -28,6 +28,8 @@ brew install \
 brew install --cask ghostty aerospace || true
 brew install --cask karabiner-elements || true
 brew install --cask discord || true
+brew install --cask zed || true
+brew install --cask voquill/voquill/voquill-desktop || true
 
 {{- else if eq .chezmoi.os "linux" }}
 
@@ -147,6 +149,12 @@ fi
 if ! command -v voquill >/dev/null 2>&1; then
     log "Installing voquill"
     curl -fsSL https://voquill.github.io/apt/install.sh | bash
+fi
+
+# zed — official installer drops the binary in ~/.local/bin (no apt repo)
+if ! command -v zed >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/zed" ]]; then
+    log "Installing zed via the official installer"
+    curl -f https://zed.dev/install.sh | sh
 fi
 
 {{- end }}

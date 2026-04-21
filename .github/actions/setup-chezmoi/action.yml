@@ -1,0 +1,39 @@
+name: Set up chezmoi
+description: Install chezmoi + age, generate a throwaway age key, and initialize chezmoi from the checked-out source.
+
+runs:
+  using: composite
+  steps:
+    - name: Install age
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq age
+
+    - name: Install chezmoi
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/bin"
+        sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Generate throwaway age key
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.config/chezmoi"
+        age-keygen -o "$HOME/.config/chezmoi/age-key.txt"
+
+    - name: Symlink workspace as chezmoi source dir
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/share"
+        ln -sfn "$GITHUB_WORKSPACE" "$HOME/.local/share/chezmoi"
+
+    - name: Initialize chezmoi config
+      shell: bash
+      run: |
+        set -euo pipefail
+        chezmoi init

@@ -123,6 +123,12 @@ if ! command -v nvim >/dev/null 2>&1 && command -v snap >/dev/null 2>&1; then
     sudo snap install nvim --classic
 fi
 
+# voquill — vendor apt repo + package install
+if ! command -v voquill >/dev/null 2>&1; then
+    log "Installing voquill"
+    curl -fsSL https://voquill.github.io/apt/install.sh | bash
+fi
+
 {{- end }}
 
 # ---- Bun ----------------------------------------------------------

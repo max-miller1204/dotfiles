@@ -1,0 +1,107 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  CHEZMOI_SOURCE_DIR: ${{ github.workspace }}
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-chezmoi
+      - name: Install shellcheck
+        run: sudo apt-get install -y -qq shellcheck
+      - name: Shellcheck plain scripts
+        run: |
+          set -euo pipefail
+          shellcheck -s bash \
+            dot_claude/executable_run-context7.sh \
+            dot_claude/executable_statusline.sh
+          shellcheck -s sh private_dot_local/bin/executable_zenity-askpass
+      - name: Shellcheck rendered script templates
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            chezmoi execute-template < "$f" | shellcheck -s bash -
+            echo "::endgroup::"
+          done < <(find .chezmoiscripts -name '*.sh.tmpl' -print0)
+
+  fish-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-chezmoi
+      - name: Install fish
+        run: sudo apt-get install -y -qq fish
+      - name: fish -n on plain fish files
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            fish -n "$f"
+            echo "::endgroup::"
+          done < <(find dot_config/fish -name '*.fish' -print0)
+      - name: fish -n on rendered fish templates
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            tmp=$(mktemp --suffix=.fish)
+            chezmoi execute-template < "$f" > "$tmp"
+            fish -n "$tmp"
+            rm -f "$tmp"
+            echo "::endgroup::"
+          done < <(find dot_config/fish -name '*.fish.tmpl' -print0)
+
+  config-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-chezmoi
+      - name: Install jq
+        run: sudo apt-get install -y -qq jq
+      - name: Validate TOML files
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f"
+            echo "::endgroup::"
+          done < <(find . -name '*.toml' ! -path './.git/*' -print0)
+      - name: Validate JSON files
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            jq empty "$f"
+            echo "::endgroup::"
+          done < <(find . -name '*.json' ! -path './.git/*' -print0)
+      - name: Validate rendered TOML/JSON templates
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            echo "::group::$f"
+            rendered=$(chezmoi execute-template < "$f")
+            case "$f" in
+              *.toml.tmpl)
+                printf '%s' "$rendered" | python3 -c 'import sys, tomllib; tomllib.load(sys.stdin.buffer)'
+                ;;
+              *.json.tmpl)
+                printf '%s' "$rendered" | jq empty
+                ;;
+            esac
+            echo "::endgroup::"
+          done < <(find . \( -name '*.toml.tmpl' -o -name '*.json.tmpl' \) ! -path './.git/*' -print0)
+
+  chezmoi-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-chezmoi
+      - name: chezmoi apply --dry-run
+        run: chezmoi apply --dry-run --verbose --exclude=encrypted,scripts

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Sync managed MCP servers into ~/.claude.json at user scope via the
+# official `claude mcp` CLI. Re-runs whenever the staging template changes.
+#
+# staging hash: {{ include "dot_config/claude-code/mcp-servers.json.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+MCP_SOURCE="${HOME}/.config/claude-code/mcp-servers.json"
+MANAGED=({{- range .managedMcpNames }} "{{ . }}"{{- end }})
+
+command -v claude >/dev/null || { echo "claude CLI required on PATH" >&2; exit 1; }
+command -v jq     >/dev/null || { echo "jq required on PATH"        >&2; exit 1; }
+[ -r "$MCP_SOURCE" ] || { echo "staging file missing: $MCP_SOURCE" >&2; exit 1; }
+
+for name in "${MANAGED[@]}"; do
+  claude mcp remove --scope user "$name" >/dev/null 2>&1 || true
+done
+
+jq -r '.mcpServers | to_entries[] | [.key, (.value | tojson)] | @tsv' "$MCP_SOURCE" \
+  | while IFS=$'\t' read -r name json; do
+      claude mcp add-json --scope user "$name" "$json" >/dev/null
+      printf '  + %s\n' "$name"
+    done
+
+echo "Synced MCP servers into ~/.claude.json"

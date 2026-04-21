@@ -31,6 +31,7 @@ brew install --cask discord || true
 brew install --cask zed || true
 brew install --cask voquill/voquill/voquill-desktop || true
 brew install --cask zoom || true
+brew install --cask anki obsidian spotify || true
 
 {{- else if eq .chezmoi.os "linux" }}
 
@@ -165,6 +166,36 @@ if ! command -v zoom >/dev/null 2>&1; then
     curl -fsSL -o "$ZOOM_DEB" "https://zoom.us/client/latest/zoom_amd64.deb"
     sudo apt-get install -y "$ZOOM_DEB"
     rm -f "$ZOOM_DEB"
+fi
+
+# flatpak + flathub — needed for anki and spotify
+if ! command -v flatpak >/dev/null 2>&1; then
+    log "Installing flatpak"
+    sudo apt-get install -y flatpak
+fi
+sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+# anki — flatpak from flathub
+if ! flatpak info net.ankiweb.Anki >/dev/null 2>&1; then
+    log "Installing anki via flatpak"
+    sudo flatpak install -y flathub net.ankiweb.Anki
+fi
+
+# spotify — flatpak from flathub
+if ! flatpak info com.spotify.Client >/dev/null 2>&1; then
+    log "Installing spotify via flatpak"
+    sudo flatpak install -y flathub com.spotify.Client
+fi
+
+# obsidian — no apt repo; fetch latest .deb from the GitHub releases
+if ! command -v obsidian >/dev/null 2>&1; then
+    log "Installing obsidian from the latest GitHub .deb"
+    OBSIDIAN_DEB_URL="$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest \
+        | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | .browser_download_url' | head -n1)"
+    OBSIDIAN_DEB="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$OBSIDIAN_DEB" "$OBSIDIAN_DEB_URL"
+    sudo apt-get install -y "$OBSIDIAN_DEB"
+    rm -f "$OBSIDIAN_DEB"
 fi
 
 {{- end }}

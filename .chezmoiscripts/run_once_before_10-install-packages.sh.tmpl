@@ -133,6 +133,15 @@ if ! command -v ghostty >/dev/null 2>&1; then
     sudo apt-get install -y ghostty
 fi
 
+# discord — no official apt repo; grab the latest .deb and let apt resolve deps
+if ! command -v discord >/dev/null 2>&1; then
+    log "Installing discord from the official .deb"
+    DISCORD_DEB="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
+    sudo apt-get install -y "$DISCORD_DEB"
+    rm -f "$DISCORD_DEB"
+fi
+
 # voquill — vendor apt repo + package install
 if ! command -v voquill >/dev/null 2>&1; then
     log "Installing voquill"

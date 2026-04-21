@@ -1,1 +1,14 @@
-{"mcpServers":{"context7":{"args":[],"command":"{{ .chezmoi.homeDir }}/.claude/run-context7.sh","type":"stdio"}}}
+{
+  "mcpServers": {
+    "nixos": {
+      "type": "stdio",
+      "command": "{{ .chezmoi.homeDir }}/.local/share/mise/shims/uvx",
+      "args": ["mcp-nixos"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "{{ .chezmoi.homeDir }}/.claude/run-context7.sh",
+      "args": []
+    }
+  }
+}

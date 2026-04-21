@@ -33,7 +33,7 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
-- creates `~/.config/secrets` (mode 700) for the context7 API key
+- creates `~/.config/secrets` (mode 700) — chezmoi also manages this dir via the `private_secrets/` source, but the bootstrap keeps a fallback mkdir so the context7 launcher script can't blow up before the first apply
 - adds fish to `/etc/shells` and sets it as your login shell
 - clones TPM and installs tmux plugins
 - drops the LazyVim starter into `~/.config/nvim` if nothing's there yet
@@ -46,16 +46,61 @@ silently fail inside some TTYs), run it manually:
 chsh -s "$(command -v fish)"
 ```
 
-## Secrets
+## Secrets (age-encrypted, committed to git)
 
-The context7 MCP runner reads its API key from a plain file. Chezmoi does not
-manage it — drop it in yourself:
+Secrets are encrypted with [age](https://github.com/FiloSottile/age) using the
+recipient declared in `.chezmoi.toml.tmpl`. Encrypted files live under
+`encrypted_private_dot_config/private_secrets/` in the source tree and decrypt
+to `~/.config/secrets/` at `chezmoi apply` time.
+
+### First-time setup on a new machine
+
+1. Install `age` (the bootstrap script pulls it in via apt/brew on first run,
+   but on a brand-new box you can install it manually first).
+
+2. Put the age **identity** (private key) at `~/.config/chezmoi/age-key.txt`,
+   mode 600. On the machine that already has it, just copy it over. On a
+   fresh key, generate one:
+
+   ```sh
+   mkdir -p ~/.config/chezmoi && chmod 700 ~/.config/chezmoi
+   age-keygen -o ~/.config/chezmoi/age-key.txt
+   chmod 600 ~/.config/chezmoi/age-key.txt
+   # Back up the AGE-SECRET-KEY-1… line to a password manager!
+   # Then paste the public key into .chezmoi.toml.tmpl's [age] recipient field.
+   ```
+
+3. Run `chezmoi init` once to render `.chezmoi.toml.tmpl` into
+   `~/.config/chezmoi/chezmoi.toml` (it wires the identity path + recipient).
+
+4. `chezmoi apply` — existing encrypted secrets decrypt into
+   `~/.config/secrets/`.
+
+### Adding or rotating a secret
+
+Place the plaintext value on disk, then:
 
 ```sh
-mkdir -p ~/.config/secrets && chmod 700 ~/.config/secrets
-echo -n '<context7-key>' > ~/.config/secrets/context7_api_key
-chmod 600 ~/.config/secrets/context7_api_key
+# Adds the file to chezmoi, encrypted-in-place in the source tree.
+chezmoi add --encrypt ~/.config/secrets/context7_api_key
 ```
+
+Commit the resulting `encrypted_*` blob. Never commit the plaintext.
+
+## MCP servers (Claude Code + Codex)
+
+Declared once in `dot_config/claude-code/mcp-servers.json.tmpl` and
+`dot_config/codex/mcp-servers.toml.tmpl` — these are staging files. On every
+`chezmoi apply` where either changes, a `run_onchange_after_*` script syncs
+them in place:
+
+- `~/.claude.json` (user scope) — via `claude mcp remove` + `claude mcp add-json`
+- `~/.codex/config.toml` — via awk-strip + append
+
+Managed server names are listed in `.chezmoi.toml.tmpl` under
+`[data] managedMcpNames`. The sync scripts only touch those names, so anything
+else you've added manually in `~/.claude.json` or `~/.codex/config.toml` is
+preserved. Verify with `claude mcp list`.
 
 ## What's here
 
@@ -69,10 +114,12 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
-- `dot_config/claude-code/mcp-servers.json.tmpl` — MCP runners for Claude Code
+- `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
+- `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/executable_run-context7.sh` — context7 MCP launcher
+- `dot_claude/executable_run-context7.sh` — context7 MCP launcher (reads age-decrypted key from `~/.config/secrets/context7_api_key`)
 - `dot_claude/skills/spec/` — Claude skills
+- `encrypted_private_dot_config/private_secrets/encrypted_context7_api_key` — age-encrypted API key, decrypts on apply
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
@@ -82,6 +129,8 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
+- `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
+- `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 
 ## Updating
 

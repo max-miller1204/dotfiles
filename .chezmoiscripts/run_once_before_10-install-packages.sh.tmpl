@@ -29,6 +29,7 @@ brew install \
 brew install brevdev/homebrew-brev/brev || true
 
 brew install --cask firefox || true
+brew install --cask google-chrome || true
 brew install --cask ghostty || true
 brew install --cask nikitabobko/tap/aerospace || true
 brew install --cask karabiner-elements || true
@@ -150,6 +151,16 @@ if ! command -v discord >/dev/null 2>&1; then
     curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
     sudo apt-get install -y "$DISCORD_DEB"
     rm -f "$DISCORD_DEB"
+fi
+
+# google-chrome — grab the official .deb; it also adds Google's apt repo so
+# future updates flow through `apt-get upgrade`.
+if ! command -v google-chrome >/dev/null 2>&1; then
+    log "Installing google-chrome from the official .deb"
+    CHROME_DEB="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$CHROME_DEB" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+    sudo apt-get install -y "$CHROME_DEB"
+    rm -f "$CHROME_DEB"
 fi
 
 # voquill — vendor apt repo + package install. The installed binary is

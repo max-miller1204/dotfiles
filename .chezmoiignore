@@ -1,4 +1,5 @@
 README.md
+raycast-export
 
 {{- if eq .chezmoi.os "darwin" }}
 .local/bin/zenity-askpass

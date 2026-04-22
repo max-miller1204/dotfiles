@@ -19,6 +19,8 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
+> **Migrating from an existing Mac?** See [Migrating to a new Mac](#migrating-to-a-new-mac) for the pre/post-migration checklist (age key, Raycast re-export, SSH, etc.) before running the commands above.
+
 That's it — the install scripts run during `apply` and handle the rest:
 
 - installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, eza, zoxide,
@@ -159,6 +161,104 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
+
+## Migrating to a new Mac
+
+The bootstrap above handles packages and dotfiles. A few things live outside
+the repo and need manual hand-off.
+
+### Before you leave the old Mac
+
+1. **Back up the age identity** — required to decrypt any `private_secrets/*`
+   on the new machine. Without it, `chezmoi apply` fails on encrypted files.
+
+   ```sh
+   cp ~/.config/chezmoi/age-key.txt ~/Desktop/age-key.txt   # or password manager / iCloud / USB
+   ```
+
+2. **Commit and push anything in flight** in this repo:
+
+   ```sh
+   chezmoi cd
+   git status && git push
+   ```
+
+3. **Re-export Raycast** if you've changed any preferences, hotkeys, quicklinks,
+   or Snippets since the last commit — the snapshot is plaintext under
+   `raycast-export/raycast.rayconfig` and is the only copy of your Raycast
+   state the new Mac will see:
+
+   ```sh
+   # Raycast → Settings → Advanced → Export → overwrite raycast-export/raycast.rayconfig
+   chezmoi cd
+   git add raycast-export/raycast.rayconfig && git commit -m "raycast: snapshot" && git push
+   ```
+
+4. **Back up anything not in this repo** you actually want: `~/.ssh/`,
+   `~/.gnupg/` (if you sign commits), Obsidian vaults, Anki collections,
+   shell history if you don't use Atuin sync, app-specific state you care
+   about. This repo doesn't manage any of that.
+
+### On the new Mac
+
+1. **Install Xcode Command Line Tools** (Homebrew's installer will trigger
+   this automatically on first `brew install`, but doing it up front avoids
+   a GUI popup mid-bootstrap):
+
+   ```sh
+   xcode-select --install
+   ```
+
+2. **Restore the age identity** before running chezmoi, so the first apply
+   can decrypt secrets:
+
+   ```sh
+   mkdir -p ~/.config/chezmoi && chmod 700 ~/.config/chezmoi
+   cp /path/to/backup/age-key.txt ~/.config/chezmoi/age-key.txt
+   chmod 600 ~/.config/chezmoi/age-key.txt
+   ```
+
+3. **Copy SSH keys** (or log in with `gh auth login` after chezmoi finishes —
+   the gitconfig uses `gh auth git-credential` for HTTPS, so HTTPS clones
+   work without SSH at all):
+
+   ```sh
+   mkdir -p ~/.ssh && chmod 700 ~/.ssh
+   cp /path/to/backup/id_* ~/.ssh/
+   chmod 600 ~/.ssh/id_*
+   ```
+
+4. **Bootstrap** — same command as the top of this README:
+
+   ```sh
+   brew install chezmoi
+   chezmoi init --apply max-miller1204/dotfiles
+   ```
+
+5. **Open a new Ghostty tab** so fish picks up as the login shell. If fish
+   isn't the default yet, run `chsh -s "$(command -v fish)"` manually — the
+   bootstrap's `chsh` can silently fail inside some TTYs.
+
+6. **Import Raycast** — see [Raycast settings](#raycast-settings) for the
+   two-step dance (import `.rayconfig`, point Raycast at
+   `~/.config/raycast-scripts`).
+
+7. **Sign in to anything that isn't in secrets**: GitHub (`gh auth login`),
+   Atuin (`atuin login` + `atuin sync` — `auto_sync` is off by default),
+   1Password / password manager, Discord, Spotify, Obsidian, Zed account,
+   Claude Code (`claude` → follow the login flow).
+
+8. **Verify**:
+
+   ```sh
+   claude mcp list           # should show nixos + context7
+   mise list                 # should show node, python, rust, go, fzf, bun, neovim, uv
+   which brew fish claude    # sanity-check everything's on PATH
+   ```
+
+9. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**
+   managed by this repo — configure them manually via System Settings, or
+   add a `defaults write` script later if that becomes worth automating.
 
 ## Updating
 

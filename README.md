@@ -25,7 +25,11 @@ That's it — the install scripts run during `apply` and handle the rest:
   starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, pfetch
 - installs **GUI apps** (casks on macOS; PPA/.deb/flatpak on Ubuntu):
   ghostty, discord, zed, voquill, zoom, anki, obsidian, spotify, plus
-  aerospace + karabiner-elements on macOS
+  aerospace, karabiner-elements, raycast, neovide-app, balenaetcher,
+  macdown-3000, pearcleaner on macOS
+- installs the **JetBrainsMono Nerd Font** cask on macOS (required by
+  the ghostty config, which specifies it with no fallback). Linux skips
+  it — starship/eza icons degrade gracefully to system fallback fonts
 - installs **toolchains via mise**: `node@lts`, `python@latest`,
   `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`
   (so fzf/bun/neovim are mise-managed, not apt/brew)
@@ -50,8 +54,8 @@ chsh -s "$(command -v fish)"
 
 Secrets are encrypted with [age](https://github.com/FiloSottile/age) using the
 recipient declared in `.chezmoi.toml.tmpl`. Encrypted files live under
-`encrypted_private_dot_config/private_secrets/` in the source tree and decrypt
-to `~/.config/secrets/` at `chezmoi apply` time.
+`dot_config/private_secrets/` in the source tree and decrypt to
+`~/.config/secrets/` at `chezmoi apply` time.
 
 ### First-time setup on a new machine
 
@@ -107,7 +111,7 @@ preserved. Verify with `claude mcp list`.
 Cross-platform:
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes apt, mise, flatpak, chezmoi, and atuin in one go)
+- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go)
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/ghostty/config` + `themes/catppuccin-mocha`
@@ -119,11 +123,35 @@ Cross-platform:
 - `dot_claude/settings.json` + `executable_statusline.sh`
 - `dot_claude/executable_run-context7.sh` — context7 MCP launcher (reads age-decrypted key from `~/.config/secrets/context7_api_key`)
 - `dot_claude/skills/spec/` — Claude skills
-- `encrypted_private_dot_config/private_secrets/encrypted_context7_api_key` — age-encrypted API key, decrypts on apply
+- `dot_config/private_secrets/encrypted_private_context7_api_key.age` — age-encrypted API key, decrypts on apply
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
 - `dot_config/aerospace/aerospace.toml`
+- `dot_config/raycast-scripts/*.sh` — Raycast Script Commands (plaintext
+  shell scripts with `@raycast.*` headers)
+- `private_dot_local/bin/executable_mac-askpass` — osascript dialog used
+  as `SUDO_ASKPASS` so Claude Code's `!` (no TTY) can run sudo commands
+
+Linux-only (gated via `.chezmoiignore`):
+- `private_dot_local/bin/executable_zenity-askpass` — zenity equivalent
+  of mac-askpass
+
+### Raycast settings
+
+On a new Mac, two manual steps wire Raycast up to the managed config:
+
+1. **Import preferences**: the exported snapshot lives at
+   `raycast-export/raycast.rayconfig` (plaintext, not chezmoi-applied —
+   the repo is its only home). Open Raycast → Settings → Advanced →
+   Import and pick that file.
+2. **Point Raycast at the script commands**: Raycast → Settings →
+   Extensions → Script Commands → add `~/.config/raycast-scripts` to the
+   directory list. Scripts in there are managed by chezmoi.
+
+To update the snapshot after changing settings: re-export from Raycast
+(Settings → Advanced → Export) and drop the resulting `.rayconfig` over
+`raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, fish-as-login-shell
@@ -137,4 +165,4 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The install script is `run_once` — it only reruns if its content changes
-- `update-all` (fish function) refreshes everything the bootstrap installs: apt (+ PPAs), mise toolchains, flatpak apps, chezmoi itself, and atuin
+- `update-all` (fish function) refreshes everything the bootstrap installs: brew (formulae + casks) on macOS or apt (+ PPAs) + flatpak on Ubuntu, plus mise toolchains, chezmoi itself, and atuin

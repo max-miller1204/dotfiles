@@ -1,6 +1,10 @@
 README.md
 
-{{- if ne .chezmoi.os "darwin" }}
+{{- if eq .chezmoi.os "darwin" }}
+.local/bin/zenity-askpass
+{{- else }}
 .config/karabiner
 .config/aerospace
+.config/raycast-scripts
+.local/bin/mac-askpass
 {{- end }}

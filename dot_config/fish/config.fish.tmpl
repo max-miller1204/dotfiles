@@ -49,9 +49,12 @@ if status is-interactive
     set -gx BAT_THEME ansi
 
     # GUI password prompt for sudo -A (useful when no TTY, e.g. Claude Code `!`)
-    # Uses a zenity wrapper to avoid GNOME's "inhibit shortcuts" prompt that
-    # gnome-ssh-askpass triggers via its keyboard grab.
-    if test -x ~/.local/bin/zenity-askpass
+    # macOS: osascript dialog. Linux/GNOME: zenity wrapper (avoids the
+    # "Allow inhibiting shortcuts" prompt that gnome-ssh-askpass triggers).
+    if test -x ~/.local/bin/mac-askpass
+        set -gx SUDO_ASKPASS ~/.local/bin/mac-askpass
+        alias sudoa 'sudo -A'
+    else if test -x ~/.local/bin/zenity-askpass
         set -gx SUDO_ASKPASS ~/.local/bin/zenity-askpass
         alias sudoa 'sudo -A'
     else if test -x /usr/bin/ssh-askpass

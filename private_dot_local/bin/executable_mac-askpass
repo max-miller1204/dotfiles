@@ -1,0 +1,7 @@
+#!/bin/sh
+# Minimal askpass wrapper for macOS using osascript. Used via SUDO_ASKPASS
+# so Claude Code's `!` (no TTY) can run sudo without prompting on stdin.
+title=${*:-sudo password}
+osascript \
+    -e "display dialog \"$title\" with title \"$title\" with icon caution default answer \"\" with hidden answer" \
+    -e 'text returned of result' 2>/dev/null

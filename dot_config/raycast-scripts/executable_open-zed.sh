@@ -2,7 +2,7 @@
 
 # Required parameters:
 # @raycast.schemaVersion 1
-# @raycast.title Open VsCode
+# @raycast.title Open Zed
 # @raycast.mode silent
 
 # Optional parameters:
@@ -11,4 +11,4 @@
 # Documentation:
 # @raycast.author max
 
-code -n
+zed -n

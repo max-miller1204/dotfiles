@@ -15,15 +15,29 @@ Apply worktree changes to main. Runs `git diff HEAD | git apply --index -` first
 - With no arg: applies the current worktree (must `cd` into it first).
 - With branch: applies the worktree at `../<repo>--<branch>`.
 - **On conflict:** `git apply --3way` leaves conflict markers. Surface the conflict to the user, wait for manual resolution, do not continue.
-- **Use when:** integrating a worktree's changes into main without deleting the worktree.
+- **Only applies uncommitted work** (`git diff HEAD`). If the branch has commits ahead of main, `gwa` reports "Nothing to apply." For committed branches (the swarm case), use `gwc`.
+- **Use when:** integrating an in-progress worktree's changes into main without deleting the worktree.
+
+### `gwc [branch]`
+Git-worktree-cherry-pick. Cherry-picks every commit on `<branch>` that is not on the main worktree's currently-checked-out branch (typically `main`/`master`), in order, onto the main worktree.
+- With no arg: cherry-picks the current worktree's branch (must `cd` into it first).
+- With branch: cherry-picks from the worktree at `../<repo>--<branch>`.
+- **No-op if the branch has no commits ahead of the target** — prints a hint pointing at `gwa`.
+- **On conflict:** cherry-pick stops with markers in the main worktree. Stop, surface the files, wait for manual `cherry-pick --continue` or `--abort`. Do not advance.
+- **Use when:** folding back a swarm chunk whose agent already committed. Preferred over `gwa` for committed work because it preserves each commit (with its message) as its own entry on main.
 
 ### `gwf [branch]`
-Fold worktree: apply + stage + remove worktree + delete branch + kill tmux panes in that directory. Uses `gum confirm`.
+Fold worktree: apply (uncommitted diff) + stage + remove worktree + delete branch + kill tmux panes in that directory. Uses `gum confirm`.
 - **Cannot be invoked from Claude's Bash tool** — `gum confirm` blocks on stdin and the tool is non-interactive. The command will hang.
-- **Substitute (non-interactive, same effect):**
+- Shares the `gwa` limitation: only picks up uncommitted work. For committed swarm chunks, the fold-back substitute uses `gwc` instead.
+- **Substitute (non-interactive, covers both cases):**
   ```
+  # committed work (swarm default):
+  gwc <branch>
+  # OR uncommitted work:
   gwa <branch>
   git -C <main> add .
+
   git -C <main> worktree remove <parent>/<repo>--<branch> --force
   git -C <main> branch -D <branch>
   # plus: kill tmux panes whose pane_current_path starts with the worktree path
@@ -93,15 +107,19 @@ tslwm "" branch1 branch2 ... branch8
 
 ## Fold-back recipe (non-interactive — what Claude actually runs)
 
+Swarm agents commit their work (see `chunk-template.md` → "Commit your work to this branch when done"), so the default fold primitive is **`gwc`** (cherry-pick). Fall back to `gwa` only if the agent left work uncommitted.
+
 ```
 # for each branch, ask user: apply-only / full-fold / skip
 
-# apply-only:
+# apply-only (committed work — default for swarm):
+gwc <branch>     # safe — no gum
+
+# apply-only (uncommitted work):
 gwa <branch>     # safe — no gum
 
 # full-fold (substitute for gwf, since gwf blocks on gum):
-gwa <branch>
-git -C <main> add .
+gwc <branch>                  # or gwa <branch> if uncommitted; then git -C <main> add .
 git -C <main> worktree remove <parent>/<repo>--<branch> --force
 git -C <main> branch -D <branch>
 # then kill tmux panes whose pane_current_path starts with that worktree path:
@@ -109,9 +127,17 @@ tmux list-panes -a -F "#{pane_id} #{pane_current_path}" \
   | awk -v p="<worktree-path>" '$2==p || index($2,p"/")==1 {print $1}' \
   | xargs -r -n1 tmux kill-pane -t
 
-# on gwa conflict: stop, surface the conflict, wait. Check cleanliness with
+# on conflict (either gwc's cherry-pick or gwa's 3way): stop, surface the
+# conflicted files, wait for manual resolution (resolve in the main worktree,
+# then `git cherry-pick --continue` or `git add . && git commit`).
+# Check cleanliness with:
 #   git -C <main> status --porcelain
 # before advancing.
+
+# Cargo.lock conflicts are common when parallel chunks each add deps. Resolve by
+# taking main's lock (`git checkout --ours Cargo.lock && git add Cargo.lock`),
+# then run `cargo check --workspace` to let cargo regenerate the lockfile with
+# the new deps, then `git add Cargo.lock && git cherry-pick --continue`.
 
 # final sweep (substitute for gwra):
 git -C <main> worktree list --porcelain   # parse, filter <parent>/<repo>--*

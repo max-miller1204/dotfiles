@@ -2,6 +2,22 @@
 
 Chezmoi-managed dotfiles for Max. Targets **Ubuntu** and **macOS**.
 
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `chezmoi update` | `git pull` **+** `chezmoi apply`. Use on a machine to pull in changes pushed from another machine. |
+| `chezmoi apply` | Apply the **local** source tree to `$HOME`. Use after editing something locally. |
+| `chezmoi diff` | Preview what `apply` would change — no writes. |
+| `chezmoi edit <file>` | Edit a managed file (opens the source template, not the target in `$HOME`). |
+| `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
+| `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
+| `chezmoi add --encrypt <path>` | Same, but age-encrypt it in the source tree (for secrets). |
+| `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
+| `update-all` | Fish function — refreshes brew / apt / flatpak, mise toolchains, chezmoi, atuin. |
+
+Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
+
 On first `chezmoi apply`, a `run_once_before` script installs every CLI these
 dotfiles expect (fish, tmux, neovim, eza, fzf, zoxide, starship, bat, fd,
 ripgrep, jq, atuin, mise, gh, gum, pfetch, plus Homebrew on macOS / an apt

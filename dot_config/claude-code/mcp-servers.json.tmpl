@@ -9,6 +9,11 @@
       "type": "stdio",
       "command": "{{ .chezmoi.homeDir }}/.claude/run-context7.sh",
       "args": []
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
     }
   }
 }

@@ -25,6 +25,10 @@ brew install \
     fish git tmux eza fzf zoxide starship bat fd ripgrep jq \
     atuin mise pfetch gh gum age
 
+# brev — Nvidia cloud GPU CLI (from the brevdev tap)
+brew install brevdev/homebrew-brev/brev || true
+
+brew install --cask firefox || true
 brew install --cask ghostty || true
 brew install --cask nikitabobko/tap/aerospace || true
 brew install --cask karabiner-elements || true
@@ -198,6 +202,12 @@ if ! command -v obsidian >/dev/null 2>&1; then
     curl -fsSL -o "$OBSIDIAN_DEB" "$OBSIDIAN_DEB_URL"
     sudo apt-get install -y "$OBSIDIAN_DEB"
     rm -f "$OBSIDIAN_DEB"
+fi
+
+# brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
+if ! command -v brev >/dev/null 2>&1; then
+    log "Installing brev via the official installer"
+    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
 fi
 
 {{- end }}

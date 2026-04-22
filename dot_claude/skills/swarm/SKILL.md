@@ -3,7 +3,7 @@ name: swarm
 description: "Execute a spec in parallel git worktrees, one wave at a time. Scaffolds the foundation serially in the current session, dispatches leaf chunks to parallel Claude agents via tmux, then walks the user through folding each branch back into trunk. Triggers on: 'swarm', 'swarm this', 'parallelize this', 'dispatch swarm', 'run in parallel worktrees', 'execute this spec', 'scaffold and fan out', 'run wave N', 'fan out the work'. Takes optional $1 = path to spec file (defaults to ./SPEC.md). Use /spec first to write the spec; use this skill to execute it."
 ---
 
-You orchestrate parallel work across git worktrees using the user's fish commands (`ga`, `gwa`, `gwf`, `gwr`, `gwra`, `tsl`, `tslw`, `tslwm`, `tdl`, `tdlm`). You are the **coordinator**: you do the serial scaffold work in this session, spawn other Claude agents in tmux panes/windows to do leaf work in parallel, then walk the user through folding each branch back.
+You orchestrate parallel work across git worktrees using the user's fish commands (`ga`, `gwa`, `gwc`, `gwf`, `gwr`, `gwra`, `tsl`, `tslw`, `tslwm`, `tdl`, `tdlm`). You are the **coordinator**: you do the serial scaffold work in this session, spawn other Claude agents in tmux panes/windows to do leaf work in parallel, then walk the user through folding each branch back.
 
 Consult `references/commands.md` whenever you need to pick a command — don't guess at behavior or flags.
 
@@ -98,13 +98,15 @@ When the user says chunks are done, walk through each branch **one at a time**. 
 - **Full fold** — apply + stage + remove worktree + delete branch
 - **Skip** — leave this one for later
 
-**Critical:** `gwf`, `gwr`, and `gwra` all use `gum confirm`, which blocks on stdin. You cannot answer it from the Bash tool — the command will hang. So:
+**Primitive choice:** swarm agents commit their work (per the CHUNK.md template), so the default fold primitive is **`gwc`** (git-worktree-cherry-pick). It cherry-picks every commit on the branch that is ahead of main, preserving each commit's message as its own entry on main. Fall back to `gwa` only if the agent left work uncommitted — `gwa` only applies the uncommitted diff and will say "Nothing to apply" on a committed branch.
 
-- **Apply only** → run `gwa <branch>` directly. `gwa` does not use gum. Safe to run.
+**Critical:** `gwf`, `gwr`, and `gwra` all use `gum confirm`, which blocks on stdin. You cannot answer it from the Bash tool — the command will hang. `gwa` and `gwc` do not use gum and are safe to run. So:
+
+- **Apply only** → run `gwc <branch>` (committed) or `gwa <branch>` (uncommitted).
 - **Full fold** → do the steps manually (no gum). From the main repo root (`cd` into it first):
   ```
-  gwa <branch>                              # apply (cached then 3way fallback)
-  git -C <main> add .                       # stage
+  gwc <branch>                              # cherry-pick commits onto main
+  # OR: gwa <branch> && git -C <main> add . # for uncommitted work
   git -C <main> worktree remove <path> --force
   git -C <main> branch -D <branch>
   ```
@@ -115,7 +117,7 @@ When the user says chunks are done, walk through each branch **one at a time**. 
     | xargs -r -n1 tmux kill-pane -t
   ```
 
-**On conflict** (either `gwa`'s `git apply --index` fails *and* the `--3way` fallback leaves conflict markers): stop immediately. Print the conflicted files. Tell the user to resolve them — either in the main repo or in the worktree — and come back when clean. **Do not advance to the next branch until the current state is clean.** Check with `git -C <main> status --porcelain`.
+**On conflict** (either `gwc`'s cherry-pick or `gwa`'s `--3way` fallback leaves markers): stop immediately. Print the conflicted files. Resolve in the main repo (e.g. `git checkout --ours Cargo.lock && cargo check --workspace && git add Cargo.lock` for lockfile conflicts), then `git cherry-pick --continue`. **Do not advance to the next branch until the current state is clean.** Check with `git -C <main> status --porcelain`.
 
 ## Phase 9 — Cleanup
 

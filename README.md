@@ -24,11 +24,12 @@ chezmoi init --apply max-miller1204/dotfiles
 That's it — the install scripts run during `apply` and handle the rest:
 
 - installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, eza, zoxide,
-  starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, pfetch
+  starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, pfetch, brev
+  (Nvidia cloud GPU CLI — brew tap on macOS, official curl installer on Linux)
 - installs **GUI apps** (casks on macOS; PPA/.deb/flatpak on Ubuntu):
   ghostty, discord, zed, voquill, zoom, anki, obsidian, spotify, plus
   aerospace, karabiner-elements, raycast, neovide-app, balenaetcher,
-  macdown-3000, pearcleaner on macOS
+  macdown-3000, pearcleaner, firefox on macOS (Linux ships Firefox by default)
 - installs the **JetBrainsMono Nerd Font** cask on macOS (required by
   the ghostty config, which specifies it with no fallback). Linux skips
   it — starship/eza icons degrade gracefully to system fallback fonts

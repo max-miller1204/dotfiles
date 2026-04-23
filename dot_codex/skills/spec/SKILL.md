@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use this skill when the user wants to spec out, plan, or design a feature, project, or task. Triggers on: "spec", "write a spec", "plan this", "design this", "let me describe what I want", or when the user provides a file or description and wants a detailed specification written. Read any referenced input file first, then write the spec to the requested path or `./SPEC.md`.
+description: "Write detailed implementation specs through a focused interview. Use when the user wants to spec, plan, or design a feature, project, or task, or when they provide a brief or file and want a concrete SPEC.md with scope, design, verification, and optional execution waves."
 ---
 
 # Spec

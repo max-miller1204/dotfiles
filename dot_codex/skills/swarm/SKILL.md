@@ -1,6 +1,6 @@
 ---
 name: swarm
-description: Use this skill when the user wants to execute a spec in parallel git worktrees with Codex worker agents. Triggers on: "swarm", "swarm this", "parallelize this", "run in parallel worktrees", "execute this spec", "run wave N", or "fan out the work". Read the spec from the requested path or `./SPEC.md`, scaffold the shared foundation locally, then dispatch chunk work to parallel Codex workers.
+description: "Execute a spec in parallel git worktrees with Codex worker agents. Use when the user wants to fan out implementation from a SPEC.md, run a wave of parallel work, scaffold shared contracts, dispatch chunk owners, and fold completed branches back into the integration branch."
 ---
 
 # Swarm

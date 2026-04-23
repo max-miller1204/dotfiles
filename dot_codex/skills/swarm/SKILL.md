@@ -1,207 +1,160 @@
 ---
 name: swarm
-description: "Execute a spec with Codex worker agents in parallel. Use when the user wants to fan out implementation from a SPEC.md, run a wave of parallel work, scaffold shared contracts, dispatch chunk owners, integrate completed worker changes, or optionally coordinate git worktrees and fold completed branches back into an integration branch."
+description: "Execute a spec in parallel git worktrees, one wave at a time. Scaffolds the foundation serially in the current session, dispatches leaf chunks to parallel Codex worker agents via `spawn_agent`, then walks the user through folding each branch back into trunk. Triggers on: 'swarm', 'swarm this', 'parallelize this', 'dispatch swarm', 'run in parallel worktrees', 'execute this spec', 'scaffold and fan out', 'run wave N', 'fan out the work'. Takes optional $1 = path to spec file (defaults to ./SPEC.md). Use `spec` first to write the spec; use this skill to execute it."
 ---
 
 # Swarm
 
-Coordinate parallel work from a spec. You are the coordinator: you do serial scaffold work in the current session, split leaf work into isolated chunks, dispatch Codex worker agents, review their results, then integrate each chunk one at a time.
+You orchestrate parallel work across git worktrees using Codex worker agents. You are the **coordinator**: you do the serial scaffold work in this session, create one worktree per chunk, spawn workers via `spawn_agent` to do the leaf work in parallel, then walk the user through folding each branch back.
 
-Prefer **Codex app agent mode** in the Codex desktop app. Use **git worktree mode** only when shell/git are available and local worktrees are useful or explicitly requested.
+This skill is opinionated: one path, git worktrees + `spawn_agent` workers. No shell/no-git fallback. If the project can't support git worktrees, stop and tell the user to run the work serially instead.
 
-Read `references/chunk-template.md` when preparing worker instructions.
+## Phase 1 — Load the spec
 
-## Execution modes
+Read `$1` if given, else `./SPEC.md`. If neither exists, tell the user to run `spec` first and stop.
 
-### Codex app agent mode
+Look for a **Waves** section in the spec.
 
-Use this mode by default in the Codex app.
+- **If waves are present** (the primary path): scan for any `_Wave N executed …_` notes already in the spec — those waves are done. Offer the first un-executed wave. Use that wave's chunks and scaffold verbatim; do not re-chunk.
+- **If no waves section**: treat the spec as one wave. You'll need to analyze parallelizability yourself in the next phase.
 
-- Dispatch one worker agent per chunk with `spawn_agent` because `swarm` is an explicit request for parallel delegated work.
-- Give each worker a disjoint write scope and tell it to edit files directly in its forked workspace.
-- Tell workers they are not alone in the codebase, must not revert unrelated edits, and must adapt to existing changes.
-- Do not require git worktrees, local commits, or a clean repository before dispatching workers.
-- Use shell/git commands only when available and helpful. If they are unavailable, continue with app-native worker delegation and manual patch integration.
-- When workers return, review their changed paths and content before applying or accepting changes in the coordinator workspace.
-- Integrate one chunk at a time, run focused validation after each integration, and resolve conflicts before integrating the next chunk.
+## Phase 2 — Propose the wave plan
 
-### Git worktree mode
+Present to the user:
 
-Use this mode when the user asks for worktrees, the repo is suitable for branch-based integration, or shell/git are available and the task benefits from isolated local branches.
+1. **Scaffold** — files/modules to land serially before dispatch. Includes: workspace manifest, shared types, locked interface contracts (trait signatures, type defs), stub modules for each future chunk, CI config.
+2. **Chunks** — for each: branch name (kebab-case, will be the worktree suffix), goal, files/areas it owns, explicit interfaces with other chunks, done-when criteria (ideally a smoke test).
+3. **Intra-wave sequencing** — any pairs that must be serialized (e.g. chunk B after chunk A because they touch the same crate).
 
-- Create one sibling worktree per chunk.
-- Require a clean integration branch before creating worktrees.
-- Ask before overwriting existing worktrees or branches.
-- Have workers commit locally but not push.
-- Fold branches back by cherry-picking or merging one completed branch at a time.
+If the spec did not pre-chunk: analyze independence. Good fit: disjoint files/subsystems, clear contracts. Bad fit: single-file refactors, tight sequential deps, shared-state edits. If it doesn't parallelize, say so and stop — recommend serial work.
 
-### Serial fallback
+Confirm the plan with the user before doing anything destructive. Let the user edit the chunk list.
 
-Stop and recommend serial execution when:
+## Phase 3 — Preconditions for scaffold
 
-- the work is mostly one file or one tightly coupled behavior
-- chunk ownership cannot be made disjoint
-- shared interfaces are unstable
-- worker agents are unavailable
-- the user wants only planning or review, not implementation
+Verify:
+- Inside a git repo: `git rev-parse --git-dir` succeeds
+- On trunk: `git branch --show-current` matches the trunk branch (`main`, `master`, or whatever `git symbolic-ref refs/remotes/origin/HEAD` resolves to; fall back to asking if unclear)
+- Working tree clean: `git status --porcelain` is empty
 
-## Phase 1 - Load the spec
+If any fail, explain what's wrong and stop. Do not force state.
 
-- Read the user-specified spec path, or `./SPEC.md` by default.
-- If no spec exists, stop and tell the user to run `spec` first.
-- Look for a `Waves` section.
+## Phase 4 — Build the scaffold in this session
 
-If waves are present:
-- find any execution notes such as `_Wave N executed YYYY-MM-DD: ..._`
-- treat those waves as complete
-- offer the first unexecuted wave unless the user explicitly asks for another
-- use the wave's scaffold, chunk list, and sequencing verbatim; do not silently re-chunk it
+You (the coordinator) write the scaffold files yourself. Workers are not running yet — this is all you.
 
-If no waves section exists:
-- treat the spec as a single candidate wave
-- analyze whether the work is actually parallelizable
-- only continue if the chunks can be isolated by ownership and interface
+- Write the workspace/package manifest, shared types, interface contracts, stub modules for each chunk, CI.
+- Run a build check appropriate to the stack (e.g. `cargo check --workspace` for Rust, `tsc --noEmit` for TypeScript, `go build ./...` for Go). **Do not proceed if it fails.** Fix and re-check.
+- Commit with a clear message describing what contracts were locked. Example: `scaffold: lock SttEngine + LlmProvider + Recorder + … contracts`.
 
-## Phase 2 - Propose the execution plan
+The scaffold commit is load-bearing: every parallel chunk branches from it and imports from it. Nail it down before dispatch.
 
-Present the wave plan before making changes:
-- selected execution mode: Codex app agent mode, git worktree mode, or serial fallback
-- scaffold work that must land first
-- chunk list with worker names, ownership, interfaces, and done-when checks
-- branch/worktree names, only if using git worktree mode
-- sequencing constraints inside the wave
+## Phase 5 — Preconditions for dispatch
 
-If the spec did not pre-chunk the work:
-- split only when boundaries are genuinely clean
-- stop and recommend serial execution when the work is mostly one-file, tightly sequential, or interface-unstable
+Verify:
+- The scaffold commit you just made is on trunk and is HEAD
+- Working tree still clean
+- `spawn_agent` is available in this session (this skill requires it)
 
-Confirm the plan with a concise direct question before dispatching workers or creating worktrees.
+## Phase 6 — Create worktrees, write CHUNK.md, dispatch workers
 
-## Phase 3 - Preconditions
+Worktree naming convention: `<parent>/<repo>--<branch>`. E.g. in `~/code/chatter`, branch `audio-recorder` lives at `~/code/chatter--audio-recorder`.
 
-For Codex app agent mode:
+Three-step dispatch, in this order (avoids a race where a worker starts before its `CHUNK.md` exists):
 
-- inspect the workspace enough to identify existing patterns and likely conflict zones
-- check git status when shell/git are available, but do not block solely because the tree is dirty
-- never revert or overwrite user changes
-- stop and ask only when existing changes overlap a planned chunk or make integration ambiguous
-- ensure each chunk has a disjoint write scope before dispatch
+1. **Create a worktree per chunk.** Each starts from the current trunk HEAD (the scaffold commit):
+   ```
+   git worktree add <parent>/<repo>--<branch> -b <branch>
+   ```
+   If the branch or worktree already exists, stop and ask the user instead of overwriting it.
 
-For git worktree mode, verify all of the following:
+2. **Write `<worktree>/CHUNK.md`** for each chunk, using `references/chunk-template.md`. Fill in: name, goal, files owned, interfaces (copy the locked signatures from the scaffold commit verbatim), done-when, out-of-scope, branch name, worktree path.
 
-- inside a git repository
-- the working tree is clean
-- the current branch is the intended integration branch
+3. **Spawn one worker per chunk via `spawn_agent`.** Use `fork_context: false` so workers share the repo and their commits land on the branch for later cherry-pick. The prompt must pin the worker to its worktree and tell it to read `CHUNK.md`:
+   ```
+   spawn_agent({
+     agent_type: "worker",
+     fork_context: false,
+     message: "You are one of several parallel Codex worker agents.
+     You own only <parent>/<repo>--<branch> on branch <branch>.
+     cd into that worktree, read CHUNK.md, execute it exactly.
+     You are not alone in the codebase — do not revert unrelated edits,
+     do not touch sibling chunk files, and adapt to existing changes.
+     Commit your work locally on <branch> when done. Do not push or merge."
+   })
+   ```
+   Do this per-chunk. Do not batch. Verify each `spawn_agent` call returned before moving to the next.
 
-Prefer `main` or `master`, but another local branch is acceptable if the user intends to fold all worker branches back there. If that intent is unclear, ask before proceeding.
+Report the worker IDs and worktree paths so the user can navigate.
 
-Do not force state. In git worktree mode, if the repo is dirty or the target branch is unclear, stop and explain the blocker.
+## Phase 7 — Hand off
 
-## Phase 4 - Build the scaffold locally
+Do not poll. Do not use `wait_agent` just to check on progress — only use it when the next critical coordinator step genuinely blocks on a worker's result. The user watches the workers and tells you when chunks are done. If the user asks you to check in on a specific chunk, you can inspect its worktree via `Read`/`Bash` — but don't steer the worker unless asked.
 
-Do the serial scaffold work yourself in the current session before dispatching workers:
-- shared manifests or config
-- common types and interface contracts
-- stub modules for each chunk if needed
-- tests or smoke-test harnesses required by all chunks
+While workers run, you may do non-overlapping coordinator work locally (integration prep, conflict analysis, validation harness). Avoid duplicating work workers are already doing.
 
-Run the appropriate validation before dispatch:
-- TypeScript: `tsc --noEmit`, project tests, or the repo's standard check
-- Python: targeted tests or lint/type checks
-- Rust: `cargo check` or `cargo test`
-- Go: `go test ./...` or targeted packages
-- otherwise use the repo's normal verification command
+## Phase 8 — Fold back
 
-Do not dispatch workers until the scaffold passes, unless validation tooling is unavailable. If validation cannot run, state the gap in the worker prompt and in the final report.
+When the user says chunks are done, walk through each branch **one at a time**. For each, ask:
 
-In git worktree mode, commit the scaffold with a message that makes the locked contracts explicit. Workers should branch from this exact point.
+- **Apply only** — cherry-pick commits onto trunk, keep the worktree for inspection
+- **Full fold** — cherry-pick + remove worktree + delete branch
+- **Skip** — leave this one for later
 
-In Codex app agent mode, do not commit solely for the swarm unless the user asked for commits. Keep scaffold edits in the coordinator workspace and include the locked interfaces in each worker prompt.
+Workers commit their work (per CHUNK.md), so the default fold primitive is **`git cherry-pick`**. It preserves each commit's message as its own entry on trunk. `cd` into the main worktree first.
 
-## Phase 5 - Prepare worker inputs
+**Apply only:**
+```
+git cherry-pick <trunk>..<branch>
+```
 
-For each chunk in the chosen wave, prepare a concise `CHUNK.md`-style instruction from `references/chunk-template.md` containing only that chunk's relevant details.
+**Full fold:**
+```
+git cherry-pick <trunk>..<branch>
+git worktree remove <parent>/<repo>--<branch> --force
+git branch -D <branch>
+```
 
-In Codex app agent mode:
+**On conflict**: stop immediately. Print the conflicted files. Resolve in the main worktree (e.g. `git checkout --ours Cargo.lock && cargo check --workspace && git add Cargo.lock` for lockfile conflicts), then `git cherry-pick --continue`. **Do not advance to the next branch until the current state is clean.** Check with `git status --porcelain`.
 
-- no physical `CHUNK.md` file is required unless it helps coordination
-- include the worker's exact file/module ownership in the prompt
-- include known files that are out of scope
-- include done-when checks and validation commands
-- instruct the worker to edit files directly in its forked workspace and report changed paths
+If a worker did NOT commit (left uncommitted work): tell the user, then fall back to applying the diff manually from the worktree — `git -C <worktree> diff HEAD | git apply --index -` (with `--3way` if it fails), from the main worktree. Commit it before the next fold.
 
-In git worktree mode:
+## Phase 9 — Cleanup
 
-- create a sibling worktree on its own branch, typically `codex/<chunk-name>`
-- use a predictable sibling path such as `../<repo>-<chunk-name>`
-- if a branch or worktree already exists, stop and ask instead of overwriting it
-- ensure each worktree contains the scaffold commit
-- write a `CHUNK.md` file into each worktree
+After all branches are folded or skipped, ask the user whether to sweep remaining swarm worktrees. Enumerate:
 
-## Phase 6 - Dispatch Codex workers
+```
+git worktree list --porcelain
+```
 
-Dispatch one worker agent per chunk only because `swarm` is an explicit request for delegated parallel work.
+Parse for `worktree <path>` entries whose path matches `<parent>/<repo>--*` (excluding the main worktree itself). Show the list to the user and confirm before removing. Then for each match:
 
-Each worker prompt must include:
-- the execution mode
-- the worktree path and branch name, if using git worktree mode
-- the coordinator workspace path, if useful for context
-- exact ownership boundaries
-- locked interfaces that must not change
-- done-when checks
-- the rule that the worker is not alone in the codebase and must not revert unrelated edits
-- the requirement to report changed files and validation results
-- in Codex app agent mode, the requirement to edit directly in the worker's forked workspace
-- in git worktree mode, the requirement to commit finished work locally
+```
+git worktree remove --force <path>
+git branch -D <branch>
+```
 
-Use worker agents for implementation. Keep the coordinator focused on integration readiness, validation strategy, and conflict risk.
+## Phase 10 — Record the wave
 
-## Phase 7 - While workers run
+Append a one-line note to the spec file:
 
-- do non-overlapping coordinator work locally
-- inspect for integration risks across chunk boundaries
-- avoid redundant implementation work
-- use `wait_agent` sparingly; only wait when the next critical step depends on a worker result
+```
+_Wave {{N}} executed {{YYYY-MM-DD}}: branches {{comma-separated list}}_
+```
 
-## Phase 8 - Fold branches back
+Use today's date (from the environment context). This is the only persistent state — on the next `swarm` invocation, this note is how you know which wave to offer next.
 
-In Codex app agent mode, process one completed worker at a time:
+If the spec had no Waves section, append instead:
 
-1. read the worker's final report and changed path list
-2. review the returned patch/content before integrating
-3. apply or accept the worker changes into the coordinator workspace
-4. run focused validation for that chunk
-5. resolve conflicts or regressions before touching the next chunk
-6. record any manual coordinator edits made during integration
-
-If a worker cannot provide an applicable patch or changed files are unavailable, ask that worker for a focused diff or implementation summary before redoing any work locally.
-
-In git worktree mode, process one completed chunk at a time:
-
-1. verify the worker branch is committed and the worktree is clean
-2. fold commits back into the integration branch, preferably by cherry-picking the branch's ahead commits in order
-3. run the relevant validation after each fold
-4. if conflicts occur, stop and resolve them before touching the next branch
-5. once folded successfully, remove the worktree and delete the branch
-
-Do not batch-fold multiple branches at once. Keep the integration branch clean between folds.
-
-## Phase 9 - Record execution
-
-Append an execution note to the spec:
-
-- wave-based spec, Codex app mode: `_Wave N executed YYYY-MM-DD: workers chunk-a, chunk-b_`
-- wave-based spec, git mode: `_Wave N executed YYYY-MM-DD: branches branch-a, branch-b_`
-- single-wave spec, Codex app mode: `_Executed YYYY-MM-DD: workers chunk-a, chunk-b_`
-- single-wave spec, git mode: `_Executed YYYY-MM-DD: branches branch-a, branch-b_`
-
-This note is the durable record of progress for the next `swarm` run.
+```
+_Executed {{YYYY-MM-DD}}: branches {{list}}_
+```
 
 ## Ground rules
 
-- Do not push, merge to remote, or modify remotes unless the user explicitly asks.
-- Do not create commits unless the execution mode or user request calls for them.
-- Do not change locked interfaces mid-wave without surfacing it as a spec change.
-- Stop on conflicts rather than papering over them.
-- Prefer explicit ownership over clever parallelism.
-- If the plan is not actually parallel-safe, say so and keep the work serial.
+- **You don't push, you don't merge, you don't touch remotes.** Fold-back is local-only. The user decides what gets pushed.
+- **You don't skip hooks** (no `--no-verify`). If a commit hook fails during the scaffold, fix the underlying issue.
+- **You stop on conflict.** Never pass `-Xtheirs` or similar to paper over a 3way conflict.
+- **You do not unilaterally edit locked interfaces.** If a chunk turns out to need a different signature mid-dispatch, that's a spec change — stop and surface it.
+- **Workers commit; the coordinator integrates.** Dispatch with `fork_context: false` so commits land on the shared repo's branches, not a fork you have to patch-import.
+- **The human is the clock.** You don't poll workers, don't time out chunks, don't retry. The user drives when each phase advances.

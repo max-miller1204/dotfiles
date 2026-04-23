@@ -1,38 +1,33 @@
 # Chunk: {{name}}
 
-You are one of several parallel Codex worker agents implementing a shared spec. Other workers may be changing sibling workspaces, forked workspaces, or worktrees at the same time.
+You are one of several parallel Codex worker agents implementing a spec. This file is your task. Other workers are implementing sibling chunks in their own git worktrees at the same time.
 
 ## Goal
 {{one-sentence goal}}
 
-## Execution context
-- Mode: `{{codex-app-agent-mode-or-git-worktree-mode}}`
-- Workspace/worktree path: `{{workspace-or-worktree-path}}`
-- Branch, if applicable: `{{branch}}`
-
 ## Files / areas you own
-- `{{path}}`
-- `{{path}}`
+- {{path}}
+- {{path}}
 
-## Locked interfaces
-- `{{type-or-api}}`: `{{signature}}`
-- `{{type-or-api}}`: `{{signature}}`
+## Interfaces with other chunks (locked in the scaffold commit — do NOT change)
+- {{trait or type}}: `{{signature}}`
+- {{trait or type}}: `{{signature}}`
 
-Do not change locked interfaces unilaterally. If one is wrong, stop and report the blocker.
+Changing these breaks sibling chunks. If you think the interface is wrong, stop and tell the user — do not edit it unilaterally.
 
 ## Done when
+- [ ] {{criterion — ideally a smoke test command the user can run}}
 - [ ] {{criterion}}
-- [ ] {{criterion}}
+
+Tick each box when satisfied. When all are ticked, tell the user you're done and wait.
 
 ## Out of scope
-- `{{path-or-area}}`
-- `{{path-or-area}}`
+{{what NOT to touch — explicit list of files/areas owned by other chunks}}
 
-## Worker rules
+## Ground rules
 
-1. Stay inside your assigned workspace or worktree.
-2. You are not alone in the codebase. Do not revert or overwrite unrelated edits.
-3. Do not touch files owned by sibling chunks.
-4. In Codex app agent mode, edit files directly in your forked workspace and report changed files.
-5. In git worktree mode, commit your work locally when done, but do not push and do not merge.
-6. Report validation results, files changed, and any blockers that remain.
+1. Stay inside this worktree. You are on branch `{{branch}}` at `{{worktree-path}}`. Do not `cd` out of it.
+2. Do not touch files owned by other chunks. If you need something from them, note it and ask the user.
+3. You are not alone in the codebase. Do not revert or overwrite unrelated edits made by sibling workers.
+4. Commit your work to this branch when done, but do not push and do not merge. The coordinator session will fold your branch back into trunk.
+5. If you hit a blocker, stop and tell the user. Do not attempt to coordinate with sibling workers directly.

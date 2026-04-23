@@ -1,56 +1,44 @@
 ---
 name: spec
-description: "Write detailed implementation specs through a focused interview. Use when the user wants to spec, plan, or design a feature, project, or task, or when they provide a brief or file and want a concrete SPEC.md with scope, design, verification, and optional execution waves."
+description: "Use this skill when the user wants to spec out, plan, or design a feature, project, or task. Triggers on: 'spec', 'write a spec', 'plan this', 'design this', 'let me describe what I want', or when the user provides a file/description and wants a detailed specification written. Takes an optional $1 argument pointing to a file to read first, and an optional $2 for the output path (defaults to ./SPEC.md)."
 ---
 
 # Spec
 
-Write a spec through a focused interview. Read any user-mentioned file or brief first, then ask only the questions needed to lock the design.
+Write a spec through interview. Read `$1` if given, then interview the user in detail about anything relevant:
 
-## Workflow
+- Technical implementation
+- UI & UX
+- Concerns
+- Tradeoffs
+- Scope — what's explicitly in and out
 
-1. Gather the real constraints.
-   - Ask about implementation approach, UX, risks, tradeoffs, and explicit in-scope vs out-of-scope boundaries.
-   - Ask non-obvious questions that might change the architecture, not just surface details.
-   - If the repo already exists, anchor questions in concrete files, modules, and integration points.
+Make the questions non-obvious. Challenge assumptions — ask questions that might change the whole approach, not just refine it. Prefer one sharp question at a time over a long questionnaire.
 
-2. Probe for execution shape before drafting.
-   - Ask whether the work is:
-     - atomic with no parallelism
-     - one wave: serial scaffold, then parallel leaf chunks
-     - multiple dependency-ordered waves
-   - In default mode, ask this as a concise plain-text question with explicit options instead of relying on special UI tools.
+## Probe wave structure
 
-3. If the answer includes waves, drill until `swarm` can execute without re-asking.
-   - For each wave, capture:
-     - scaffold work that must land first
-     - locked interface contracts established by the scaffold
-     - chunk list with branch name, ownership, and done-when criteria
-     - any intra-wave sequencing constraints
+Before writing the spec, ask one extra question: does the work have a **serial-foundation-then-parallel-leaves** shape, or multiple dependency-ordered waves? Ask as a plain-text question with explicit options:
 
-4. Write the spec.
-   - Default output path: `./SPEC.md`
-   - If the user names another output path, use it.
+- No — single atomic piece of work, no parallelism needed
+- Yes — one wave (scaffold + parallel leaves, then done)
+- Yes — multiple waves with dependencies between them
 
-## Required structure
+If "yes" in either form, drill further:
+- For each wave: what's the scaffold (serial pre-dispatch work)? What are the leaf chunks (branch name, scope, done-when smoke test)? Any intra-wave sequencing (e.g. chunk B must land after A)?
+- The goal is enough detail that the companion `swarm` skill can later execute each wave verbatim without re-asking.
 
-- `Context` - why this exists and the problem it solves
-- `Scope` - in-scope and out-of-scope, explicit
-- `Design` - the settled approach, not a brainstorm dump
-- `Verification` - how to prove the work functions end to end
-- `Waves` - include only when the user confirmed wave-based execution
+## Write SPEC.md
 
-For each wave, include:
-- scaffold
-- locked interface contracts
-- chunks with branch name, scope, and done-when
-- sequencing notes when relevant
+At the end of the interview, write the spec to `$2` if given, otherwise `./SPEC.md`. Structure:
 
-## Quality rules
+- **Context** — why this is being built, the problem it solves
+- **Scope** — in-scope and out-of-scope, explicit
+- **Design** — the approach settled on (not the alternatives considered)
+- **Verification** — how to know it works end-to-end
+- **Waves** (only if the user answered yes above) — for each wave:
+  - Scaffold: files/modules to land serially before dispatch
+  - Interface contracts locked in the scaffold commit (trait signatures, type definitions)
+  - Chunks: table with branch name, scope, done-when
+  - Intra-wave sequencing notes if any
 
-- Prefer one sharp question at a time over a long questionnaire.
-- Challenge weak assumptions directly when they affect architecture, scope, or verification.
-- If the user does not want a long interview, state the assumptions clearly in the spec instead of pretending they were settled.
-- Make the spec concrete enough that a later `swarm` run can use it as an execution plan rather than a vague design note.
-- If there are no waves, the spec itself is the deliverable.
-- If there are waves, tell the user the next step is `swarm`.
+If there are waves, tell the user the next step is `swarm` to execute them one at a time. If there are no waves, the spec is the deliverable — they can implement it themselves or pass it to other tooling.

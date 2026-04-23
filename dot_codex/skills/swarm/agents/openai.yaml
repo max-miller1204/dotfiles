@@ -1,0 +1,4 @@
+interface:
+  display_name: "Swarm"
+  short_description: "Run parallel worktree execution waves"
+  default_prompt: "Use $swarm to execute this SPEC.md with scaffold work, parallel worktrees, and coordinated fold-back."

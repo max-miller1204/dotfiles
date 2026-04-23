@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec"
+  short_description: "Draft detailed implementation specs"
+  default_prompt: "Use $spec to turn this brief into a concrete SPEC.md with scope, design, verification, and execution waves if needed."

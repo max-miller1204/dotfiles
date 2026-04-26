@@ -7,14 +7,44 @@ You orchestrate parallel work across git worktrees using the user's fish command
 
 Consult `references/commands.md` whenever you need to pick a command — don't guess at behavior or flags.
 
+This skill supports two **delivery modes**, declared per-spec:
+
+- **solo-local** (default) — fold each wave's work directly onto trunk. No remotes, no PRs. The flow documented inline below.
+- **fork-pr** — each wave lands on its own branch, gets pushed to a fork, and is reviewed via PR upstream. Phases 1.5, 3.5, and 8.5 are fork-only and live in `references/fork-mode.md`. Read that file in full before doing fork-mode work.
+
+The term **integration branch** is used throughout. In solo mode it's trunk. In fork mode it's the wave branch. Substitute accordingly.
+
 ## Phase 1 — Load the spec
 
 Read `$1` if given, else `./SPEC.md`. If neither exists, tell the user to run `/spec` first and stop.
+
+### 1a — Pick a wave
 
 Look for a **Waves** section in the spec.
 
 - **If waves are present** (the primary path): scan for any `_Wave N executed …_` notes already in the spec — those waves are done. Offer the first un-executed wave via `AskUserQuestion`. Use that wave's chunks and scaffold verbatim; do not re-chunk.
 - **If no waves section**: treat the spec as one wave. You'll need to analyze parallelizability yourself in the next phase.
+
+### 1b — Resolve delivery mode
+
+Look for an `## Execution` section in the spec. Parse it line-by-line, splitting each line on the first `:` into a key/value pair. Apply these tolerance rules:
+
+- **Case-insensitive keys** — `Delivery mode`, `delivery mode`, `DELIVERY MODE` all match.
+- **Whitespace-lenient** — accept any amount of whitespace around `:`, trim values.
+- **Ignore unknown keys and free text** — only known `Key: value` lines count.
+- **First match wins** — if a key appears twice, take the first and warn.
+
+Then:
+
+- If `Delivery mode: solo-local` is present → solo mode. Continue with this file.
+- If `Delivery mode: fork-pr` is present → fork mode. Read `references/fork-mode.md` now, then come back. Don't ask about other fork-mode fields yet (remotes, base strategy) — those are deferred to the phases that need them.
+- If the section is missing or `Delivery mode:` is absent → `AskUserQuestion` for delivery mode only:
+  - `solo` (current behavior; fold to trunk)
+  - `fork` (wave branches; opt-in push/PR — see references/fork-mode.md)
+
+  After the user answers, write a minimal `## Execution` section with `Delivery mode: <answer>` back into the spec so subsequent invocations skip this question. Surface the write in plain text ("Updated SPEC.md → set Delivery mode: solo-local").
+
+The remaining phases are written in solo-mode terms with notes for fork mode. **Solo mode is byte-identical to the previous version of this skill.**
 
 ## Phase 2 — Propose the wave plan
 
@@ -32,10 +62,14 @@ Use `AskUserQuestion` to confirm the plan before doing anything destructive. Let
 
 Verify:
 - Inside a git repo: `git rev-parse --git-dir` succeeds
-- On trunk: `git branch --show-current` matches the trunk branch (`main`, `master`, or whatever `git symbolic-ref refs/remotes/origin/HEAD` resolves to; fall back to asking if unclear)
 - Working tree clean: `git status --porcelain` is empty
+- Starting branch is appropriate for the mode:
+  - **solo**: on trunk (`main`, `master`, or whatever `git symbolic-ref refs/remotes/origin/HEAD` resolves to; fall back to asking if unclear).
+  - **fork**: on trunk OR on the wave-base branch resolved in Phase 1.5 (see `references/fork-mode.md`). The wave branch itself doesn't exist yet; it's created in Phase 3.5.
 
 If any fail, explain what's wrong and stop. Do not force state.
+
+In fork mode, the next step is Phase 3.5 (create the wave branch) before scaffolding — see `references/fork-mode.md`.
 
 ## Phase 4 — Build the scaffold in this session
 
@@ -45,13 +79,15 @@ You (the coordinator) write the scaffold files yourself. The other agents aren't
 - Run a build check appropriate to the stack (e.g. `cargo check --workspace` for Rust, `tsc --noEmit` for TypeScript, `go build ./...` for Go). **Do not proceed if it fails.** Fix and re-check.
 - Commit with a clear message describing what contracts were locked. Example: `scaffold: lock SttEngine + LlmProvider + Recorder + … contracts`.
 
-The scaffold commit is load-bearing: every parallel chunk imports from it. Nail it down before dispatch.
+The scaffold commit lands on the integration branch — trunk in solo mode, the wave branch in fork mode (since Phase 3.5 already checked it out). Either way, it's load-bearing: every parallel chunk imports from it. Nail it down before dispatch.
+
+In fork mode, this means trunk is **not** modified — it stays at upstream's HEAD until the PR merges upstream.
 
 ## Phase 5 — Preconditions for dispatch
 
 Verify:
 - `$TMUX` is set (inside a tmux session)
-- The scaffold commit you just made is on trunk and is HEAD
+- The scaffold commit you just made is HEAD on the integration branch (trunk in solo mode, the wave branch in fork mode)
 - Working tree still clean
 
 ## Phase 6 — Dispatch
@@ -98,14 +134,16 @@ When the user says chunks are done, walk through each branch **one at a time**. 
 - **Full fold** — apply + stage + remove worktree + delete branch
 - **Skip** — leave this one for later
 
-**Primitive choice:** swarm agents commit their work (per the CHUNK.md template), so the default fold primitive is **`gwc`** (git-worktree-cherry-pick). It cherry-picks every commit on the branch that is ahead of main, preserving each commit's message as its own entry on main. Fall back to `gwa` only if the agent left work uncommitted — `gwa` only applies the uncommitted diff and will say "Nothing to apply" on a committed branch.
+**Primitive choice:** swarm agents commit their work (per the CHUNK.md template), so the default fold primitive is **`gwc`** (git-worktree-cherry-pick). It cherry-picks every commit on the chunk branch that is ahead of the main worktree's currently-checked-out branch — i.e. the integration branch — preserving each commit's message as its own entry on the integration branch. Fall back to `gwa` only if the agent left work uncommitted — `gwa` only applies the uncommitted diff and will say "Nothing to apply" on a committed branch.
+
+In fork mode, make sure the main worktree has the wave branch checked out before running `gwc`. The fish helpers don't hardcode `main` — they target whatever HEAD is.
 
 **Critical:** `gwf`, `gwr`, and `gwra` all use `gum confirm`, which blocks on stdin. You cannot answer it from the Bash tool — the command will hang. `gwa` and `gwc` do not use gum and are safe to run. So:
 
 - **Apply only** → run `gwc <branch>` (committed) or `gwa <branch>` (uncommitted).
 - **Full fold** → do the steps manually (no gum). From the main repo root (`cd` into it first):
   ```
-  gwc <branch>                              # cherry-pick commits onto main
+  gwc <branch>                              # cherry-pick commits onto integration branch
   # OR: gwa <branch> && git -C <main> add . # for uncommitted work
   git -C <main> worktree remove <path> --force
   git -C <main> branch -D <branch>
@@ -119,6 +157,8 @@ When the user says chunks are done, walk through each branch **one at a time**. 
 
 **On conflict** (either `gwc`'s cherry-pick or `gwa`'s `--3way` fallback leaves markers): stop immediately. Print the conflicted files. Resolve in the main repo (e.g. `git checkout --ours Cargo.lock && cargo check --workspace && git add Cargo.lock` for lockfile conflicts), then `git cherry-pick --continue`. **Do not advance to the next branch until the current state is clean.** Check with `git -C <main> status --porcelain`.
 
+In fork mode, after Phase 8 completes successfully, continue to Phase 8.5 (push and open PR) — see `references/fork-mode.md`. In solo mode, skip Phase 8.5 and go straight to Phase 9.
+
 ## Phase 9 — Cleanup
 
 After all branches are folded or skipped, ask the user whether to sweep remaining swarm worktrees. Again, `gwra` blocks on `gum confirm` — do it manually:
@@ -131,15 +171,24 @@ Parse for `worktree <path>` entries whose path matches `<parent>/<repo>--*` (exc
 
 Confirm the list with the user before removing — show them the paths and branches you're about to delete.
 
+**Wave branches are preserved**, never swept. They live in the main worktree (just `git checkout`ed there), so they're already excluded by the `<parent>/<repo>--*` filter — no special-casing needed. Their PR may still be open and depending on the branch.
+
 ## Phase 10 — Record the wave
 
-Append a one-line note to the spec file:
+Append a one-line note to the spec file. The format depends on delivery mode:
 
-```
-_Wave {{N}} executed {{YYYY-MM-DD}}: branches {{comma-separated list}}_
-```
+- **solo**:
+  ```
+  _Wave {{N}} executed {{YYYY-MM-DD}}: branches {{comma-separated list}}_
+  ```
+- **fork**:
+  ```
+  _Wave {{N}} executed {{YYYY-MM-DD}} on branch {{wave-branch}}; chunks {{list}}; PR {{url-or-"not pushed"}}_
+  ```
 
-Use today's date (from the environment context). This is the only persistent state — on the next `/swarm` invocation, this note is how you know which wave to offer next.
+Use today's date (from the environment context). This is per-run history — on the next `/swarm` invocation, this note is how you know which wave to offer next.
+
+The annotation lives at the bottom of the spec, **not** inside the `## Execution` section. Execution captures durable preferences; annotations capture per-run history. Don't conflate them.
 
 If the spec had no Waves section, append instead:
 
@@ -149,7 +198,9 @@ _Executed {{YYYY-MM-DD}}: branches {{list}}_
 
 ## Ground rules
 
-- **You don't push, you don't merge, you don't touch remotes.** Fold-back is local-only. The user decides what gets pushed.
+- **You don't merge.** Even in fork mode, opening a PR is the boundary — merging is the human's decision upstream.
+- **You push only with explicit confirmation, only in fork mode, and only the wave branch.** Chunk branches are never pushed by this skill. Solo mode never pushes anything.
+- **You never `--force` push.** If a push is rejected, surface the output and let the user diagnose.
 - **You don't skip hooks** (no `--no-verify`). If a commit hook fails during the scaffold, fix the underlying issue.
 - **You stop on conflict.** Never pass `-Xtheirs` or similar to paper over a 3way conflict.
 - **You do not unilaterally edit locked interfaces.** If a chunk turns out to need a different signature mid-dispatch, that's a spec change — stop and surface it.

@@ -11,20 +11,21 @@ Create a worktree at `../<repo>--<branch>`, create the branch, `cd` into the wor
 - **Use when:** creating a single worktree serially. For parallel dispatch prefer `tslw`/`tslwm`, which create worktrees *and* launch panes in one call.
 
 ### `gwa [branch]`
-Apply worktree changes to main. Runs `git diff HEAD | git apply --index -` first (cached), falling back to `--3way` on failure. Copies untracked files.
+Apply worktree changes to the main worktree's currently-checked-out branch (the integration branch — trunk in solo mode, the wave branch in fork mode). Runs `git diff HEAD | git apply --index -` first (cached), falling back to `--3way` on failure. Copies untracked files.
 - With no arg: applies the current worktree (must `cd` into it first).
 - With branch: applies the worktree at `../<repo>--<branch>`.
 - **On conflict:** `git apply --3way` leaves conflict markers. Surface the conflict to the user, wait for manual resolution, do not continue.
-- **Only applies uncommitted work** (`git diff HEAD`). If the branch has commits ahead of main, `gwa` reports "Nothing to apply." For committed branches (the swarm case), use `gwc`.
-- **Use when:** integrating an in-progress worktree's changes into main without deleting the worktree.
+- **Only applies uncommitted work** (`git diff HEAD`). If the chunk branch has commits ahead of the integration branch, `gwa` reports "Nothing to apply." For committed branches (the swarm case), use `gwc`.
+- **Use when:** integrating an in-progress worktree's changes into the integration branch without deleting the worktree.
 
 ### `gwc [branch]`
-Git-worktree-cherry-pick. Cherry-picks every commit on `<branch>` that is not on the main worktree's currently-checked-out branch (typically `main`/`master`), in order, onto the main worktree.
+Git-worktree-cherry-pick. Cherry-picks every commit on `<branch>` that is not on the main worktree's currently-checked-out branch (the integration branch — `main`/`master` in solo mode, the wave branch in fork mode), in order, onto the main worktree.
 - With no arg: cherry-picks the current worktree's branch (must `cd` into it first).
 - With branch: cherry-picks from the worktree at `../<repo>--<branch>`.
-- **No-op if the branch has no commits ahead of the target** — prints a hint pointing at `gwa`.
+- **No-op if the branch has no commits ahead of the integration branch** — prints a hint pointing at `gwa`.
 - **On conflict:** cherry-pick stops with markers in the main worktree. Stop, surface the files, wait for manual `cherry-pick --continue` or `--abort`. Do not advance.
-- **Use when:** folding back a swarm chunk whose agent already committed. Preferred over `gwa` for committed work because it preserves each commit (with its message) as its own entry on main.
+- **Use when:** folding back a swarm chunk whose agent already committed. Preferred over `gwa` for committed work because it preserves each commit (with its message) as its own entry on the integration branch.
+- **Important:** the helper does not hardcode `main`. It targets whatever branch the main worktree currently has checked out. So in fork mode, make sure the wave branch is checked out before running `gwc`.
 
 ### `gwf [branch]`
 Fold worktree: apply (uncommitted diff) + stage + remove worktree + delete branch + kill tmux panes in that directory. Uses `gum confirm`.
@@ -109,6 +110,8 @@ tslwm "" branch1 branch2 ... branch8
 
 Swarm agents commit their work (see `chunk-template.md` → "Commit your work to this branch when done"), so the default fold primitive is **`gwc`** (cherry-pick). Fall back to `gwa` only if the agent left work uncommitted.
 
+In fork mode, make sure the main worktree has the wave branch checked out before any `gwc` call — `gwc` cherry-picks onto whatever HEAD is.
+
 ```
 # for each branch, ask user: apply-only / full-fold / skip
 
@@ -135,13 +138,16 @@ tmux list-panes -a -F "#{pane_id} #{pane_current_path}" \
 # before advancing.
 
 # Cargo.lock conflicts are common when parallel chunks each add deps. Resolve by
-# taking main's lock (`git checkout --ours Cargo.lock && git add Cargo.lock`),
-# then run `cargo check --workspace` to let cargo regenerate the lockfile with
-# the new deps, then `git add Cargo.lock && git cherry-pick --continue`.
+# taking the integration branch's lock (`git checkout --ours Cargo.lock && git
+# add Cargo.lock`), then run `cargo check --workspace` to let cargo regenerate
+# the lockfile with the new deps, then `git add Cargo.lock && git cherry-pick
+# --continue`.
 
 # final sweep (substitute for gwra):
 git -C <main> worktree list --porcelain   # parse, filter <parent>/<repo>--*
 # confirm list with user, then loop:
 #   git worktree remove --force <path>
 #   git branch -D <branch>
+# wave branches in fork mode are NOT in this filter (they live in the main
+# worktree, not in <parent>/<repo>--*), so they're preserved automatically.
 ```

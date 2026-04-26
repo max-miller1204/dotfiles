@@ -1,6 +1,6 @@
 # Command reference
 
-All commands defined in `~/.config/fish/functions/`. Invoke via `Bash` tool (fish is the user's shell).
+All commands defined in `~/.config/fish/functions/`. The user's interactive shell is fish, but Claude Code's `Bash` tool defaults to bash — fish functions like `gwc`/`gwa`/`tslw`/`tslwm` aren't callable directly. Wrap them: `fish -c 'gwc <branch>'`. (For commands that need the user's full env including `$PATH` additions and aliases, use `fish -lc '...'` to source the login profile.)
 
 Worktree naming convention: `<parent-dir>/<repo-basename>--<branch>`. E.g. in `~/code/chatter`, branch `audio-recorder` lives at `~/code/chatter--audio-recorder`.
 
@@ -142,11 +142,11 @@ tmux list-panes -a -F "#{pane_id} #{pane_current_path}" \
 #   git -C <main> status --porcelain
 # before advancing.
 
-# Cargo.lock conflicts are common when parallel chunks each add deps. Resolve by
-# taking the integration branch's lock (`git checkout --ours Cargo.lock && git
-# add Cargo.lock`), then run `cargo check --workspace` to let cargo regenerate
-# the lockfile with the new deps, then `git add Cargo.lock && git cherry-pick
-# --continue`.
+# Lockfile conflicts are common when parallel chunks each add deps. The pattern
+# is the same across stacks: take the integration branch's lock (`git checkout
+# --ours <lockfile>`), let the stack's resolver regenerate it, then
+# `git add <lockfile> && git cherry-pick --continue`. See the per-stack table
+# below for the regenerate command.
 
 # final sweep (substitute for gwra):
 git -C <main> worktree list --porcelain   # parse, filter <parent>/<repo>--*
@@ -157,3 +157,19 @@ git -C <main> worktree list --porcelain   # parse, filter <parent>/<repo>--*
 # wave branches in fork mode are NOT in this filter (they live in the main
 # worktree, not in <parent>/<repo>--*), so they're preserved automatically.
 ```
+
+### Lockfile conflict regeneration
+
+| Stack | Lockfile | Regenerate command |
+|-------|----------|--------------------|
+| Cargo (Rust) | `Cargo.lock` | `cargo check --workspace` |
+| npm | `package-lock.json` | `npm install` |
+| pnpm | `pnpm-lock.yaml` | `pnpm install` |
+| Bun | `bun.lockb` / `bun.lock` | `bun install` |
+| Go modules | `go.sum` | `go mod tidy` |
+| uv (Python) | `uv.lock` | `uv sync` |
+| Poetry | `poetry.lock` | `poetry lock --no-update` |
+
+Pattern in all cases: `git checkout --ours <lockfile>` → run the regenerate command → `git add <lockfile> && git cherry-pick --continue`. Taking `--ours` is correct because the integration branch's lock is the merge base for the next chunk; the regenerator re-adds the missing deps from the chunk branch.
+
+**This pattern is for *derived* lockfiles only.** When the conflict is in the manifest itself (e.g. `pyproject.toml`'s `dependencies = [...]` line, `package.json`'s `dependencies` block, `Cargo.toml`'s `[dependencies]`), the manifest IS the source of truth — there's no upstream to regenerate from. `--ours` would silently drop the chunk branch's contribution and the regenerator wouldn't restore it. Resolve manifest-level conflicts by hand: edit the conflicted region to union both branches' changes, `git add <manifest>`, then `git cherry-pick --continue`. The skill's general "stop on conflict, surface, resolve, continue" discipline still applies — just don't reach for the lockfile recipe when the conflict is in the manifest.

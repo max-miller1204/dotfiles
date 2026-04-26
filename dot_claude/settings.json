@@ -75,13 +75,15 @@
     }
   },
   "advisorModel": "opus",
+  "tui": "fullscreen",
   "voice": {
     "enabled": true,
     "mode": "hold"
   },
   "autoMemoryEnabled": true,
   "autoDreamEnabled": true,
+  "editorMode": "normal",
+  "teammateMode": "auto",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "tui": "fullscreen"
+  "voiceEnabled": true
 }

@@ -25,6 +25,24 @@ If "yes" in either form, drill further:
 - For each wave: what's the scaffold (serial pre-dispatch work)? What are the leaf chunks (branch name, scope, done-when smoke test)? Any intra-wave sequencing (e.g. chunk B must land after A)?
 - The goal is enough detail that the companion `/swarm` skill can later execute each wave verbatim without re-asking.
 
+## Probe delivery (only if waves exist)
+
+If the user answered yes to wave structure, ask one more question — how should each wave be delivered? Use `AskUserQuestion`:
+
+- **solo-local** — fold each wave's work directly onto trunk locally. No remotes, no PRs. Right when the user owns the repo or pushes to main directly.
+- **fork-pr** — each wave lands on its own branch, gets pushed to a fork, and is reviewed via pull request upstream. Right for forks of large public repos or any contribution-style workflow.
+
+If `fork-pr`, drill on a few more details so swarm doesn't have to ask later. Each is optional — accept "I don't know yet, ask me later" and leave the field unset:
+
+- Fork remote name (default `origin`)
+- Upstream remote name (default `upstream`)
+- Base strategy:
+  - `upstream-trunk` — every wave branches off upstream's default branch (independent waves)
+  - `stack-on-previous-wave` — each wave branches off the previous wave's branch (stacked PRs, for dependent waves)
+  - `ask-per-wave` — let swarm prompt at each wave
+
+These values flow into the spec's `## Execution` section below; swarm will fill in any field the user skipped.
+
 ## Write SPEC.md
 
 At the end of the interview, write the spec to `$2` if given, otherwise `./SPEC.md`. Structure:
@@ -33,10 +51,24 @@ At the end of the interview, write the spec to `$2` if given, otherwise `./SPEC.
 - **Scope** — in-scope and out-of-scope, explicit
 - **Design** — the approach settled on (not the alternatives considered)
 - **Verification** — how to know it works end-to-end
-- **Waves** (only if the user answered yes above) — for each wave:
+- **Waves** (only if the user answered yes to wave structure) — for each wave:
   - Scaffold: files/modules to land serially before dispatch
   - Interface contracts locked in the scaffold commit (trait signatures, type definitions)
   - Chunks: table with branch name, scope, done-when
   - Intra-wave sequencing notes if any
+- **Execution** (only if waves exist) — durable workflow preferences for `/swarm`:
+
+  ```markdown
+  ## Execution
+
+  Delivery mode: solo-local | fork-pr
+  PR unit: wave
+  Base strategy: upstream-trunk | stack-on-previous-wave | ask-per-wave
+  Branch naming: swarm/{slug}-wave-{n}
+  Fork remote: origin
+  Upstream remote: upstream
+  ```
+
+  `{slug}` is the spec filename slug, `{n}` the wave number — both substituted by swarm at runtime. Leave any field whose value the user skipped; swarm will prompt and fill it in on the relevant phase. Only emit `Fork remote:` / `Upstream remote:` lines if the user picked `fork-pr` mode.
 
 If there are waves, tell the user the next step is `/swarm` to execute them one at a time. If there are no waves, the spec is the deliverable — they can implement it themselves or pass it to other tooling.

@@ -28,5 +28,5 @@ Tick each box when satisfied. When all are ticked, tell the user you're done and
 
 1. Stay inside this worktree. You are on branch `{{branch}}` at `{{worktree-path}}`.
 2. Do not touch files owned by other chunks. If you need something from them, note it and ask the user.
-3. Commit your work to this branch when done, but do not push and do not merge. The coordinator session will fold your branch back into trunk.
+3. Commit your work to this branch when done, but do not push and do not merge. The coordinator session will fold your branch back into the integration branch (trunk in solo-local delivery; the wave branch in fork-pr delivery — the coordinator handles either).
 4. If you hit a blocker, stop and tell the user. Do not attempt to coordinate with sibling agents directly.

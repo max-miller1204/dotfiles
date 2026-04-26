@@ -40,10 +40,13 @@ Fold worktree: apply (uncommitted diff) + stage + remove worktree + delete branc
   git -C <main> add .
 
   git -C <main> worktree remove <parent>/<repo>--<branch> --force
+  rmdir -p "$(dirname <parent>/<repo>--<branch>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names
   git -C <main> branch -D <branch>
   # plus: kill tmux panes whose pane_current_path starts with the worktree path
   ```
 - **Use when:** the user asks to fully fold a chunk. Always use the substitute sequence, not `gwf` itself.
+
+  **Why the rmdir:** if `<branch>` contains `/` (e.g. `swarm/foo-wave-2-bar`), the worktree path `<parent>/<repo>--swarm/foo-wave-2-bar` has an intermediate dir `<parent>/<repo>--swarm/`. `git worktree remove` only removes the leaf, leaving the parent empty. `rmdir -p` walks up and stops at the first non-empty parent, so it's safe — if other sibling worktrees still exist under the same parent, the parent stays.
 
 ### `gwr [branch]`
 Remove a single worktree and its branch. Kills tmux panes in that directory. Uses `gum confirm`.
@@ -51,6 +54,7 @@ Remove a single worktree and its branch. Kills tmux panes in that directory. Use
 - **Substitute:**
   ```
   git -C <main> worktree remove <parent>/<repo>--<branch> --force
+  rmdir -p "$(dirname <parent>/<repo>--<branch>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names
   git -C <main> branch -D <branch>
   # plus: kill tmux panes whose pane_current_path starts with the worktree path
   ```
@@ -124,6 +128,7 @@ gwa <branch>     # safe — no gum
 # full-fold (substitute for gwf, since gwf blocks on gum):
 gwc <branch>                  # or gwa <branch> if uncommitted; then git -C <main> add .
 git -C <main> worktree remove <parent>/<repo>--<branch> --force
+rmdir -p "$(dirname <parent>/<repo>--<branch>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names (e.g. swarm/foo-wave-2-bar)
 git -C <main> branch -D <branch>
 # then kill tmux panes whose pane_current_path starts with that worktree path:
 tmux list-panes -a -F "#{pane_id} #{pane_current_path}" \
@@ -147,6 +152,7 @@ tmux list-panes -a -F "#{pane_id} #{pane_current_path}" \
 git -C <main> worktree list --porcelain   # parse, filter <parent>/<repo>--*
 # confirm list with user, then loop:
 #   git worktree remove --force <path>
+#   rmdir -p "$(dirname <path>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names; rmdir -p stops at the first non-empty parent so it's safe across the loop
 #   git branch -D <branch>
 # wave branches in fork mode are NOT in this filter (they live in the main
 # worktree, not in <parent>/<repo>--*), so they're preserved automatically.

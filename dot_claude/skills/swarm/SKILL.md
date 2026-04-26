@@ -22,7 +22,9 @@ Read `$1` if given, else `./SPEC.md`. If neither exists, tell the user to run `/
 
 Look for a **Waves** section in the spec.
 
-- **If waves are present** (the primary path): scan for any `_Wave N executed …_` notes already in the spec — those waves are done. Offer the first un-executed wave via `AskUserQuestion`. Use that wave's chunks and scaffold verbatim; do not re-chunk.
+- **If waves are present** (the primary path): scan for completion markers. The canonical form is `_Wave N executed YYYY-MM-DD: ..._` (italic, written by Phase 10) but accept reasonable variants — optional underscores, and any of `executed|done|completed|finished|shipped` for the verb. If a line mentions "Wave N" but matches neither the canonical nor the permissive form, **stop and surface it to the user** — silently ignoring is the failure mode where you re-execute already-completed work.
+
+  Filter completed waves out. Of what remains: if exactly one un-executed wave is left, proceed with it directly (no prompt — there's nothing to ask). If multiple remain, offer the first via `AskUserQuestion`. Use the chosen wave's chunks and scaffold verbatim; do not re-chunk.
 - **If no waves section**: treat the spec as one wave. You'll need to analyze parallelizability yourself in the next phase.
 
 ### 1b — Resolve delivery mode
@@ -42,7 +44,9 @@ Then:
   - `solo` (current behavior; fold to trunk)
   - `fork` (wave branches; opt-in push/PR — see references/fork-mode.md)
 
-  After the user answers, write a minimal `## Execution` section with `Delivery mode: <answer>` back into the spec so subsequent invocations skip this question. Surface the write in plain text ("Updated SPEC.md → set Delivery mode: solo-local").
+  After the user answers, write a minimal `## Execution` section with `Delivery mode: <answer>` back into the spec so subsequent invocations skip this question. **Place it before `## Waves` and after the spec's meta sections (Why/Stack/Interfaces/Verification/etc.)** — not at the bottom of the file, since the bottom is reserved for Phase 10's wave annotations.
+
+  Commit the spec edit immediately as its own commit (e.g. `spec: declare delivery mode (<answer>)`) before advancing to Phase 3 — Phase 3's working-tree-clean check needs the edit committed, not lingering as an unstaged change. Surface the write in plain text ("Updated SPEC.md → set Delivery mode: solo-local; committed as <sha>").
 
 The remaining phases are written in solo-mode terms with notes for fork mode. **Solo mode is byte-identical to the previous version of this skill.**
 
@@ -76,7 +80,7 @@ In fork mode, the next step is Phase 3.5 (create the wave branch) before scaffol
 You (the coordinator) write the scaffold files yourself. The other agents aren't running yet — this is all you.
 
 - Write the workspace/package manifest, shared types, interface contracts, stub modules for each chunk, CI.
-- Run a build check appropriate to the stack (e.g. `cargo check --workspace` for Rust, `tsc --noEmit` for TypeScript, `go build ./...` for Go). **Do not proceed if it fails.** Fix and re-check.
+- Run a build check. If the spec gives an explicit one (e.g. a "build/typecheck command for scaffold gate" line under Stack), use that. Otherwise fall back to the stack's standard fast-fail check — e.g. `cargo check --workspace` (Rust), `tsc --noEmit` (TypeScript), `bun run typecheck` (Bun), `go build ./...` (Go), `uv run mypy src/ && uv run pytest -q` (Python with uv). **Do not proceed if it fails.** Fix and re-check.
 - Commit with a clear message describing what contracts were locked. Example: `scaffold: lock SttEngine + LlmProvider + Recorder + … contracts`.
 
 The scaffold commit lands on the integration branch — trunk in solo mode, the wave branch in fork mode (since Phase 3.5 already checked it out). Either way, it's load-bearing: every parallel chunk imports from it. Nail it down before dispatch.
@@ -89,6 +93,8 @@ Verify:
 - `$TMUX` is set (inside a tmux session)
 - The scaffold commit you just made is HEAD on the integration branch (trunk in solo mode, the wave branch in fork mode)
 - Working tree still clean
+
+If any fail, explain what's wrong and stop. Do not force state — don't `tmux new-session` to manufacture a session, don't ignore a dirty tree, don't reset HEAD.
 
 ## Phase 6 — Dispatch
 
@@ -118,7 +124,7 @@ Three-step dispatch, in this order (avoids a race where Claude starts before its
    ```
    tmux send-keys -t <pane_id> 'c "read CHUNK.md and execute it"' C-m
    ```
-   Do this per-pane, not in a loop that might race. Verify each pane got the command before moving to the next.
+   Send to each pane individually and verify each got the command before moving on. `tmux send-keys` doesn't error when a pane ID is stale or wrong — it just silently does nothing — so per-pane verification is how you catch a missed dispatch.
 
 Report the pane/window IDs and worktree paths so the user can navigate.
 
@@ -138,6 +144,8 @@ When the user says chunks are done, walk through each branch **one at a time**. 
 
 In fork mode, make sure the main worktree has the wave branch checked out before running `gwc`. The fish helpers don't hardcode `main` — they target whatever HEAD is.
 
+**If the chunk's pane was closed before fold-back**, that's not a problem — `gwc` cherry-picks from the branch, not the pane. The branch and worktree typically still exist on disk; verify with `git -C <main> rev-parse <branch>` if uncertain. If the worktree was also removed (e.g. user ran `gwr` manually), the branch alone is sufficient for `gwc`. If the branch itself is gone, that work is lost — surface this and stop rather than guessing.
+
 **Critical:** `gwf`, `gwr`, and `gwra` all use `gum confirm`, which blocks on stdin. You cannot answer it from the Bash tool — the command will hang. `gwa` and `gwc` do not use gum and are safe to run. So:
 
 - **Apply only** → run `gwc <branch>` (committed) or `gwa <branch>` (uncommitted).
@@ -156,7 +164,7 @@ In fork mode, make sure the main worktree has the wave branch checked out before
     | xargs -r -n1 tmux kill-pane -t
   ```
 
-**On conflict** (either `gwc`'s cherry-pick or `gwa`'s `--3way` fallback leaves markers): stop immediately. Print the conflicted files. Resolve in the main repo (e.g. `git checkout --ours Cargo.lock && cargo check --workspace && git add Cargo.lock` for lockfile conflicts), then `git cherry-pick --continue`. **Do not advance to the next branch until the current state is clean.** Check with `git -C <main> status --porcelain`.
+**On conflict** (either `gwc`'s cherry-pick or `gwa`'s `--3way` fallback leaves markers): stop immediately. Print the conflicted files. Resolve in the main repo, then `git cherry-pick --continue`. For lockfile conflicts (common when parallel chunks each add deps), the pattern is `git checkout --ours <lockfile>` → regenerate via the stack's resolver → `git add <lockfile>` → `--continue`; see `references/commands.md` for the per-stack regenerate command. **Do not advance to the next branch until the current state is clean.** Check with `git -C <main> status --porcelain`.
 
 In fork mode, after Phase 8 completes successfully, continue to Phase 8.5 (push and open PR) — see `references/fork-mode.md`. In solo mode, skip Phase 8.5 and go straight to Phase 9.
 

@@ -146,6 +146,7 @@ In fork mode, make sure the main worktree has the wave branch checked out before
   gwc <branch>                              # cherry-pick commits onto integration branch
   # OR: gwa <branch> && git -C <main> add . # for uncommitted work
   git -C <main> worktree remove <path> --force
+  rmdir -p "$(dirname <path>)" 2>/dev/null || true  # cleans up intermediate parent dirs from slashed branch names (e.g. swarm/foo-wave-2 → <repo>--swarm/foo-wave-2)
   git -C <main> branch -D <branch>
   ```
   Where `<path>` is `<parent>/<repo>--<branch>`. Also kill any tmux panes whose `pane_current_path` starts with that worktree path:
@@ -167,7 +168,7 @@ After all branches are folded or skipped, ask the user whether to sweep remainin
 git -C <main> worktree list --porcelain
 ```
 
-Parse for `worktree <path>` entries whose path matches `<parent>/<repo>--*` (excluding the main worktree itself). For each match: `git worktree remove --force <path>` + `git branch -D <branch>`. Kill lingering tmux panes the same way as Phase 8.
+Parse for `worktree <path>` entries whose path matches `<parent>/<repo>--*` (excluding the main worktree itself). For each match: `git worktree remove --force <path>` + `rmdir -p "$(dirname <path>)" 2>/dev/null || true` (cleans up intermediate parent dirs created when branch names contain `/`, e.g. `swarm/foo-wave-2-bar` → `<repo>--swarm/foo-wave-2-bar`; rmdir -p walks up and stops at the first non-empty parent, so it's safe) + `git branch -D <branch>`. Kill lingering tmux panes the same way as Phase 8.
 
 Confirm the list with the user before removing — show them the paths and branches you're about to delete.
 

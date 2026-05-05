@@ -2,7 +2,7 @@
 
 # Required parameters:
 # @raycast.schemaVersion 1
-# @raycast.title Open Zed
+# @raycast.title Open VSCode
 # @raycast.mode silent
 
 # Optional parameters:
@@ -11,4 +11,4 @@
 # Documentation:
 # @raycast.author max
 
-zed -n
+open -n -a "visual studio code"

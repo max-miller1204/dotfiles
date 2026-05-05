@@ -205,7 +205,7 @@ In fork mode, make sure the main worktree has the wave branch checked out before
 - **Full fold** → do the steps manually (no gum). From the main repo root (`cd` into it first):
   ```
   gwc <branch>                              # cherry-pick commits onto integration branch
-  # OR: gwa <branch> && git -C <main> add . # for uncommitted work
+  # OR: gwa <branch>                        # for uncommitted work (also stages copied untracked files)
   git -C <main> worktree remove <path> --force
   rmdir -p "$(dirname <path>)" 2>/dev/null || true  # cleans up intermediate parent dirs from slashed branch names (e.g. swarm/foo-wave-2 → <repo>--swarm/foo-wave-2)
   git -C <main> branch -D <branch>

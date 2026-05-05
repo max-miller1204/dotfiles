@@ -38,9 +38,13 @@ function gwa
         or git -C $source_abs diff HEAD | git -C $main_abs apply --3way -
     end
 
+    # Symmetric with the tracked-diff path above (which uses `git apply --index`):
+    # stage each copied untracked file so the main worktree's index reflects the
+    # applied chunk regardless of whether each file was tracked upstream.
     for f in $untracked
         mkdir -p (dirname "$main_abs/$f")
         cp "$source_abs/$f" "$main_abs/$f"
+        git -C $main_abs add -- $f
     end
 
     git -C $main_abs status --short

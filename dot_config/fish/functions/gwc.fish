@@ -51,7 +51,22 @@ function gwc
 
     git -C $main_abs cherry-pick $commits
     set -l rc $status
-    if test $rc -ne 0
+
+    # Drive the sequencer to completion, --skipping commits that are
+    # patch-equivalent to ones already on the integration branch. Handles
+    # both single-redundant and mixed cases without dropping non-empty
+    # siblings. Use --absolute-git-dir so the check works when invoked
+    # from a chunk worktree with no args.
+    set -l git_dir (git -C $main_abs rev-parse --absolute-git-dir 2>/dev/null)
+    set -l skipped 0
+    while test $rc -ne 0
+        set -l porcelain (git -C $main_abs status --porcelain --untracked-files=no)
+        if test -n "$git_dir" -a -e "$git_dir/CHERRY_PICK_HEAD" -a -z "$porcelain"
+            set skipped (math $skipped + 1)
+            git -C $main_abs cherry-pick --skip >/dev/null 2>&1
+            set rc $status
+            continue
+        end
         echo ""
         echo "gwc: cherry-pick stopped. Resolve in $main_abs, then:"
         echo "  git -C $main_abs add <files>"
@@ -60,5 +75,13 @@ function gwc
         return $rc
     end
 
-    echo "Cherry-picked into $main_abs"
+    if test $skipped -eq $n
+        echo ""
+        echo "gwc: all $n commit(s) from '$branch' are already on '$target' (skipped)."
+        echo "  If '$branch' is fully folded, run gwf '$branch' to tear it down."
+    else if test $skipped -gt 0
+        echo "Cherry-picked "(math $n - $skipped)" commit(s); skipped $skipped already-applied into $main_abs"
+    else
+        echo "Cherry-picked into $main_abs"
+    end
 end

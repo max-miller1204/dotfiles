@@ -11,7 +11,7 @@ Create a worktree at `../<repo>--<branch>`, create the branch, `cd` into the wor
 - **Use when:** creating a single worktree serially. For parallel dispatch prefer `tslw`/`tslwm`, which create worktrees *and* launch panes in one call.
 
 ### `gwa [branch]`
-Apply worktree changes to the main worktree's currently-checked-out branch (the integration branch — trunk in solo mode, the wave branch in fork mode). Runs `git diff HEAD | git apply --index -` first (cached), falling back to `--3way` on failure. Copies untracked files.
+Apply worktree changes to the main worktree's currently-checked-out branch (the integration branch — trunk in solo mode, the wave branch in fork mode). Runs `git diff HEAD | git apply --index -` first (cached), falling back to `--3way` on failure. Copies untracked files and stages them with `git add` (symmetric with the `--index` path used for tracked diffs — the main worktree's index always reflects the applied chunk).
 - With no arg: applies the current worktree (must `cd` into it first).
 - With branch: applies the worktree at `../<repo>--<branch>`.
 - **On conflict:** `git apply --3way` leaves conflict markers. Surface the conflict to the user, wait for manual resolution, do not continue.
@@ -23,6 +23,7 @@ Git-worktree-cherry-pick. Cherry-picks every commit on `<branch>` that is not on
 - With no arg: cherry-picks the current worktree's branch (must `cd` into it first).
 - With branch: cherry-picks from the worktree at `../<repo>--<branch>`.
 - **No-op if the branch has no commits ahead of the integration branch** — prints a hint pointing at `gwa`.
+- **No-op if all commits are already applied (empty cherry-pick)** — happens when the user re-runs `gwc` on a branch that's already been folded but whose commit SHAs differ from the integration branch (e.g. main moved on between fold and re-run). `gwc` auto-aborts the empty cherry-pick, exits 0 with a message pointing at `gwf` for cleanup, and leaves the working tree clean.
 - **On conflict:** cherry-pick stops with markers in the main worktree. Stop, surface the files, wait for manual `cherry-pick --continue` or `--abort`. Do not advance.
 - **Use when:** folding back a swarm chunk whose agent already committed. Preferred over `gwa` for committed work because it preserves each commit (with its message) as its own entry on the integration branch.
 - **Important:** the helper does not hardcode `main`. It targets whatever branch the main worktree currently has checked out. So in fork mode, make sure the wave branch is checked out before running `gwc`.
@@ -35,9 +36,8 @@ Fold worktree: apply (uncommitted diff) + stage + remove worktree + delete branc
   ```
   # committed work (swarm default):
   gwc <branch>
-  # OR uncommitted work:
+  # OR uncommitted work (gwa stages copied untracked files automatically):
   gwa <branch>
-  git -C <main> add .
 
   git -C <main> worktree remove <parent>/<repo>--<branch> --force
   rmdir -p "$(dirname <parent>/<repo>--<branch>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names
@@ -126,7 +126,7 @@ gwc <branch>     # safe — no gum
 gwa <branch>     # safe — no gum
 
 # full-fold (substitute for gwf, since gwf blocks on gum):
-gwc <branch>                  # or gwa <branch> if uncommitted; then git -C <main> add .
+gwc <branch>                  # or gwa <branch> if uncommitted (gwa stages copied untracked files automatically)
 git -C <main> worktree remove <parent>/<repo>--<branch> --force
 rmdir -p "$(dirname <parent>/<repo>--<branch>)" 2>/dev/null || true   # cleans up intermediate parent dirs from slashed branch names (e.g. swarm/foo-wave-2-bar)
 git -C <main> branch -D <branch>

@@ -156,6 +156,17 @@ Run the same command across N panes/windows. `tsl` is directory-only; `tslw`/`ts
 | `Alt+Up` | Previous session |
 | `Alt+Down` | Next session |
 
+### Mac alternates
+
+Option is reserved for Aerospace on macOS, so the Linux `Alt+*` binds don't fire. These `Ctrl+Shift` binds are equivalents.
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+Shift+Left` | Focus pane left |
+| `Ctrl+Shift+Down` | Focus pane down |
+| `Ctrl+Shift+Up` | Focus pane up |
+| `Ctrl+Shift+Right` | Focus pane right |
+
 ### Copy Mode (vi)
 
 | Key | Action |

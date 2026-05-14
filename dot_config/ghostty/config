@@ -4,6 +4,7 @@ copy-on-select = clipboard
 cursor-style = block
 font-family = JetBrainsMono Nerd Font
 font-size = 13
+macos-option-as-alt = true
 mouse-hide-while-typing = true
 theme = catppuccin-mocha
 window-decoration = false

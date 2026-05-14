@@ -11,4 +11,4 @@ fi
 
 CONTEXT7_API_KEY="$(tr -d '\n' < "$secret_file")"
 export CONTEXT7_API_KEY
-exec npx -y @upstash/context7-mcp "$@"
+exec npx -y @upstash/context7-mcp@latest "$@"

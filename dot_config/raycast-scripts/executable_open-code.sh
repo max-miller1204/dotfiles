@@ -11,4 +11,4 @@
 # Documentation:
 # @raycast.author max
 
-open -n -a "visual studio code"
+code -n

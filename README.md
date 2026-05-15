@@ -20,7 +20,7 @@ Then `git add … && git commit && git push` from inside `chezmoi cd` to share c
 
 On first `chezmoi apply`, a `run_once_before` script installs every CLI these
 dotfiles expect (fish, tmux, neovim, eza, fzf, zoxide, starship, bat, fd,
-ripgrep, jq, atuin, mise, gh, gum, pfetch, plus Homebrew on macOS / an apt
+ripgrep, jq, atuin, mise, gum, pfetch, plus Homebrew on macOS / an apt
 repo for eza on Ubuntu). `run_once_after` scripts clone TPM + install tmux
 plugins and drop the LazyVim starter into `~/.config/nvim` if it's empty.
 
@@ -40,12 +40,14 @@ chezmoi init --apply max-miller1204/dotfiles
 That's it — the install scripts run during `apply` and handle the rest:
 
 - installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, eza, zoxide,
-  starship, bat, fd, ripgrep, jq, atuin, mise, gh, gum, pfetch, brev
-  (Nvidia cloud GPU CLI — brew tap on macOS, official curl installer on Linux)
+  starship, bat, fd, ripgrep, jq, atuin, mise, gum, pfetch, brev
+  (Nvidia cloud GPU CLI — brew tap on macOS, official curl installer on Linux).
+  `gh` is macOS-only (Homebrew); on Ubuntu install it yourself if you need it
 - installs **GUI apps** (casks on macOS; PPA/.deb/flatpak on Ubuntu):
-  ghostty, discord, zed, voquill, zoom, anki, obsidian, spotify, plus
-  aerospace, karabiner-elements, raycast, neovide-app, balenaetcher,
-  macdown-3000, pearcleaner, firefox on macOS (Linux ships Firefox by default)
+  ghostty, discord, voquill, zoom, anki, obsidian, spotify, plus
+  zed, aerospace, karabiner-elements, raycast, neovide-app, balenaetcher,
+  macdown-3000, pearcleaner, firefox on macOS (Linux ships Firefox by
+  default; zed and Chrome are macOS-only; on Ubuntu zoom installs via flatpak)
 - installs the **JetBrainsMono Nerd Font** cask on macOS (required by
   the ghostty config, which specifies it with no fallback). Linux skips
   it — starship/eza icons degrade gracefully to system fallback fonts

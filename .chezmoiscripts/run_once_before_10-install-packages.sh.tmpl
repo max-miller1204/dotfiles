@@ -103,19 +103,6 @@ if ! command -v mise >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/mise" ]]; then
     curl https://mise.run | sh
 fi
 
-# gh (GitHub CLI) — used by the gitconfig credential helper
-if ! command -v gh >/dev/null 2>&1; then
-    log "Installing gh"
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
-    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-    sudo apt-get update -y
-    sudo apt-get install -y gh
-fi
-
 # pfetch — tiny system info fetcher printed at fish startup
 if ! command -v pfetch >/dev/null 2>&1; then
     log "Installing pfetch"
@@ -153,16 +140,6 @@ if ! command -v discord >/dev/null 2>&1; then
     rm -f "$DISCORD_DEB"
 fi
 
-# google-chrome — grab the official .deb; it also adds Google's apt repo so
-# future updates flow through `apt-get upgrade`.
-if ! command -v google-chrome >/dev/null 2>&1; then
-    log "Installing google-chrome from the official .deb"
-    CHROME_DEB="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$CHROME_DEB" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
-    sudo apt-get install -y "$CHROME_DEB"
-    rm -f "$CHROME_DEB"
-fi
-
 # voquill — vendor apt repo + package install. The installed binary is
 # voquill-desktop, so guard on the dpkg package state rather than a command name.
 if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
@@ -170,22 +147,7 @@ if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
     curl -fsSL https://voquill.github.io/apt/install.sh | bash
 fi
 
-# zed — official installer drops the binary in ~/.local/bin (no apt repo)
-if ! command -v zed >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/zed" ]]; then
-    log "Installing zed via the official installer"
-    curl -f https://zed.dev/install.sh | sh
-fi
-
-# zoom — no apt repo; grab the latest .deb and let apt resolve deps
-if ! command -v zoom >/dev/null 2>&1; then
-    log "Installing zoom from the official .deb"
-    ZOOM_DEB="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$ZOOM_DEB" "https://zoom.us/client/latest/zoom_amd64.deb"
-    sudo apt-get install -y "$ZOOM_DEB"
-    rm -f "$ZOOM_DEB"
-fi
-
-# flatpak + flathub — needed for anki and spotify
+# flatpak + flathub — needed for anki, spotify, and zoom
 if ! command -v flatpak >/dev/null 2>&1; then
     log "Installing flatpak"
     sudo apt-get install -y flatpak
@@ -202,6 +164,12 @@ fi
 if ! flatpak info com.spotify.Client >/dev/null 2>&1; then
     log "Installing spotify via flatpak"
     sudo flatpak install -y flathub com.spotify.Client
+fi
+
+# zoom — flatpak from flathub
+if ! flatpak info us.zoom.Zoom >/dev/null 2>&1; then
+    log "Installing zoom via flatpak"
+    sudo flatpak install -y flathub us.zoom.Zoom
 fi
 
 # obsidian — no apt repo; fetch latest .deb from the GitHub releases

@@ -1,0 +1,6 @@
+# GitHub issue-chooser config — NOT an issue template. The skill must skip it.
+blank_issues_enabled: false
+contact_links:
+  - name: Questions
+    url: https://example.com/discuss
+    about: Ask usage questions here rather than opening an issue.

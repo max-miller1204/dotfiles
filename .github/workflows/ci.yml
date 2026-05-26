@@ -101,4 +101,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-chezmoi
       - name: chezmoi apply --dry-run
-        run: chezmoi apply --dry-run --verbose --exclude=encrypted,scripts
+        run: chezmoi apply --dry-run --verbose --exclude=scripts

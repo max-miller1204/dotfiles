@@ -1,6 +1,6 @@
 # dotfiles
 
-Chezmoi-managed dotfiles for Max. Targets **Ubuntu** and **macOS**.
+Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubuntu** (which uses the Linux path with desktop apps gated off — see [WSL Ubuntu](#wsl-ubuntu)).
 
 ## Commands
 
@@ -58,7 +58,7 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
-- creates `~/.config/secrets` (mode 700) — chezmoi also manages this dir via the `private_secrets/` source, but the bootstrap keeps a fallback mkdir so the context7 launcher script can't blow up before the first apply
+- installs the **1Password CLI (`op`)** — Homebrew cask `1password-cli` on macOS, the official apt repo on Linux. MCP runner scripts read secrets from 1Password at invocation time (see [Secrets](#secrets-1password))
 - adds fish to `/etc/shells` and sets it as your login shell
 - clones TPM and installs tmux plugins
 - drops the LazyVim starter into `~/.config/nvim` if nothing's there yet
@@ -71,46 +71,51 @@ silently fail inside some TTYs), run it manually:
 chsh -s "$(command -v fish)"
 ```
 
-## Secrets (age-encrypted, committed to git)
+## Secrets (1Password)
 
-Secrets are encrypted with [age](https://github.com/FiloSottile/age) using the
-recipient declared in `.chezmoi.toml.tmpl`. Encrypted files live under
-`dot_config/private_secrets/` in the source tree and decrypt to
-`~/.config/secrets/` at `chezmoi apply` time.
+Secrets live in 1Password and are fetched at invocation time via the `op` CLI.
+Nothing encrypted is committed to git anymore, and nothing plaintext lands on
+disk — runners just `op read` the value and pass it through to the consumer.
+
+Current items (vault `Personal`):
+
+| Reference | Used by |
+| --- | --- |
+| `op://Personal/context7/credential` | `dot_codex/executable_run-context7.sh` (Upstash Context7 MCP) |
 
 ### First-time setup on a new machine
 
-1. Install `age` (the bootstrap script pulls it in via apt/brew on first run,
-   but on a brand-new box you can install it manually first).
+1. **Install the 1Password CLI.** The bootstrap script installs it for you
+   (Homebrew cask `1password-cli` on macOS, official apt repo on Linux). If
+   you're setting up before the first `chezmoi apply`, install it yourself —
+   see [developer.1password.com/docs/cli](https://developer.1password.com/docs/cli/get-started/).
 
-2. Put the age **identity** (private key) at `~/.config/chezmoi/age-key.txt`,
-   mode 600. On the machine that already has it, just copy it over. On a
-   fresh key, generate one:
+2. **Sign in.** The smoothest path is biometric unlock via the desktop app:
+   1Password desktop → Settings → Developer → "Integrate with 1Password CLI."
+   Then `op signin` once and `op` will resolve transparently from any shell.
+   Without the desktop app, `eval "$(op signin)"` per shell session works too.
+
+3. **Verify** the reference resolves:
 
    ```sh
-   mkdir -p ~/.config/chezmoi && chmod 700 ~/.config/chezmoi
-   age-keygen -o ~/.config/chezmoi/age-key.txt
-   chmod 600 ~/.config/chezmoi/age-key.txt
-   # Back up the AGE-SECRET-KEY-1… line to a password manager!
-   # Then paste the public key into .chezmoi.toml.tmpl's [age] recipient field.
+   op read 'op://Personal/context7/credential' | head -c 8
+   # Should print the first 8 chars of the API key (no errors)
    ```
-
-3. Run `chezmoi init` once to render `.chezmoi.toml.tmpl` into
-   `~/.config/chezmoi/chezmoi.toml` (it wires the identity path + recipient).
-
-4. `chezmoi apply` — existing encrypted secrets decrypt into
-   `~/.config/secrets/`.
 
 ### Adding or rotating a secret
 
-Place the plaintext value on disk, then:
-
 ```sh
-# Adds the file to chezmoi, encrypted-in-place in the source tree.
-chezmoi add --encrypt ~/.config/secrets/context7_api_key
+# Create a new item:
+op item create --category=apicredential --vault=Personal \
+  --title=NAME "credential[concealed]=THE-SECRET"
+
+# Rotate an existing one:
+op item edit NAME --vault=Personal "credential[concealed]=NEW-SECRET"
 ```
 
-Commit the resulting `encrypted_*` blob. Never commit the plaintext.
+Then update (or add) the runner script that consumes it to call
+`op read 'op://Personal/NAME/credential'`. See
+`dot_codex/executable_run-context7.sh` for the pattern.
 
 ## MCP servers (Claude Code + Codex)
 
@@ -142,9 +147,8 @@ Cross-platform:
 - `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/executable_run-context7.sh` — context7 MCP launcher (reads age-decrypted key from `~/.config/secrets/context7_api_key`)
+- `dot_codex/executable_run-context7.sh` — context7 MCP launcher; reads the API key from 1Password (`op://Personal/context7/credential`)
 - `dot_claude/skills/spec/` — Claude skills
-- `dot_config/private_secrets/encrypted_private_context7_api_key.age` — age-encrypted API key, decrypts on apply
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
@@ -157,6 +161,11 @@ macOS-only (gated via `.chezmoiignore`):
 Linux-only (gated via `.chezmoiignore`):
 - `private_dot_local/bin/executable_zenity-askpass` — zenity equivalent
   of mac-askpass
+
+WSL-only adjustments (gated via the `isWSL` flag in `.chezmoi.toml.tmpl`):
+- `.chezmoiignore` skips `dot_config/ghostty` (use Windows Terminal instead)
+- The bootstrap skips the Linux desktop-app block (ghostty, discord, voquill,
+  obsidian, anki, spotify, zoom, brev) so WSL only gets CLI tools
 
 ### Raycast settings
 
@@ -181,6 +190,57 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 
+## WSL Ubuntu
+
+These dotfiles target Ubuntu inside WSL2 — Windows-native is not supported. The
+`isWSL` flag in `.chezmoi.toml.tmpl` auto-detects the WSL kernel
+(`microsoft-standard-WSL2`) and adapts: the Linux bootstrap runs, but the
+desktop-app block (ghostty, discord, obsidian, anki, spotify, zoom, …) is
+skipped, and `dot_config/ghostty` is ignored. Use the Windows-native versions
+of those apps and Windows Terminal as your terminal emulator.
+
+### Bootstrap inside WSL Ubuntu
+
+Open WSL Ubuntu and run:
+
+```sh
+# Install chezmoi (one-liner from the chezmoi site)
+sh -c "$(curl -fsSL https://get.chezmoi.io)"
+
+# Install 1Password CLI (the bootstrap will do this anyway, but install
+# it first if you want secrets to resolve during the very first apply)
+# — see https://developer.1password.com/docs/cli/get-started/
+
+# Clone + apply
+chezmoi init --apply max-miller1204/dotfiles
+```
+
+The first apply installs CLIs, mise toolchains, Nix, Claude Code, and the
+1Password CLI, then sets fish as your login shell.
+
+### 1Password sign-in from WSL
+
+The cleanest setup is the **desktop-app integration**: install 1Password for
+Windows, enable Settings → Developer → "Integrate with 1Password CLI," then in
+WSL run `op signin` once. Subsequent `op read` calls just work (Touch ID / 
+Windows Hello unlocks the desktop app, which acts as the keyring for the CLI).
+
+Without the desktop app, you can `eval "$(op signin)"` per shell session.
+
+### WSL-specific gotchas
+
+- **Default shell.** `chsh` works in WSL2 but the change requires a new
+  WSL session (`wsl --shutdown` from PowerShell, then reopen). If `chsh`
+  fails inside the bootstrap, run it manually with `chsh -s "$(command -v fish)"`.
+- **systemd.** Nix (via the Determinate installer) installs cleanly on Ubuntu
+  WSL with systemd enabled — it's on by default on recent Ubuntu WSL images.
+  If `systemctl status` returns "System has not been booted with systemd,"
+  add `[boot] systemd=true` to `/etc/wsl.conf` and `wsl --shutdown`.
+- **Don't run `chezmoi apply` against `/mnt/c/...`.** Keep the chezmoi source
+  inside the Linux filesystem (`~/.local/share/chezmoi`, which is where
+  `chezmoi init` puts it). Running it from `/mnt/c` would lose file modes and
+  be much slower over the 9P bridge.
+
 ## Migrating to a new Mac
 
 The bootstrap above handles packages and dotfiles. A few things live outside
@@ -188,12 +248,9 @@ the repo and need manual hand-off.
 
 ### Before you leave the old Mac
 
-1. **Back up the age identity** — required to decrypt any `private_secrets/*`
-   on the new machine. Without it, `chezmoi apply` fails on encrypted files.
-
-   ```sh
-   cp ~/.config/chezmoi/age-key.txt ~/Desktop/age-key.txt   # or password manager / iCloud / USB
-   ```
+1. **Make sure 1Password sync is healthy** — secrets live there now (see
+   [Secrets](#secrets-1password)). Confirm the items in the `Personal` vault
+   are visible in the desktop app before you wipe the old machine.
 
 2. **Commit and push anything in flight** in this repo:
 
@@ -228,14 +285,10 @@ the repo and need manual hand-off.
    xcode-select --install
    ```
 
-2. **Restore the age identity** before running chezmoi, so the first apply
-   can decrypt secrets:
-
-   ```sh
-   mkdir -p ~/.config/chezmoi && chmod 700 ~/.config/chezmoi
-   cp /path/to/backup/age-key.txt ~/.config/chezmoi/age-key.txt
-   chmod 600 ~/.config/chezmoi/age-key.txt
-   ```
+2. **Sign in to 1Password** (desktop app + CLI integration is easiest, see
+   [Secrets](#secrets-1password)). MCP runners need `op read` working before
+   they're first invoked, but `chezmoi apply` itself doesn't depend on it —
+   you can do this after.
 
 3. **Copy SSH keys** (or log in with `gh auth login` after chezmoi finishes —
    the gitconfig uses `gh auth git-credential` for HTTPS, so HTTPS clones
@@ -270,9 +323,10 @@ the repo and need manual hand-off.
 8. **Verify**:
 
    ```sh
-   claude mcp list           # should show nixos + context7
-   mise list                 # should show node, python, rust, go, fzf, bun, neovim, uv
-   which brew fish claude    # sanity-check everything's on PATH
+   claude mcp list                              # should show nixos (+ playwright if added)
+   mise list                                    # should show node, python, rust, go, fzf, bun, neovim, uv
+   which brew fish claude op                    # sanity-check everything's on PATH
+   op read 'op://Personal/context7/credential'  # confirms 1Password sign-in
    ```
 
 9. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**

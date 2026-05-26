@@ -9,3 +9,7 @@ raycast-export
 .config/raycast-scripts
 .local/bin/mac-askpass
 {{- end }}
+
+{{- if .isWSL }}
+.config/ghostty
+{{- end }}

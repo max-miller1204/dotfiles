@@ -5,6 +5,8 @@ set -euo pipefail
 
 log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
+IS_WSL={{ if .isWSL }}1{{ else }}0{{ end }}
+
 {{- if eq .chezmoi.os "darwin" }}
 
 # ---- macOS --------------------------------------------------------
@@ -23,7 +25,7 @@ fi
 log "Installing packages via Homebrew"
 brew install \
     fish git tmux eza fzf zoxide starship bat fd ripgrep jq \
-    atuin mise pfetch gh gum age
+    atuin mise pfetch gh gum 1password-cli
 
 # brev — Nvidia cloud GPU CLI (from the brevdev tap)
 brew install brevdev/homebrew-brev/brev || true
@@ -60,7 +62,7 @@ sudo apt-get update -y
 
 log "Installing base apt packages"
 sudo apt-get install -y \
-    fish git tmux zoxide bat ripgrep jq curl wget age \
+    fish git tmux zoxide bat ripgrep jq curl wget \
     fd-find ca-certificates gnupg build-essential \
     software-properties-common zenity
 
@@ -123,70 +125,91 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# ghostty — PPA has a current release; not in default apt repos
-if ! command -v ghostty >/dev/null 2>&1; then
-    log "Installing ghostty from mkasberg/ghostty-ubuntu"
-    sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu
+# 1Password CLI — official apt repo. Used by MCP runners to read secrets.
+if ! command -v op >/dev/null 2>&1; then
+    log "Installing 1Password CLI"
+    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \
+        | sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
+        | sudo tee /etc/apt/sources.list.d/1password.list >/dev/null
+    sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+    curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol \
+        | sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
+    sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \
+        | sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
     sudo apt-get update -y
-    sudo apt-get install -y ghostty
+    sudo apt-get install -y 1password-cli
 fi
 
-# discord — no official apt repo; grab the latest .deb and let apt resolve deps
-if ! command -v discord >/dev/null 2>&1; then
-    log "Installing discord from the official .deb"
-    DISCORD_DEB="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
-    sudo apt-get install -y "$DISCORD_DEB"
-    rm -f "$DISCORD_DEB"
-fi
+if [[ "$IS_WSL" -eq 1 ]]; then
+    log "WSL detected — skipping Linux desktop apps (use Windows-native versions)"
+else
+    # ghostty — PPA has a current release; not in default apt repos
+    if ! command -v ghostty >/dev/null 2>&1; then
+        log "Installing ghostty from mkasberg/ghostty-ubuntu"
+        sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu
+        sudo apt-get update -y
+        sudo apt-get install -y ghostty
+    fi
 
-# voquill — vendor apt repo + package install. The installed binary is
-# voquill-desktop, so guard on the dpkg package state rather than a command name.
-if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
-    log "Installing voquill"
-    curl -fsSL https://voquill.github.io/apt/install.sh | bash
-fi
+    # discord — no official apt repo; grab the latest .deb and let apt resolve deps
+    if ! command -v discord >/dev/null 2>&1; then
+        log "Installing discord from the official .deb"
+        DISCORD_DEB="$(mktemp --suffix=.deb)"
+        curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
+        sudo apt-get install -y "$DISCORD_DEB"
+        rm -f "$DISCORD_DEB"
+    fi
 
-# flatpak + flathub — needed for anki, spotify, and zoom
-if ! command -v flatpak >/dev/null 2>&1; then
-    log "Installing flatpak"
-    sudo apt-get install -y flatpak
-fi
-sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    # voquill — vendor apt repo + package install. The installed binary is
+    # voquill-desktop, so guard on the dpkg package state rather than a command name.
+    if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
+        log "Installing voquill"
+        curl -fsSL https://voquill.github.io/apt/install.sh | bash
+    fi
 
-# anki — flatpak from flathub
-if ! flatpak info net.ankiweb.Anki >/dev/null 2>&1; then
-    log "Installing anki via flatpak"
-    sudo flatpak install -y flathub net.ankiweb.Anki
-fi
+    # flatpak + flathub — needed for anki, spotify, and zoom
+    if ! command -v flatpak >/dev/null 2>&1; then
+        log "Installing flatpak"
+        sudo apt-get install -y flatpak
+    fi
+    sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# spotify — flatpak from flathub
-if ! flatpak info com.spotify.Client >/dev/null 2>&1; then
-    log "Installing spotify via flatpak"
-    sudo flatpak install -y flathub com.spotify.Client
-fi
+    # anki — flatpak from flathub
+    if ! flatpak info net.ankiweb.Anki >/dev/null 2>&1; then
+        log "Installing anki via flatpak"
+        sudo flatpak install -y flathub net.ankiweb.Anki
+    fi
 
-# zoom — flatpak from flathub
-if ! flatpak info us.zoom.Zoom >/dev/null 2>&1; then
-    log "Installing zoom via flatpak"
-    sudo flatpak install -y flathub us.zoom.Zoom
-fi
+    # spotify — flatpak from flathub
+    if ! flatpak info com.spotify.Client >/dev/null 2>&1; then
+        log "Installing spotify via flatpak"
+        sudo flatpak install -y flathub com.spotify.Client
+    fi
 
-# obsidian — no apt repo; fetch latest .deb from the GitHub releases
-if ! command -v obsidian >/dev/null 2>&1; then
-    log "Installing obsidian from the latest GitHub .deb"
-    OBSIDIAN_DEB_URL="$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest \
-        | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | .browser_download_url' | head -n1)"
-    OBSIDIAN_DEB="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$OBSIDIAN_DEB" "$OBSIDIAN_DEB_URL"
-    sudo apt-get install -y "$OBSIDIAN_DEB"
-    rm -f "$OBSIDIAN_DEB"
-fi
+    # zoom — flatpak from flathub
+    if ! flatpak info us.zoom.Zoom >/dev/null 2>&1; then
+        log "Installing zoom via flatpak"
+        sudo flatpak install -y flathub us.zoom.Zoom
+    fi
 
-# brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
-if ! command -v brev >/dev/null 2>&1; then
-    log "Installing brev via the official installer"
-    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+    # obsidian — no apt repo; fetch latest .deb from the GitHub releases
+    if ! command -v obsidian >/dev/null 2>&1; then
+        log "Installing obsidian from the latest GitHub .deb"
+        OBSIDIAN_DEB_URL="$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest \
+            | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | .browser_download_url' | head -n1)"
+        OBSIDIAN_DEB="$(mktemp --suffix=.deb)"
+        curl -fsSL -o "$OBSIDIAN_DEB" "$OBSIDIAN_DEB_URL"
+        sudo apt-get install -y "$OBSIDIAN_DEB"
+        rm -f "$OBSIDIAN_DEB"
+    fi
+
+    # brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
+    if ! command -v brev >/dev/null 2>&1; then
+        log "Installing brev via the official installer"
+        sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+    fi
 fi
 
 {{- end }}
@@ -218,11 +241,6 @@ if ! command -v claude >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/claude" ]]; 
     log "Installing Claude Code via official installer"
     curl -fsSL https://claude.ai/install.sh | bash
 fi
-
-# ---- Secrets directory (MCP runners read keys from here) ----------
-log "Preparing ~/.config/secrets (mode 700)"
-mkdir -p "$HOME/.config/secrets"
-chmod 700 "$HOME/.config/secrets"
 
 # ---- Make fish a login shell --------------------------------------
 FISH_PATH="$(command -v fish || true)"

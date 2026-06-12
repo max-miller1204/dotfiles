@@ -181,7 +181,7 @@ Linux-only (gated via `.chezmoiignore`):
 WSL-only adjustments (gated via the `isWSL` flag in `.chezmoi.toml.tmpl`):
 - `.chezmoiignore` skips `dot_config/ghostty` (use Windows Terminal instead)
 - The bootstrap skips the Linux desktop-app block (ghostty, discord, voquill,
-  obsidian, anki, spotify, zoom, brev) so WSL only gets CLI tools
+  obsidian, anki, spotify, zoom) so WSL only gets CLI tools
 - chezmoi uses the Windows-side `op.exe` for 1Password reads (see
   [Secrets](#secrets-1password))
 

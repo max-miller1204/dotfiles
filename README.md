@@ -12,7 +12,6 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 | `chezmoi edit <file>` | Edit a managed file (opens the source template, not the target in `$HOME`). |
 | `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
 | `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
-| `chezmoi add --encrypt <path>` | Same, but age-encrypt it in the source tree (for secrets). |
 | `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
 | `update-all` | Fish function — refreshes brew / apt / flatpak, mise toolchains, chezmoi, atuin. |
 
@@ -35,7 +34,7 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-> **Migrating from an existing Mac?** See [Migrating to a new Mac](#migrating-to-a-new-mac) for the pre/post-migration checklist (age key, Raycast re-export, SSH, etc.) before running the commands above.
+> **Migrating from an existing Mac?** See [Migrating to a new Mac](#migrating-to-a-new-mac) for the pre/post-migration checklist (Raycast re-export, SSH, etc.) before running the commands above.
 
 That's it — the install scripts run during `apply` and handle the rest:
 
@@ -58,7 +57,9 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
-- installs the **1Password CLI (`op`)** — Homebrew cask `1password-cli` on macOS, the official apt repo on Linux. MCP runner scripts read secrets from 1Password at invocation time (see [Secrets](#secrets-1password))
+- installs the **1Password CLI** (`op`) — the secrets backend (Homebrew cask
+  `1password-cli` on macOS, official apt repo on Linux); see
+  [Secrets](#secrets-1password)
 - adds fish to `/etc/shells` and sets it as your login shell
 - clones TPM and installs tmux plugins
 - drops the LazyVim starter into `~/.config/nvim` if nothing's there yet
@@ -73,15 +74,21 @@ chsh -s "$(command -v fish)"
 
 ## Secrets (1Password)
 
-Secrets live in 1Password and are fetched at invocation time via the `op` CLI.
-Nothing encrypted is committed to git anymore, and nothing plaintext lands on
-disk — runners just `op read` the value and pass it through to the consumer.
+Secrets live in 1Password, not in this repo — nothing encrypted is committed
+to git, and nothing plaintext lands in the source tree. There are currently
+**no secrets in use**; this is the pattern for when one is needed:
 
-Current items (vault `Personal`):
+- **chezmoi template** (value rendered into a target file at apply time):
 
-| Reference | Used by |
-| --- | --- |
-| `op://Personal/context7/credential` | `dot_codex/executable_run-context7.sh` (Upstash Context7 MCP) |
+  ```
+  {{ onepasswordRead "op://Personal/MyService/credential" }}
+  ```
+
+- **Runner script** (value fetched at invocation time, never on disk):
+
+  ```sh
+  MY_KEY="$(op read 'op://Personal/MyService/credential')"
+  ```
 
 ### First-time setup on a new machine
 
@@ -95,12 +102,19 @@ Current items (vault `Personal`):
    Then `op signin` once and `op` will resolve transparently from any shell.
    Without the desktop app, `eval "$(op signin)"` per shell session works too.
 
-3. **Verify** the reference resolves:
+3. **Verify** with `op whoami` (or `op.exe whoami` inside WSL).
 
-   ```sh
-   op read 'op://Personal/context7/credential' | head -c 8
-   # Should print the first 8 chars of the API key (no errors)
-   ```
+Platform notes:
+
+- **macOS** — the desktop app provides Touch ID unlock for `op`.
+- **Ubuntu** — install the desktop app too if you want biometric-style
+  unlock; otherwise `op signin` works standalone.
+- **WSL Ubuntu** — `.chezmoi.toml.tmpl` detects WSL and points chezmoi at the
+  **Windows-side `op.exe`**, so chezmoi secret reads unlock via the Windows
+  1Password app (Windows Hello). Install 1Password + the CLI integration on
+  the Windows side; WSL's PATH interop makes `op.exe` callable from Linux.
+  The apt-installed Linux `op` remains available for runner scripts and
+  manual `op signin`.
 
 ### Adding or rotating a secret
 
@@ -113,9 +127,8 @@ op item create --category=apicredential --vault=Personal \
 op item edit NAME --vault=Personal "credential[concealed]=NEW-SECRET"
 ```
 
-Then update (or add) the runner script that consumes it to call
-`op read 'op://Personal/NAME/credential'`. See
-`dot_codex/executable_run-context7.sh` for the pattern.
+Then reference it via `op://Personal/NAME/credential` from a template or
+runner script as above.
 
 ## MCP servers (Claude Code + Codex)
 
@@ -127,10 +140,13 @@ them in place:
 - `~/.claude.json` (user scope) — via `claude mcp remove` + `claude mcp add-json`
 - `~/.codex/config.toml` — via awk-strip + append
 
-Managed server names are listed in `.chezmoi.toml.tmpl` under
-`[data] managedMcpNames`. The sync scripts only touch those names, so anything
-else you've added manually in `~/.claude.json` or `~/.codex/config.toml` is
-preserved. Verify with `claude mcp list`.
+The Claude sync touches only the names listed in `.chezmoi.toml.tmpl` under
+`[data] managedMcpNames`; the Codex sync touches only the section names
+declared in its staging TOML. Anything else you've added manually (or that
+Codex's own plugin registry manages) in `~/.claude.json` or
+`~/.codex/config.toml` is preserved. One consequence: removing a server from
+the staging files means deleting its leftover section from
+`~/.codex/config.toml` by hand once. Verify with `claude mcp list`.
 
 ## What's here
 
@@ -147,8 +163,8 @@ Cross-platform:
 - `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_codex/executable_run-context7.sh` — context7 MCP launcher; reads the API key from 1Password (`op://Personal/context7/credential`)
-- `dot_claude/skills/spec/` — Claude skills
+- `dot_claude/skills/` — Claude skills (backlog-from-spec, grill-me, brev-cli)
+- `dot_codex/skills/` — Codex skills
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
@@ -166,6 +182,8 @@ WSL-only adjustments (gated via the `isWSL` flag in `.chezmoi.toml.tmpl`):
 - `.chezmoiignore` skips `dot_config/ghostty` (use Windows Terminal instead)
 - The bootstrap skips the Linux desktop-app block (ghostty, discord, voquill,
   obsidian, anki, spotify, zoom, brev) so WSL only gets CLI tools
+- chezmoi uses the Windows-side `op.exe` for 1Password reads (see
+  [Secrets](#secrets-1password))
 
 ### Raycast settings
 
@@ -207,10 +225,6 @@ Open WSL Ubuntu and run:
 # Install chezmoi (one-liner from the chezmoi site)
 sh -c "$(curl -fsSL https://get.chezmoi.io)"
 
-# Install 1Password CLI (the bootstrap will do this anyway, but install
-# it first if you want secrets to resolve during the very first apply)
-# — see https://developer.1password.com/docs/cli/get-started/
-
 # Clone + apply
 chezmoi init --apply max-miller1204/dotfiles
 ```
@@ -220,12 +234,14 @@ The first apply installs CLIs, mise toolchains, Nix, Claude Code, and the
 
 ### 1Password sign-in from WSL
 
-The cleanest setup is the **desktop-app integration**: install 1Password for
-Windows, enable Settings → Developer → "Integrate with 1Password CLI," then in
-WSL run `op signin` once. Subsequent `op read` calls just work (Touch ID / 
-Windows Hello unlocks the desktop app, which acts as the keyring for the CLI).
+chezmoi is configured (via `.chezmoi.toml.tmpl`) to call the **Windows-side
+`op.exe`** for secret reads, so the cleanest setup is: install 1Password for
+Windows, enable Settings → Developer → "Integrate with 1Password CLI," and
+unlocks happen via Windows Hello. Verify from WSL with `op.exe whoami`.
 
-Without the desktop app, you can `eval "$(op signin)"` per shell session.
+For shell-level use of the Linux `op` (runner scripts, ad-hoc reads), sign in
+with `op signin` once, or `eval "$(op signin)"` per shell session without the
+desktop app.
 
 ### WSL-specific gotchas
 
@@ -249,8 +265,8 @@ the repo and need manual hand-off.
 ### Before you leave the old Mac
 
 1. **Make sure 1Password sync is healthy** — secrets live there now (see
-   [Secrets](#secrets-1password)). Confirm the items in the `Personal` vault
-   are visible in the desktop app before you wipe the old machine.
+   [Secrets](#secrets-1password)), so anything stored in your vaults is
+   already on the new machine once you sign in.
 
 2. **Commit and push anything in flight** in this repo:
 
@@ -285,12 +301,7 @@ the repo and need manual hand-off.
    xcode-select --install
    ```
 
-2. **Sign in to 1Password** (desktop app + CLI integration is easiest, see
-   [Secrets](#secrets-1password)). MCP runners need `op read` working before
-   they're first invoked, but `chezmoi apply` itself doesn't depend on it —
-   you can do this after.
-
-3. **Copy SSH keys** (or log in with `gh auth login` after chezmoi finishes —
+2. **Copy SSH keys** (or log in with `gh auth login` after chezmoi finishes —
    the gitconfig uses `gh auth git-credential` for HTTPS, so HTTPS clones
    work without SSH at all):
 
@@ -300,36 +311,38 @@ the repo and need manual hand-off.
    chmod 600 ~/.ssh/id_*
    ```
 
-4. **Bootstrap** — same command as the top of this README:
+3. **Bootstrap** — same command as the top of this README:
 
    ```sh
    brew install chezmoi
    chezmoi init --apply max-miller1204/dotfiles
    ```
 
-5. **Open a new Ghostty tab** so fish picks up as the login shell. If fish
+4. **Open a new Ghostty tab** so fish picks up as the login shell. If fish
    isn't the default yet, run `chsh -s "$(command -v fish)"` manually — the
    bootstrap's `chsh` can silently fail inside some TTYs.
 
-6. **Import Raycast** — see [Raycast settings](#raycast-settings) for the
+5. **Import Raycast** — see [Raycast settings](#raycast-settings) for the
    two-step dance (import `.rayconfig`, point Raycast at
    `~/.config/raycast-scripts`).
 
-7. **Sign in to anything that isn't in secrets**: GitHub (`gh auth login`),
-   Atuin (`atuin login` + `atuin sync` — `auto_sync` is off by default),
-   1Password / password manager, Discord, Spotify, Obsidian, Zed account,
+6. **Sign in to everything**: 1Password (desktop app + CLI integration, see
+   [Secrets](#secrets-1password) — `chezmoi apply` doesn't depend on it while
+   the repo has no secrets, so this can wait until after bootstrap),
+   GitHub (`gh auth login`), Atuin (`atuin login` + `atuin sync` —
+   `auto_sync` is off by default), Discord, Spotify, Obsidian, Zed account,
    Claude Code (`claude` → follow the login flow).
 
-8. **Verify**:
+7. **Verify**:
 
    ```sh
-   claude mcp list                              # should show nixos (+ playwright if added)
-   mise list                                    # should show node, python, rust, go, fzf, bun, neovim, uv
-   which brew fish claude op                    # sanity-check everything's on PATH
-   op read 'op://Personal/context7/credential'  # confirms 1Password sign-in
+   claude mcp list           # should show nixos + playwright
+   mise list                 # should show node, python, rust, go, fzf, bun, neovim, uv
+   which brew fish claude op # sanity-check everything's on PATH
+   op whoami                 # confirms 1Password sign-in
    ```
 
-9. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**
+8. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**
    managed by this repo — configure them manually via System Settings, or
    add a `defaults write` script later if that becomes worth automating.
 

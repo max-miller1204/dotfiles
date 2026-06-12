@@ -145,6 +145,12 @@ if ! command -v op >/dev/null 2>&1; then
     sudo apt-get install -y 1password-cli
 fi
 
+# brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
+if ! command -v brev >/dev/null 2>&1; then
+    log "Installing brev via the official installer"
+    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+fi
+
 if [[ "$IS_WSL" -eq 1 ]]; then
     log "WSL detected — skipping Linux desktop apps (use Windows-native versions)"
 else
@@ -208,11 +214,6 @@ else
         rm -f "$OBSIDIAN_DEB"
     fi
 
-    # brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
-    if ! command -v brev >/dev/null 2>&1; then
-        log "Installing brev via the official installer"
-        sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
-    fi
 fi
 
 {{- end }}

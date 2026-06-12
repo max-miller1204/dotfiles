@@ -5,8 +5,6 @@ set -euo pipefail
 
 log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
-IS_WSL={{ if .isWSL }}1{{ else }}0{{ end }}
-
 {{- if eq .chezmoi.os "darwin" }}
 
 # ---- macOS --------------------------------------------------------
@@ -52,6 +50,8 @@ brew install --cask font-jetbrains-mono-nerd-font || true
 {{- else if eq .chezmoi.os "linux" }}
 
 # ---- Ubuntu / Debian ----------------------------------------------
+IS_WSL={{ if .isWSL }}1{{ else }}0{{ end }}
+
 if ! command -v apt-get >/dev/null 2>&1; then
     echo "This bootstrap only supports apt-based Linux (Ubuntu/Debian)." >&2
     exit 1
@@ -125,7 +125,10 @@ if ! command -v gum >/dev/null 2>&1; then
     sudo apt-get install -y gum
 fi
 
-# 1Password CLI — official apt repo. Used by MCP runners to read secrets.
+# 1Password CLI — official apt repo. Installed on plain Ubuntu and WSL
+# Ubuntu alike; on WSL it's a fallback, since chezmoi is configured (see
+# .chezmoi.toml.tmpl) to prefer the Windows-side op.exe there, which
+# unlocks via the Windows 1Password app.
 if ! command -v op >/dev/null 2>&1; then
     log "Installing 1Password CLI"
     curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \

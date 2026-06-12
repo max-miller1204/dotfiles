@@ -1,3 +1,14 @@
+{{- $isWSL := and (eq .chezmoi.os "linux") (or (contains "microsoft" (lower .chezmoi.kernel.osrelease)) (contains "wsl" (lower .chezmoi.kernel.osrelease))) -}}
 [data]
-    managedMcpNames = ["nixos", "context7", "playwright"]
-    isWSL = {{ if and (eq .chezmoi.os "linux") (or (contains "microsoft" (lower .chezmoi.kernel.osrelease)) (contains "wsl" (lower .chezmoi.kernel.osrelease))) }}true{{ else }}false{{ end }}
+    managedMcpNames = ["nixos", "playwright"]
+    isWSL = {{ if $isWSL }}true{{ else }}false{{ end }}
+
+{{- if $isWSL }}
+
+# On WSL, use the Windows-side 1Password CLI so chezmoi's secret reads unlock
+# via the Windows 1Password app (Windows Hello). Requires the Windows app with
+# Settings → Developer → CLI integration enabled. The Linux op installed by
+# the bootstrap remains available for runner scripts / manual op signin.
+[onepassword]
+    command = "op.exe"
+{{- end }}

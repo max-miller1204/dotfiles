@@ -76,7 +76,13 @@ NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
 if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
     echo "MISSING: typescript not resolvable by typescript-language-server" >&2; fail=1
 fi
-if ! { command -v rust-analyzer >/dev/null 2>&1 || [[ -x "$HOME/.cargo/bin/rust-analyzer" ]]; }; then
+RA_BIN=""
+if command -v rust-analyzer >/dev/null 2>&1; then
+    RA_BIN="$(command -v rust-analyzer)"
+elif [[ -x "$HOME/.cargo/bin/rust-analyzer" ]]; then
+    RA_BIN="$HOME/.cargo/bin/rust-analyzer"
+fi
+if [[ -z "$RA_BIN" ]] || ! "$RA_BIN" --version >/dev/null 2>&1; then
     echo "MISSING: rust-analyzer" >&2; fail=1
 fi
 if ! { command -v clangd >/dev/null 2>&1 || [[ -x /usr/bin/clangd ]] || [[ -x "$HOME/.local/bin/clangd" ]]; }; then

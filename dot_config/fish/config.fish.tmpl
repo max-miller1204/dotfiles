@@ -82,9 +82,11 @@ if status is-interactive
 
     # typescript-language-server lives in its own mise prefix and can't resolve
     # the separately-installed typescript; point NODE_PATH at it so the TS LSP works.
+    # Prepend rather than overwrite so any pre-existing NODE_PATH survives (when
+    # NODE_PATH is unset, $NODE_PATH expands to nothing and the result is unchanged).
     set -l ts_node_modules ~/.local/share/mise/installs/npm-typescript/latest/lib/node_modules
     if test -d $ts_node_modules
-        set -gx NODE_PATH $ts_node_modules
+        set -gx NODE_PATH $ts_node_modules $NODE_PATH
     end
 
     # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----

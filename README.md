@@ -58,7 +58,7 @@ That's it — the install scripts run during `apply` and handle the rest:
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
 - installs the **agent "axi" CLIs** (`gh-axi`, `chrome-devtools-axi`,
-  `lavish-axi`) - ergonomic wrappers Claude Code drives from its SessionStart
+  `lavish-axi`, `tasks-axi`) - ergonomic wrappers Claude Code drives from its SessionStart
   hooks, installed as mise-managed npm tools so they survive a node upgrade
   instead of orphaning in the version-pinned runtime dir
 - installs the **language servers** Claude Code's LSP plugins need: pyright,

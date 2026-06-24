@@ -5,7 +5,7 @@
     # Single source of truth for the mise-managed tools, consumed by both the
     # install scripts and the *-upgrade fish functions so the two never drift.
     lspMiseTools = ["npm:pyright", "npm:typescript-language-server", "npm:typescript", "go:golang.org/x/tools/gopls"]
-    axiMiseTools = ["npm:gh-axi", "npm:chrome-devtools-axi", "npm:lavish-axi"]
+    axiMiseTools = ["npm:gh-axi", "npm:chrome-devtools-axi", "npm:lavish-axi", "npm:tasks-axi"]
     # The mise typescript prefix relative to $HOME, shared by the fish config's
     # NODE_PATH and the install script's resolution check (each prepends its own
     # shell's home) so the derived path can't drift between the two.

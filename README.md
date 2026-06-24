@@ -172,7 +172,7 @@ Cross-platform:
 - `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/skills/` — Claude skills (backlog-from-spec, grill-me, brev-cli)
+- `dot_claude/skills/` — Claude skills (brev-cli, codex-review)
 - `dot_codex/skills/` — Codex skills
 
 macOS-only (gated via `.chezmoiignore`):

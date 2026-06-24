@@ -51,8 +51,8 @@ That's it — the install scripts run during `apply` and handle the rest:
   the ghostty config, which specifies it with no fallback). Linux skips
   it — starship/eza icons degrade gracefully to system fallback fonts
 - installs **toolchains via mise**: `node@lts`, `python@latest`,
-  `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`
-  (so fzf/bun/neovim are mise-managed, not apt/brew)
+  `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`,
+  `uv@latest` (so fzf/bun/neovim are mise-managed, not apt/brew)
 - installs **Nix** via the Determinate installer
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in

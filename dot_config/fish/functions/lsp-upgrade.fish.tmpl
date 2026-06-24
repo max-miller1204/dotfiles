@@ -16,9 +16,11 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
         # shell's RUSTUP_TOOLCHAIN stays stale until the next mise hook). If
         # rust is not mise-managed (`mise current` prints nothing) or resolves
         # to more than one version, fall back to a plain add so we never pass a
-        # malformed --toolchain.
+        # malformed --toolchain. `mise current` prints multiple versions
+        # space-separated on one line, so tokenize on whitespace before
+        # counting rather than relying on command substitution's newline split.
         mise upgrade rust
-        set -l rust_toolchain (mise current rust)
+        set -l rust_toolchain (mise current rust | string split -n ' ')
         if test (count $rust_toolchain) -eq 1
             rustup component add --toolchain $rust_toolchain rust-analyzer
         else

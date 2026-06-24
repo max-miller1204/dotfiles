@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Install the language servers the enabled Claude Code LSP plugins expect.
+# The npm/go servers are installed as mise-managed tools so they do not orphan
+# on a node/go upgrade (a raw `npm install -g` lands in the version-pinned
+# runtime dir and vanishes when mise repoints the version). clangd comes from
+# the OS package manager and rust-analyzer from rustup. Re-runs when this
+# script changes.
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# Resolve mise the same way as the package bootstrap (no reliance on PATH activation).
+MISE_BIN=""
+if command -v mise >/dev/null 2>&1; then
+    MISE_BIN="$(command -v mise)"
+elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    MISE_BIN="$HOME/.local/bin/mise"
+fi
+if [[ -z "$MISE_BIN" ]]; then
+    echo "mise not found; cannot install LSP servers" >&2
+    exit 1
+fi
+
+# ---- mise-managed servers (npm + go backends) --------------------
+log "Installing LSP servers via mise (pyright, typescript-language-server, typescript, gopls)"
+"$MISE_BIN" use -g \
+    npm:pyright \
+    npm:typescript-language-server \
+    npm:typescript \
+    go:golang.org/x/tools/gopls
+
+# ---- rust-analyzer (rustup component, tied to the toolchain) ------
+if command -v rustup >/dev/null 2>&1; then
+    log "Ensuring rust-analyzer (rustup component)"
+    rustup component add rust-analyzer || true
+fi
+
+# ---- clangd (OS package manager) ---------------------------------
+{{- if eq .chezmoi.os "darwin" }}
+if ! command -v clangd >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/clangd" ]]; then
+    log "Installing clangd via Homebrew llvm"
+    brew install llvm
+    # llvm is keg-only, so brew does not put clangd on PATH; expose it via ~/.local/bin.
+    # TODO(macos): confirm on a Mac - this branch is untested from Linux.
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$(brew --prefix llvm)/bin/clangd" "$HOME/.local/bin/clangd"
+fi
+{{- else if eq .chezmoi.os "linux" }}
+if ! command -v clangd >/dev/null 2>&1; then
+    log "Installing clangd via apt"
+    sudo apt-get install -y clangd
+fi
+{{- end }}
+
+# ---- verify every enabled server resolves and runs ---------------
+log "Verifying language servers"
+fail=0
+for bin in pyright-langserver typescript-language-server gopls; do
+    if ! "$MISE_BIN" which "$bin" >/dev/null 2>&1; then
+        echo "MISSING (mise): $bin" >&2; fail=1
+    fi
+done
+if ! { command -v rust-analyzer >/dev/null 2>&1 || [[ -x "$HOME/.cargo/bin/rust-analyzer" ]]; }; then
+    echo "MISSING: rust-analyzer" >&2; fail=1
+fi
+if ! { command -v clangd >/dev/null 2>&1 || [[ -x /usr/bin/clangd ]] || [[ -x "$HOME/.local/bin/clangd" ]]; }; then
+    echo "MISSING: clangd" >&2; fail=1
+fi
+if [[ "$fail" -ne 0 ]]; then
+    echo "One or more LSP servers failed to install" >&2
+    exit 1
+fi
+log "All LSP servers present"

@@ -1,0 +1,7 @@
+function axi-upgrade --description 'Upgrade the axi agent CLIs (mise-managed)'
+    set -l section (set_color --bold cyan)
+    set -l reset (set_color normal)
+
+    echo "$section==> axi CLIs$reset"
+    mise upgrade npm:gh-axi npm:chrome-devtools-axi npm:lavish-axi
+end

@@ -3,7 +3,7 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
     set -l reset (set_color normal)
 
     echo "$section==> mise LSP servers$reset"
-    mise upgrade npm:pyright npm:typescript-language-server npm:typescript go:golang.org/x/tools/gopls
+    mise upgrade {{ .lspMiseTools | join " " }}
 
     if command -q rustup
         echo "$section==> rust-analyzer$reset"

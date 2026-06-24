@@ -23,11 +23,7 @@ fi
 
 # ---- mise-managed servers (npm + go backends) --------------------
 log "Installing LSP servers via mise (pyright, typescript-language-server, typescript, gopls)"
-"$MISE_BIN" use -g \
-    npm:pyright \
-    npm:typescript-language-server \
-    npm:typescript \
-    go:golang.org/x/tools/gopls
+"$MISE_BIN" use -g {{ .lspMiseTools | join " " }}
 
 # ---- rust-analyzer (rustup component, tied to the toolchain) ------
 # Resolve rustup without relying on PATH activation: the mise rust bootstrap

@@ -2,6 +2,10 @@
 [data]
     managedMcpNames = ["nixos", "playwright"]
     isWSL = {{ if $isWSL }}true{{ else }}false{{ end }}
+    # Single source of truth for the mise-managed tools, consumed by both the
+    # install scripts and the *-upgrade fish functions so the two never drift.
+    lspMiseTools = ["npm:pyright", "npm:typescript-language-server", "npm:typescript", "go:golang.org/x/tools/gopls"]
+    axiMiseTools = ["npm:gh-axi", "npm:chrome-devtools-axi", "npm:lavish-axi"]
 
 {{- if $isWSL }}
 

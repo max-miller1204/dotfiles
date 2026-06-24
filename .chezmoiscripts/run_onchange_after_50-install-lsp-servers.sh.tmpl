@@ -67,7 +67,7 @@ done
 # typescript-language-server resolves `typescript` (tsserver) at runtime, which
 # fails across mise's isolated npm prefixes unless NODE_PATH points at it (set in
 # the fish config). Verify the resolution itself, not just that the launcher runs.
-TS_MODULES="$HOME/.local/share/mise/installs/npm-typescript/latest/lib/node_modules"
+TS_MODULES="$HOME/{{ .tsNodeModulesRel }}"
 NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
 if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
     echo "MISSING: typescript not resolvable by typescript-language-server" >&2; fail=1

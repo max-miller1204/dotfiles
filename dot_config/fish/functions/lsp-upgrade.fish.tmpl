@@ -7,7 +7,23 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
 
     if command -q rustup
         echo "$section==> rust-analyzer$reset"
-        rustup component add rust-analyzer
+        # rust-analyzer is a rustup component pinned to the active rust
+        # toolchain, and that toolchain is mise-managed. A bare
+        # `rustup component add rust-analyzer` only re-adds it to the current
+        # toolchain, so it no-ops once present and never pulls a newer version.
+        # Advance the mise-managed rust first, then add the component for the
+        # toolchain mise now resolves, queried fresh via `mise current` (this
+        # shell's RUSTUP_TOOLCHAIN stays stale until the next mise hook). If
+        # rust is not mise-managed (`mise current` prints nothing) or resolves
+        # to more than one version, fall back to a plain add so we never pass a
+        # malformed --toolchain.
+        mise upgrade rust
+        set -l rust_toolchain (mise current rust)
+        if test (count $rust_toolchain) -eq 1
+            rustup component add --toolchain $rust_toolchain rust-analyzer
+        else
+            rustup component add rust-analyzer
+        end
     end
 
     echo "$section==> clangd$reset"

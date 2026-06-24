@@ -57,6 +57,15 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
+- installs the **agent "axi" CLIs** (`gh-axi`, `chrome-devtools-axi`,
+  `lavish-axi`) - ergonomic wrappers Claude Code drives from its SessionStart
+  hooks, installed as mise-managed npm tools so they survive a node upgrade
+  instead of orphaning in the version-pinned runtime dir
+- installs the **language servers** Claude Code's LSP plugins need: pyright,
+  typescript-language-server (+ typescript) and gopls as mise-managed tools,
+  rust-analyzer via the rustup component, and clangd from apt (Linux) or
+  Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
+  when that script changes
 - installs the **1Password CLI** (`op`) — the secrets backend (Homebrew cask
   `1password-cli` on macOS, official apt repo on Linux); see
   [Secrets](#secrets-1password)
@@ -153,7 +162,7 @@ the staging files means deleting its leftover section from
 Cross-platform:
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go)
+- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go; `lsp-upgrade` and `axi-upgrade` do targeted upgrades of just the Claude Code language servers or just the agent axi CLIs)
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/ghostty/config` + `themes/catppuccin-mocha`
@@ -202,11 +211,12 @@ To update the snapshot after changing settings: re-export from Raycast
 `raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, agent axi CLIs, fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
+- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew) whenever the script changes
 
 ## WSL Ubuntu
 
@@ -337,7 +347,7 @@ the repo and need manual hand-off.
 
    ```sh
    claude mcp list           # should show nixos + playwright
-   mise list                 # should show node, python, rust, go, fzf, bun, neovim, uv
+   mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & axi CLIs)
    which brew fish claude op # sanity-check everything's on PATH
    op whoami                 # confirms 1Password sign-in
    ```
@@ -352,3 +362,4 @@ the repo and need manual hand-off.
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The install script is `run_once` — it only reruns if its content changes
 - `update-all` (fish function) refreshes everything the bootstrap installs: brew (formulae + casks) on macOS or apt (+ PPAs) + flatpak on Ubuntu, plus mise toolchains, chezmoi itself, and atuin
+- `lsp-upgrade` and `axi-upgrade` (fish functions) do targeted upgrades of just the Claude Code language servers or just the agent axi CLIs. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage

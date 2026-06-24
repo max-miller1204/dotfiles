@@ -233,10 +233,9 @@ if [[ -n "$MISE_BIN" ]]; then
 
     # Agent "axi" CLIs — ergonomic wrappers Claude Code drives via its
     # SessionStart hooks and tools (gh, browser, lavish review surfaces).
-    # Installed as npm globals on the mise node.
+    # Installed as mise-managed npm tools so they survive node upgrades.
     log "Installing agent axi CLIs (gh-axi, chrome-devtools-axi, lavish-axi)"
-    "$MISE_BIN" exec node@lts -- npm install -g \
-        gh-axi chrome-devtools-axi lavish-axi
+    "$MISE_BIN" use -g {{ .axiMiseTools | join " " }}
 fi
 
 {{- if eq .chezmoi.os "linux" }}

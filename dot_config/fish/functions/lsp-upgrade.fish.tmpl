@@ -1,0 +1,37 @@
+function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers'
+    set -l section (set_color --bold cyan)
+    set -l reset (set_color normal)
+
+    echo "$section==> mise LSP servers$reset"
+    mise upgrade {{ .lspMiseTools | join " " }}
+
+    if command -q rustup
+        echo "$section==> rust-analyzer$reset"
+        # rust-analyzer is a rustup component pinned to the active rust
+        # toolchain, and that toolchain is mise-managed. A bare
+        # `rustup component add rust-analyzer` only re-adds it to the current
+        # toolchain, so it no-ops once present and never pulls a newer version.
+        # Advance the mise-managed rust first, then add the component for the
+        # toolchain mise now resolves, queried fresh via `mise current` (this
+        # shell's RUSTUP_TOOLCHAIN stays stale until the next mise hook). If
+        # rust is not mise-managed (`mise current` prints nothing) or resolves
+        # to more than one version, fall back to a plain add so we never pass a
+        # malformed --toolchain. `mise current` prints multiple versions
+        # space-separated on one line, so tokenize on whitespace before
+        # counting rather than relying on command substitution's newline split.
+        mise upgrade rust
+        set -l rust_toolchain (mise current rust | string split -n ' ')
+        if test (count $rust_toolchain) -eq 1
+            rustup component add --toolchain $rust_toolchain rust-analyzer
+        else
+            rustup component add rust-analyzer
+        end
+    end
+
+    echo "$section==> clangd$reset"
+    {{- if eq .chezmoi.os "darwin" }}
+    brew upgrade llvm
+    {{- else }}
+    sudo apt-get install --only-upgrade -y clangd
+    {{- end }}
+end

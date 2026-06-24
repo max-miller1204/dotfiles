@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Install the language servers the enabled Claude Code LSP plugins expect.
+# The npm/go servers are installed as mise-managed tools so they do not orphan
+# on a node/go upgrade (a raw `npm install -g` lands in the version-pinned
+# runtime dir and vanishes when mise repoints the version). clangd comes from
+# the OS package manager and rust-analyzer from rustup. Re-runs when this
+# script changes.
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# Resolve mise the same way as the package bootstrap (no reliance on PATH activation).
+MISE_BIN=""
+if command -v mise >/dev/null 2>&1; then
+    MISE_BIN="$(command -v mise)"
+elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    MISE_BIN="$HOME/.local/bin/mise"
+fi
+if [[ -z "$MISE_BIN" ]]; then
+    echo "mise not found; cannot install LSP servers" >&2
+    exit 1
+fi
+
+# ---- mise-managed servers (npm + go backends) --------------------
+log "Installing LSP servers via mise (pyright, typescript-language-server, typescript, gopls)"
+"$MISE_BIN" use -g {{ .lspMiseTools | join " " }}
+
+# ---- rust-analyzer (rustup component, tied to the toolchain) ------
+# Resolve rustup without relying on PATH activation: the mise rust bootstrap
+# installs it under ~/.cargo/bin, which is not on PATH in a non-interactive apply.
+RUSTUP_BIN=""
+if command -v rustup >/dev/null 2>&1; then
+    RUSTUP_BIN="$(command -v rustup)"
+elif [[ -x "$HOME/.cargo/bin/rustup" ]]; then
+    RUSTUP_BIN="$HOME/.cargo/bin/rustup"
+fi
+if [[ -n "$RUSTUP_BIN" ]]; then
+    log "Ensuring rust-analyzer (rustup component)"
+    "$RUSTUP_BIN" component add rust-analyzer || true
+fi
+
+# ---- clangd (OS package manager) ---------------------------------
+{{- if eq .chezmoi.os "darwin" }}
+if ! command -v clangd >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/clangd" ]]; then
+    log "Installing clangd via Homebrew llvm"
+    brew install llvm
+    # llvm is keg-only, so brew does not put clangd on PATH; expose it via ~/.local/bin.
+    # TODO(macos): confirm on a Mac - this branch is untested from Linux.
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$(brew --prefix llvm)/bin/clangd" "$HOME/.local/bin/clangd"
+fi
+{{- else if eq .chezmoi.os "linux" }}
+if ! command -v clangd >/dev/null 2>&1; then
+    log "Installing clangd via apt"
+    sudo apt-get install -y clangd
+fi
+{{- end }}
+
+# ---- verify every enabled server resolves and runs ---------------
+log "Verifying language servers"
+fail=0
+for bin in pyright-langserver typescript-language-server gopls; do
+    if ! "$MISE_BIN" which "$bin" >/dev/null 2>&1; then
+        echo "MISSING (mise): $bin" >&2; fail=1
+    fi
+done
+# typescript-language-server resolves `typescript` (tsserver) at runtime, which
+# fails across mise's isolated npm prefixes unless NODE_PATH points at it (set in
+# the fish config). Verify the resolution itself, not just that the launcher runs.
+TS_MODULES="$HOME/{{ .tsNodeModulesRel }}"
+NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
+if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
+    echo "MISSING: typescript not resolvable by typescript-language-server" >&2; fail=1
+fi
+RA_BIN=""
+if command -v rust-analyzer >/dev/null 2>&1; then
+    RA_BIN="$(command -v rust-analyzer)"
+elif [[ -x "$HOME/.cargo/bin/rust-analyzer" ]]; then
+    RA_BIN="$HOME/.cargo/bin/rust-analyzer"
+fi
+if [[ -z "$RA_BIN" ]] || ! "$RA_BIN" --version >/dev/null 2>&1; then
+    echo "MISSING: rust-analyzer" >&2; fail=1
+fi
+if ! { command -v clangd >/dev/null 2>&1 || [[ -x /usr/bin/clangd ]] || [[ -x "$HOME/.local/bin/clangd" ]]; }; then
+    echo "MISSING: clangd" >&2; fail=1
+fi
+if [[ "$fail" -ne 0 ]]; then
+    echo "One or more LSP servers failed to install" >&2
+    exit 1
+fi
+log "All LSP servers present"

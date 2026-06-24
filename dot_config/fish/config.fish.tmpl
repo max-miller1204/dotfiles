@@ -80,6 +80,13 @@ if status is-interactive
         mise activate fish | source
     end
 
+    # typescript-language-server lives in its own mise prefix and can't resolve
+    # the separately-installed typescript; point NODE_PATH at it so the TS LSP works.
+    set -l ts_node_modules ~/.local/share/mise/installs/npm-typescript/latest/lib/node_modules
+    if test -d $ts_node_modules
+        set -gx NODE_PATH $ts_node_modules
+    end
+
     # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----
 
     if type -q starship

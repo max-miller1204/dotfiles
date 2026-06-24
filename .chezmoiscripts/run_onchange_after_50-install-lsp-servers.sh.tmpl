@@ -30,9 +30,17 @@ log "Installing LSP servers via mise (pyright, typescript-language-server, types
     go:golang.org/x/tools/gopls
 
 # ---- rust-analyzer (rustup component, tied to the toolchain) ------
+# Resolve rustup without relying on PATH activation: the mise rust bootstrap
+# installs it under ~/.cargo/bin, which is not on PATH in a non-interactive apply.
+RUSTUP_BIN=""
 if command -v rustup >/dev/null 2>&1; then
+    RUSTUP_BIN="$(command -v rustup)"
+elif [[ -x "$HOME/.cargo/bin/rustup" ]]; then
+    RUSTUP_BIN="$HOME/.cargo/bin/rustup"
+fi
+if [[ -n "$RUSTUP_BIN" ]]; then
     log "Ensuring rust-analyzer (rustup component)"
-    rustup component add rust-analyzer || true
+    "$RUSTUP_BIN" component add rust-analyzer || true
 fi
 
 # ---- clangd (OS package manager) ---------------------------------
@@ -60,6 +68,14 @@ for bin in pyright-langserver typescript-language-server gopls; do
         echo "MISSING (mise): $bin" >&2; fail=1
     fi
 done
+# typescript-language-server resolves `typescript` (tsserver) at runtime, which
+# fails across mise's isolated npm prefixes unless NODE_PATH points at it (set in
+# the fish config). Verify the resolution itself, not just that the launcher runs.
+TS_MODULES="$HOME/.local/share/mise/installs/npm-typescript/latest/lib/node_modules"
+NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
+if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
+    echo "MISSING: typescript not resolvable by typescript-language-server" >&2; fail=1
+fi
 if ! { command -v rust-analyzer >/dev/null 2>&1 || [[ -x "$HOME/.cargo/bin/rust-analyzer" ]]; }; then
     echo "MISSING: rust-analyzer" >&2; fail=1
 fi

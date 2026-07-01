@@ -6,20 +6,15 @@
 
 set -euo pipefail
 
-CODEX_CONFIG="${HOME}/.codex/config.toml"
-MCP_SOURCE="${HOME}/.config/codex/mcp-servers.toml"
-
-[ -r "$MCP_SOURCE" ] || { echo "staging file missing: $MCP_SOURCE" >&2; exit 1; }
+STAGING_SOURCE="${HOME}/.config/codex/mcp-servers.toml"
+{{ template "lib-codex-sync.sh" . }}
 
 # Manage exactly the server names declared in the staging file, so entries
 # added by other tools (e.g. Codex's own plugin registry) are never touched.
 # Removing a server from staging therefore needs a one-time manual cleanup
 # of its leftover section in ~/.codex/config.toml.
-MANAGED_RE="$(sed -nE 's/^\[mcp_servers\.([A-Za-z0-9_-]+)\]$/\1/p' "$MCP_SOURCE" | paste -sd'|' -)"
-[ -n "$MANAGED_RE" ] || { echo "no [mcp_servers.*] sections in $MCP_SOURCE" >&2; exit 1; }
-
-mkdir -p "$(dirname "$CODEX_CONFIG")"
-[ -f "$CODEX_CONFIG" ] || : > "$CODEX_CONFIG"
+MANAGED_RE="$(sed -nE 's/^\[mcp_servers\.([A-Za-z0-9_-]+)\]$/\1/p' "$STAGING_SOURCE" | paste -sd'|' -)"
+[ -n "$MANAGED_RE" ] || { echo "no [mcp_servers.*] sections in $STAGING_SOURCE" >&2; exit 1; }
 
 # Build the regex inside awk — backslashes passed via -v get escape-processed
 # and the anchors/brackets would be silently corrupted into a char class.
@@ -35,7 +30,7 @@ if [ -s "$CODEX_CONFIG.tmp" ] && [ -n "$(tail -c1 "$CODEX_CONFIG.tmp")" ]; then
   printf '\n' >> "$CODEX_CONFIG.tmp"
 fi
 
-cat "$MCP_SOURCE" >> "$CODEX_CONFIG.tmp"
+cat "$STAGING_SOURCE" >> "$CODEX_CONFIG.tmp"
 mv "$CODEX_CONFIG.tmp" "$CODEX_CONFIG"
 
 echo "Synced MCP servers into ~/.codex/config.toml"

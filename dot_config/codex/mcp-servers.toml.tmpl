@@ -12,9 +12,11 @@
 {{- end -}}
 {{- range $i, $s := $codexServers }}
 {{- $rel := get $s "command_rel" }}
+{{- $cmd := get $s "command" }}
+{{- if and (not $rel) (not $cmd) }}{{ fail (printf "mcp.yaml: server %q has neither command_rel nor command" $s.name) }}{{- end }}
 {{- if $i }}
 
 {{ end }}[mcp_servers.{{ $s.name }}]
-command = {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson (get $s "command") }}{{ end }}
+command = {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson $cmd }}{{ end }}
 args = {{ toJson $s.args }}
 {{- end }}

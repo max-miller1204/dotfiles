@@ -11,7 +11,7 @@
 # (`claude mcp remove --scope user <name>`), since only currently-declared names
 # are removed and re-added.
 #
-# staging hash: {{ include "dot_config/claude-code/mcp-servers.json.tmpl" | sha256sum }}
+# staging hash: {{ include "dot_config/claude-code/mcp-servers.json.tmpl" | sha256sum }} {{ include ".chezmoidata/mcp.yaml" | sha256sum }}
 
 set -euo pipefail
 

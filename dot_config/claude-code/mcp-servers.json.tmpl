@@ -13,9 +13,11 @@
   "mcpServers": {
 {{- range $i, $s := $claudeServers }}
 {{- $rel := get $s "command_rel" }}
+{{- $cmd := get $s "command" }}
+{{- if and (not $rel) (not $cmd) }}{{ fail (printf "mcp.yaml: server %q has neither command_rel nor command" $s.name) }}{{- end }}
     {{ toJson $s.name }}: {
       "type": "stdio",
-      "command": {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson (get $s "command") }}{{ end }},
+      "command": {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson $cmd }}{{ end }},
       "args": {{ toJson $s.args }}
     }{{ if lt (add1 $i) (len $claudeServers) }},{{ end }}
 {{- end }}

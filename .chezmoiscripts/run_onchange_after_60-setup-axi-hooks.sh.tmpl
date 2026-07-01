@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Wire the axi agent hooks across ALL agents (Claude, Codex, OpenCode) using the
+# supported `<tool> setup hooks` command. Each axi CLI shares axi-sdk-js, and a
+# single `setup hooks` call idempotently writes, per tool:
+#   - Claude : ~/.claude/settings.json   SessionStart hook  (bare `<tool>`, timeout 10)
+#   - Codex  : ~/.codex/hooks.json        SessionStart hook  + ~/.codex/config.toml [features] hooks = true
+#   - OpenCode: ~/.config/opencode/plugins/axi-<tool>.js     ambient-context plugin
+#
+# This is the single source of truth for axi hooks. It is deliberately ordered
+# after the axi CLIs are installed (run_once_before_10-install-packages) and after
+# the agent config files are applied. Claude's four axi SessionStart hooks are also
+# vendored in dot_claude/settings.json byte-identical to what `setup hooks` emits
+# (bare command, timeout 10), so this call is a no-op for Claude and never fights the
+# chezmoi-managed settings.json - it exists to wire Codex and OpenCode (previously
+# unwired) and to self-repair all three. See README "Agent hooks (axi)".
+#
+# Re-runs whenever the templated tool list below changes.
+#
+# axi tools: {{ .axiMiseTools | join " " }}
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# The axi CLIs are mise-managed; their shims live here and are not necessarily on
+# PATH in a non-interactive `chezmoi apply`. Put the shim dir on PATH so each
+# `<tool> setup hooks` resolves. Guard per-tool so a not-yet-installed CLI degrades
+# to a skip instead of hard-failing the whole apply (self-heals on the next apply).
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+
+{{- $axiBins := list -}}
+{{- range .axiMiseTools -}}
+{{-   $axiBins = append $axiBins (trimPrefix "npm:" .) -}}
+{{- end }}
+for tool in {{ $axiBins | join " " }}; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        log "Wiring agent hooks: $tool setup hooks"
+        "$tool" setup hooks
+    else
+        log "skip: $tool not on PATH yet (will wire on next apply)"
+    fi
+done

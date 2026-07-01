@@ -231,11 +231,17 @@ if [[ -n "$MISE_BIN" ]]; then
         node@lts python@latest rust@latest go@latest \
         fzf@latest bun@latest neovim@latest uv@latest
 
-    # Agent "axi" CLIs — ergonomic wrappers Claude Code drives via its
+    # Agent "axi" CLIs - ergonomic wrappers the coding agents drive via their
     # SessionStart hooks and tools (gh, browser, lavish review, tasks surfaces).
     # Installed as mise-managed npm tools so they survive node upgrades.
     log "Installing agent axi CLIs (gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi)"
     "$MISE_BIN" use -g {{ .axiMiseTools | join " " }}
+
+    # opencode coding agent - mise resolves the bare name to aqua:anomalyco/opencode
+    # (prebuilt release binaries), keeping it a first-class agent alongside claude
+    # and codex. Its axi hooks + ~/AGENTS.md instructions are wired by later scripts.
+    log "Installing opencode agent via mise"
+    "$MISE_BIN" use -g {{ .agentMiseTools | join " " }}
 fi
 
 {{- if eq .chezmoi.os "linux" }}

@@ -75,6 +75,8 @@ for name in "${PLUGINS[@]}"; do
                 || log "warn: enable failed for $id (retries next apply)" ;;
         enabled)
             log "Already enabled: $id" ;;
+        *)
+            log "warn: unexpected plugin state '$state' for $id (retries next apply)" ;;
     esac
 done
 

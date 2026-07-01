@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Install every CLI tool these dotfiles expect. Runs exactly once per
 # unique content hash (rerun only if this script changes).
-set -euo pipefail
+{{ template "lib-log.sh" . }}
 
-log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+{{ template "lib-resolve.sh" . }}
+
+{{ template "lib-apt.sh" . }}
 
 {{- if eq .chezmoi.os "darwin" }}
 
@@ -80,14 +82,12 @@ fi
 
 # eza — not in default apt repos on older Ubuntu.
 if ! command -v eza >/dev/null 2>&1; then
-    log "Installing eza from its apt repo"
-    sudo mkdir -p /etc/apt/keyrings
-    wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
-        | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
-        | sudo tee /etc/apt/sources.list.d/gierens.list >/dev/null
-    sudo apt-get update -y
-    sudo apt-get install -y eza
+    install_aptrepo eza \
+        /etc/apt/keyrings/gierens.gpg \
+        https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
+        "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
+        /etc/apt/sources.list.d/gierens.list \
+        eza
 fi
 
 # starship
@@ -118,14 +118,12 @@ fi
 
 # gum — used by the git worktree fish functions for confirmations
 if ! command -v gum >/dev/null 2>&1; then
-    log "Installing gum"
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    wget -qO- https://repo.charm.sh/apt/gpg.key \
-        | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
-        | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
-    sudo apt-get update -y
-    sudo apt-get install -y gum
+    install_aptrepo gum \
+        /etc/apt/keyrings/charm.gpg \
+        https://repo.charm.sh/apt/gpg.key \
+        "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+        /etc/apt/sources.list.d/charm.list \
+        gum
 fi
 
 # 1Password CLI — official apt repo. Installed on plain Ubuntu and WSL
@@ -133,19 +131,20 @@ fi
 # .chezmoi.toml.tmpl) to prefer the Windows-side op.exe there, which
 # unlocks via the Windows 1Password app.
 if ! command -v op >/dev/null 2>&1; then
-    log "Installing 1Password CLI"
-    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \
-        | sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
-        | sudo tee /etc/apt/sources.list.d/1password.list >/dev/null
+    # 1Password additionally ships a debsig verification policy + keyring; set
+    # those up (they are independent of the apt keyring/list) before installing.
     sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
     curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol \
         | sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
     sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
     curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \
         | sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
-    sudo apt-get update -y
-    sudo apt-get install -y 1password-cli
+    install_aptrepo "1Password CLI" \
+        /usr/share/keyrings/1password-archive-keyring.gpg \
+        https://downloads.1password.com/linux/keys/1password.asc \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
+        /etc/apt/sources.list.d/1password.list \
+        1password-cli
 fi
 
 # brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
@@ -222,12 +221,7 @@ fi
 {{- end }}
 
 # ---- mise toolchains (node needed for npx / MCP runners) ---------
-MISE_BIN=""
-if command -v mise >/dev/null 2>&1; then
-    MISE_BIN="$(command -v mise)"
-elif [[ -x "$HOME/.local/bin/mise" ]]; then
-    MISE_BIN="$HOME/.local/bin/mise"
-fi
+MISE_BIN="$(resolve_mise)"
 if [[ -n "$MISE_BIN" ]]; then
     log "Installing toolchains via mise (node, python, rust, go, fzf, bun, neovim)"
     "$MISE_BIN" use -g \

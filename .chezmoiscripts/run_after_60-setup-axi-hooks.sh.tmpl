@@ -24,15 +24,15 @@
 # "Ambient-context hooks (axi)" and AGENTS.md.
 #
 # axi tools: {{ .axiMiseTools | join " " }}
-set -euo pipefail
+{{ template "lib-log.sh" . }}
 
-log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+{{ template "lib-resolve.sh" . }}
 
 # The axi CLIs are mise-managed; their shims live here and are not necessarily on
 # PATH in a non-interactive `chezmoi apply`. Put the shim dir on PATH so each
 # `<tool> setup hooks` resolves. Guard per-tool so a not-yet-installed CLI degrades
 # to a skip instead of hard-failing the whole apply (self-heals on the next apply).
-export PATH="$HOME/.local/share/mise/shims:$PATH"
+prepend_path "$HOME/.local/share/mise/shims"
 
 {{- $axiBins := list -}}
 {{- range .axiMiseTools -}}

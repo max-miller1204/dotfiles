@@ -43,8 +43,8 @@ fi
 log "Updating apt"
 sudo apt-get update -y
 
-# ~/.local/bin is where several tools land (pfetch, the batcat/fdfind shims);
-# ensure it exists before the package loop populates it.
+# ~/.local/bin is where pfetch lands; ensure it exists before the package loop
+# populates it.
 mkdir -p "$HOME/.local/bin"
 {{- if .isWSL }}
 log "WSL detected - skipping GUI desktop apps (Windows-native versions are used)"
@@ -112,18 +112,6 @@ fi
 install_mise "{{ get $pkg "bin" }}" "{{ $os.mise }}"
 {{-     end }}
 {{-   end }}
-{{- end }}
-
-{{- if eq .chezmoi.os "linux" }}
-
-# Ubuntu names them batcat/fdfind - symlink to the canonical names.
-mkdir -p "$HOME/.local/bin"
-if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
-    ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
-fi
-if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
-    ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
-fi
 {{- end }}
 
 # ---- mise toolchains (node needed for npx / MCP runners) ---------

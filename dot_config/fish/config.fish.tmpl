@@ -28,19 +28,6 @@ if status is-interactive
     alias t 'tmux attach || tmux new -s Work'
     alias tmux-help 'bat ~/.config/tmux/keybinds.md'
 
-    # eza replaces ls if installed
-    if type -q eza
-        alias ls 'eza -lh --group-directories-first --icons=auto'
-        alias la 'ls -a'
-        alias ll 'ls -la'
-        alias lsa 'eza -lah --group-directories-first --icons=auto'
-        alias lt 'eza --tree --level=2 --long --icons --git'
-        alias lta 'eza --tree --level=2 --long --icons --git -a'
-    else
-        alias la 'ls -a'
-        alias ll 'ls -la'
-    end
-
     # -- Environment -----------------------------------------------------
 
     set -g fish_greeting
@@ -107,6 +94,20 @@ if status is-interactive
 
     if type -q atuin
         atuin init fish | source
+    end
+
+    # eza replaces ls if installed. Probed here, after mise activation, so a
+    # mise-installed eza (Linux) is on PATH; a system eza still resolves too.
+    if type -q eza
+        alias ls 'eza -lh --group-directories-first --icons=auto'
+        alias la 'ls -a'
+        alias ll 'ls -la'
+        alias lsa 'eza -lah --group-directories-first --icons=auto'
+        alias lt 'eza --tree --level=2 --long --icons --git'
+        alias lta 'eza --tree --level=2 --long --icons --git -a'
+    else
+        alias la 'ls -a'
+        alias ll 'ls -la'
     end
 
     if type -q pfetch

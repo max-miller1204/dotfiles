@@ -257,9 +257,11 @@ if ! command -v codex >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/codex" ]]; th
     curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 fi
 
-if ! command -v opencode >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/opencode" ]]; then
+# OpenCode installs to ~/.opencode/bin via its official installer; --no-modify-path
+# stops it editing shell rc (the chezmoi-managed fish config puts it on PATH instead).
+if ! command -v opencode >/dev/null 2>&1 && [[ ! -x "$HOME/.opencode/bin/opencode" ]]; then
     log "Installing OpenCode via official installer"
-    XDG_BIN_DIR="$HOME/.local/bin" curl -fsSL https://opencode.ai/install | bash
+    curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
 fi
 
 # ---- Make fish a login shell --------------------------------------

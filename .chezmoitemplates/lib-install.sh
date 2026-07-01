@@ -86,10 +86,10 @@ install_debsig() {
     curl -fsSL "$key_url" | sudo gpg --dearmor --output "/usr/share/debsig/keyrings/$policy_id/debsig.gpg"
 }
 
-# mise-managed tool. No package uses this method today (the mise toolchains block
-# owns the `mise use -g` runtimes and is not part of the manifest); it exists so a
-# mise-backed tool is a one-line manifest add. Guarded on the command name, then
-# installed through the resolved mise (not on PATH in a non-interactive apply).
+# mise-managed tool. Backs the Linux CLI tools (eza, gum, starship, atuin, bat, fd,
+# ripgrep, zoxide, gh) via mise's aqua backend; the separate `mise use -g` toolchains
+# block owns the language runtimes and is NOT part of the manifest. Guarded on the
+# command name, then installed through the resolved mise (not on PATH in a non-interactive apply).
 install_mise() {
     local bin="$1" tool="$2"
     command -v "$bin" >/dev/null 2>&1 && return 0

@@ -1,7 +1,7 @@
 # Install a package from a third-party apt repository: drop its signing key into a
-# keyring, register the repo under sources.list.d, then update and install. eza,
-# gum, and 1Password all share this keyring+list+update+install dance; only the
-# label, keyring path, key URL, repo line, list path, and package name differ.
+# keyring, register the repo under sources.list.d, then update and install. Only
+# 1Password uses this keyring+list+update+install dance now (eza and gum moved to
+# mise); only the label, keyring path, key URL, repo line, list path, and package name differ.
 # Usage: install_aptrepo LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE
 install_aptrepo() {
     local label="$1" keyring="$2" key_url="$3" repo_line="$4" list_path="$5" package="$6"

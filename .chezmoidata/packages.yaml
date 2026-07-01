@@ -6,13 +6,22 @@
 # in .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
 # (one-stanza) edit here - no shell edits.
 #
+# Order matters on Linux: the list is walked top-to-bottom, so a prerequisite must
+# precede its consumers. `curl` + `ca-certificates` come before `mise` (its
+# installer curls over https); `mise` comes before every `mise:` tool (install_mise
+# silently no-ops if mise is not resolvable yet); `gnupg` (gpg) comes before the
+# `op` apt-repo; `software-properties-common` (add-apt-repository) comes before the
+# `ghostty` PPA. On macOS every method is brew/cask, which are order-independent
+# and idempotent, so the emission order is immaterial there.
+#
 # Per-package fields:
 #   name  - human label, used in log lines
 #   gui   - true for desktop apps; GUI packages are skipped on WSL (Windows-native
 #           versions are used there instead). Non-GUI CLI tools install everywhere.
 #   bin   - the command the method guards on (command -v <bin>) where the method
-#           needs a command-name guard (apt+ppa, deburl); omit where the method
-#           carries its own guard (flatpak app id, script dpkg, aptrepo lookup).
+#           needs a command-name guard (apt+ppa, deburl, mise); omit where the
+#           method carries its own guard (flatpak app id, script dpkg, aptrepo
+#           lookup).
 #   darwin / linux - the install method for that OS, as a single-key map:
 #     brew:    <formula>            strict `brew install` (core CLI formulae)
 #     cask:    <cask>               `brew install --cask` (tolerant, `|| true`)
@@ -21,14 +30,18 @@
 #     flatpak: <app-id>             flatpak from flathub
 #     deburl:  <url>                download a .deb from <url> and apt-install it
 #     script:  <cmd> [altpath/dpkg] curl-style vendor installer run verbatim
-#     mise:    <tool>              mise-managed tool (method available; unused today)
+#     mise:    <tool>              mise-managed tool (aqua backend); Linux CLI tools
 #   tolerant - on a brew entry, append `|| true` (optional/extra formula, e.g. brev)
 #
 # fzf is intentionally absent: the README designates mise (fzf@latest, installed in
 # the mise toolchains block) as its owner, so it must not also come from brew/apt.
 
 packages:
-  # ---- core CLI, cross-platform (brew on macOS, apt on Ubuntu) ----
+  # ---- core CLI, cross-platform, native on each OS (brew macOS / apt Linux) ----
+  # fish/git/tmux stay apt on Linux; jq deliberately stays native too - it is a
+  # `command -v jq || exit 1` dependency of the apply-time MCP/plugin scripts and
+  # is used bare in obsidian's installer, so it must not depend on mise shims that
+  # are not on PATH during a fresh apply.
   - name: fish
     gui: false
     bin: fish
@@ -44,37 +57,16 @@ packages:
     bin: tmux
     darwin: { brew: tmux }
     linux:  { apt: tmux }
-  - name: zoxide
-    gui: false
-    bin: zoxide
-    darwin: { brew: zoxide }
-    linux:  { apt: zoxide }
-  - name: bat
-    gui: false
-    bin: bat
-    darwin: { brew: bat }
-    linux:  { apt: bat }
-  - name: ripgrep
-    gui: false
-    bin: rg
-    darwin: { brew: ripgrep }
-    linux:  { apt: ripgrep }
   - name: jq
     gui: false
     bin: jq
     darwin: { brew: jq }
     linux:  { apt: jq }
-  - name: fd
-    gui: false
-    bin: fd
-    darwin: { brew: fd }
-    linux:  { apt: fd-find }
-  - name: gh
-    gui: false
-    bin: gh
-    darwin: { brew: gh }
 
-  # ---- Ubuntu base apt packages (no macOS counterpart) ----
+  # ---- Ubuntu base apt packages (no macOS counterpart). curl + ca-certificates
+  #      come first because the mise bootstrap below curls its installer over
+  #      https; gnupg backs the op apt-repo and software-properties-common backs
+  #      the ghostty PPA further down. ----
   - name: curl
     gui: false
     bin: curl
@@ -102,36 +94,8 @@ packages:
     bin: zenity
     linux: { apt: zenity }
 
-  # ---- third-party apt-repo CLI tools (brew on macOS) ----
-  - name: eza
-    gui: false
-    bin: eza
-    darwin: { brew: eza }
-    linux:  { aptrepo: eza }
-  - name: gum
-    gui: false
-    bin: gum
-    darwin: { brew: gum }
-    linux:  { aptrepo: gum }
-  - name: 1password-cli
-    gui: false
-    bin: op
-    darwin: { brew: 1password-cli }
-    linux:  { aptrepo: 1password-cli }
-
-  # ---- curl-installed CLI tools (brew on macOS, vendor installer on Ubuntu) ----
-  - name: starship
-    gui: false
-    bin: starship
-    darwin: { brew: starship }
-    linux:  { script: "curl -sS https://starship.rs/install.sh | sh -s -- -y" }
-  - name: atuin
-    gui: false
-    bin: atuin
-    darwin: { brew: atuin }
-    linux:
-      script: "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh"
-      altpath: "$HOME/.atuin/bin/atuin"
+  # ---- mise: the Linux install backend for the cross-platform CLI tools below,
+  #      so it must be installed before any of them (brew on macOS). ----
   - name: mise
     gui: false
     bin: mise
@@ -139,6 +103,71 @@ packages:
     linux:
       script: "curl https://mise.run | sh"
       altpath: "$HOME/.local/bin/mise"
+
+  # ---- cross-platform CLI tools: mise (aqua backend) on Linux, brew on macOS.
+  #      Consolidated onto mise on Linux - these were previously apt (bat/fd/
+  #      ripgrep/zoxide), third-party apt-repo+keyring (eza/gum), or curl vendor
+  #      installers (starship/atuin). Every entry here must follow the mise entry
+  #      above. gh gains a Linux install this way (it was macOS-only before). ----
+  - name: eza
+    gui: false
+    bin: eza
+    darwin: { brew: eza }
+    linux:  { mise: "aqua:eza-community/eza" }
+  - name: gum
+    gui: false
+    bin: gum
+    darwin: { brew: gum }
+    linux:  { mise: "aqua:charmbracelet/gum" }
+  - name: starship
+    gui: false
+    bin: starship
+    darwin: { brew: starship }
+    linux:  { mise: "aqua:starship/starship" }
+  - name: atuin
+    gui: false
+    bin: atuin
+    darwin: { brew: atuin }
+    linux:  { mise: "aqua:atuinsh/atuin" }
+  - name: bat
+    gui: false
+    bin: bat
+    darwin: { brew: bat }
+    linux:  { mise: "aqua:sharkdp/bat" }
+  - name: fd
+    gui: false
+    bin: fd
+    darwin: { brew: fd }
+    linux:  { mise: "aqua:sharkdp/fd" }
+  - name: ripgrep
+    gui: false
+    bin: rg
+    darwin: { brew: ripgrep }
+    linux:  { mise: "aqua:BurntSushi/ripgrep" }
+  - name: zoxide
+    gui: false
+    bin: zoxide
+    darwin: { brew: zoxide }
+    linux:  { mise: "aqua:ajeetdsouza/zoxide" }
+  - name: gh
+    gui: false
+    bin: gh
+    darwin: { brew: gh }
+    linux:  { mise: "aqua:cli/cli" }
+
+  # ---- op (1Password CLI): deliberately NOT moved to mise. Stays native on Linux
+  #      via a debsig-verified third-party apt-repo (needs gnupg above); brew on
+  #      macOS. Kept native because op unlocks chezmoi's secret reads at apply
+  #      time, before mise shims are on PATH. ----
+  - name: 1password-cli
+    gui: false
+    bin: op
+    darwin: { brew: 1password-cli }
+    linux:  { aptrepo: 1password-cli }
+
+  # ---- remaining curl-installed CLI tools (brew on macOS, vendor installer on
+  #      Ubuntu). mise itself lives above; these carry shell quoting that cannot
+  #      round-trip through a helper, so the loop emits them verbatim. ----
   - name: pfetch
     gui: false
     bin: pfetch
@@ -221,25 +250,12 @@ packages:
     darwin: { cask: font-jetbrains-mono-nerd-font }
 
 # ---- third-party apt-repo definitions, keyed by the `aptrepo:` value above ----
-# Each carries the six positional args A's install_aptrepo helper needs
-# (LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE). 1Password additionally
-# ships a debsig policy + keyring (independent of the apt keyring/list), carried
-# as the `debsig` block and applied by install_debsig before install_aptrepo.
+# Only 1Password remains here: eza and gum moved to mise (their apt-repos were
+# removed). Each entry carries the six positional args A's install_aptrepo helper
+# needs (LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE). 1Password additionally
+# ships a debsig policy + keyring (independent of the apt keyring/list), carried as
+# the `debsig` block and applied by install_debsig before install_aptrepo.
 aptrepos:
-  eza:
-    label: eza
-    keyring: /etc/apt/keyrings/gierens.gpg
-    key_url: https://raw.githubusercontent.com/eza-community/eza/main/deb.asc
-    repo_line: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
-    list_path: /etc/apt/sources.list.d/gierens.list
-    package: eza
-  gum:
-    label: gum
-    keyring: /etc/apt/keyrings/charm.gpg
-    key_url: https://repo.charm.sh/apt/gpg.key
-    repo_line: "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *"
-    list_path: /etc/apt/sources.list.d/charm.list
-    package: gum
   1password-cli:
     label: "1Password CLI"
     keyring: /usr/share/keyrings/1password-archive-keyring.gpg

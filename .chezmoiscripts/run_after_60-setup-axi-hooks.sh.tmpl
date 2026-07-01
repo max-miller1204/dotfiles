@@ -6,15 +6,22 @@
 #   - Codex  : ~/.codex/hooks.json        SessionStart hook  + ~/.codex/config.toml [features] hooks = true
 #   - OpenCode: ~/.config/opencode/plugins/axi-<tool>.js     ambient-context plugin
 #
-# This is the single source of truth for axi hooks. It is deliberately ordered
-# after the axi CLIs are installed (run_once_before_10-install-packages) and after
-# the agent config files are applied. Claude's four axi SessionStart hooks are also
-# vendored in dot_claude/settings.json byte-identical to what `setup hooks` emits
-# (bare command, timeout 10), so this call is a no-op for Claude and never fights the
-# chezmoi-managed settings.json - it exists to wire Codex and OpenCode (previously
-# unwired) and to self-repair all three. See README "Agent hooks (axi)".
+# This is the single source of truth for axi hooks: each `<tool> setup hooks`
+# owns its blocks in the agent config files, so nothing is vendored into
+# dot_claude/settings.json. It is deliberately ordered after the axi CLIs are
+# installed (run_once_before_10-install-packages) and after the agent config
+# files are applied.
 #
-# Re-runs whenever the templated tool list below changes.
+# This MUST be a plain `run_after_` script (runs on EVERY apply), not a
+# `run_onchange_after_`. Claude's SessionStart axi hooks live only in the
+# settings.json family, which chezmoi fully manages: every `chezmoi apply`
+# rewrites ~/.claude/settings.json from source and strips anything a CLI
+# appended. A `run_onchange_` keyed to this script's own hash would NOT re-fire
+# after that strip (its hash is unchanged), so the Claude hooks would be
+# silently lost. Running every apply re-asserts them. Codex's hooks.json and the
+# OpenCode plugins are not chezmoi-managed, so re-running is a cheap no-op there.
+# The resulting per-apply settings.json drift is intended - see README
+# "Ambient-context hooks (axi)" and AGENTS.md.
 #
 # axi tools: {{ .axiMiseTools | join " " }}
 set -euo pipefail

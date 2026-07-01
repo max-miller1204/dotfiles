@@ -15,15 +15,11 @@
 
 set -euo pipefail
 
-CODEX_CONFIG="${HOME}/.codex/config.toml"
-BASE_SOURCE="${HOME}/.config/codex/config-base.toml"
+STAGING_SOURCE="${HOME}/.config/codex/config-base.toml"
+{{ template "lib-codex-sync.sh" . }}
+
 BEGIN_MARKER="# >>> chezmoi codex-base (managed) >>>"
 END_MARKER="# <<< chezmoi codex-base (managed) <<<"
-
-[ -r "$BASE_SOURCE" ] || { echo "staging file missing: $BASE_SOURCE" >&2; exit 1; }
-
-mkdir -p "$(dirname "$CODEX_CONFIG")"
-[ -f "$CODEX_CONFIG" ] || : > "$CODEX_CONFIG"
 
 # 1. Drop any prior managed block, plus stray top-level `model` /
 #    `model_reasoning_effort` keys that appear before the first TOML section
@@ -47,7 +43,7 @@ awk -v b="$BEGIN_MARKER" -v e="$END_MARKER" '
 #    single blank-line separator when there is any remainder.
 {
   printf '%s\n' "$BEGIN_MARKER"
-  cat "$BASE_SOURCE"
+  cat "$STAGING_SOURCE"
   printf '%s\n' "$END_MARKER"
   if [ -s "$CODEX_CONFIG.tmp" ]; then
     printf '\n'

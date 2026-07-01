@@ -17,11 +17,12 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
-On first `chezmoi apply`, a `run_once_before` script installs every CLI these
-dotfiles expect (fish, tmux, neovim, eza, fzf, zoxide, starship, bat, fd,
-ripgrep, jq, atuin, mise, gum, pfetch, plus Homebrew on macOS / an apt
-repo for eza on Ubuntu). `run_once_after` scripts clone TPM + install tmux
-plugins and drop the LazyVim starter into `~/.config/nvim` if it's empty.
+On first `chezmoi apply`, a `run_once_before` script installs every CLI and GUI
+app these dotfiles expect; the full set is the `.chezmoidata/packages.yaml`
+manifest (see [Bootstrap a new machine](#bootstrap-a-new-machine)), not a list
+kept here.
+`run_once_after` scripts clone TPM + install tmux plugins and drop the LazyVim
+starter into `~/.config/nvim` if it's empty.
 
 ## Bootstrap a new machine
 
@@ -36,20 +37,15 @@ chezmoi init --apply max-miller1204/dotfiles
 
 > **Migrating from an existing Mac?** See [Migrating to a new Mac](#migrating-to-a-new-mac) for the pre/post-migration checklist (Raycast re-export, SSH, etc.) before running the commands above.
 
-That's it — the install scripts run during `apply` and handle the rest:
+That's it - the install scripts run during `apply` and handle the rest:
 
-- installs CLIs (apt on Ubuntu, Homebrew on macOS): fish, tmux, eza, zoxide,
-  starship, bat, fd, ripgrep, jq, atuin, mise, gum, pfetch, brev
-  (Nvidia cloud GPU CLI — brew tap on macOS, official curl installer on Linux).
-  `gh` is macOS-only (Homebrew); on Ubuntu install it yourself if you need it
-- installs **GUI apps** (casks on macOS; PPA/.deb/flatpak on Ubuntu):
-  ghostty, discord, voquill, zoom, anki, obsidian, spotify, plus
-  zed, aerospace, karabiner-elements, raycast, neovide-app, balenaetcher,
-  macdown-3000, pearcleaner, firefox on macOS (Linux ships Firefox by
-  default; zed and Chrome are macOS-only; on Ubuntu zoom installs via flatpak)
-- installs the **JetBrainsMono Nerd Font** cask on macOS (required by
-  the ghostty config, which specifies it with no fallback). Linux skips
-  it — starship/eza icons degrade gracefully to system fallback fonts
+- installs every **CLI and GUI app** these dotfiles expect from the package
+  manifest, `.chezmoidata/packages.yaml`.
+  That manifest is the single source of truth: it describes each tool once and
+  carries its per-OS install method as data, so it is the one place to look (and
+  the one place to edit), not a hand-kept list here.
+  GUI desktop apps are skipped on WSL, where the Windows-native versions are used
+  instead; the non-GUI CLI tools install everywhere
 - installs **toolchains via mise**: `node@lts`, `python@latest`,
   `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`,
   `uv@latest` (so fzf/bun/neovim are mise-managed, not apt/brew)
@@ -78,8 +74,7 @@ That's it — the install scripts run during `apply` and handle the rest:
   the `claude plugin` CLI (`run_after_65`, every apply) rather than vendoring
   `enabledPlugins` into `settings.json` - see
   [Agents (multi-agent)](#agents-multi-agent)
-- installs the **1Password CLI** (`op`) — the secrets backend (Homebrew cask
-  `1password-cli` on macOS, official apt repo on Linux); see
+- installs the **1Password CLI** (`op`), the secrets backend; see
   [Secrets](#secrets-1password)
 - adds fish to `/etc/shells` and sets it as your login shell
 - clones TPM and installs tmux plugins
@@ -304,8 +299,9 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode); the skill is `.chezmoiignore`d, so brev owns it with no chezmoi conflict
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
-`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (eza, gum, 1Password); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method.
-The three MCP sync scripts (`run_onchange_after_4x`) deliberately keep their own bare preamble instead.
+`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (eza, gum, 1Password); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method; `lib-codex-sync.sh` holds the shared file-prep preamble (define `CODEX_CONFIG`, verify the staging source is readable, `mkdir`/touch the target) for the two Codex config-sync scripts.
+The Claude MCP sync (`run_onchange_after_40`) keeps its own bare preamble; the two Codex sync scripts (`run_onchange_after_41`/`42`) share only that file-prep preamble via `lib-codex-sync.sh` and keep their differing awk-strip + recombine bodies inline.
+All three deliberately stay on a bare `set -euo pipefail` + `echo` and pull in no `lib-log.sh`.
 See [AGENTS.md](AGENTS.md) for the convention.
 
 ## WSL Ubuntu

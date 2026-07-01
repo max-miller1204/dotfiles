@@ -1,0 +1,13 @@
+# Single source of truth for the MCP servers, consumed by both agent staging
+# templates so the two can never drift:
+#   - dot_config/claude-code/mcp-servers.json.tmpl (emits servers tagged `claude`)
+#   - dot_config/codex/mcp-servers.toml.tmpl        (emits servers tagged `codex`)
+# chezmoi auto-loads .chezmoidata/*, so `mcpServers` is available as `.mcpServers`
+# in every template. Each record uses exactly one of:
+#   command_rel = a path relative to $HOME; the rendering template prepends
+#                 `{{ .chezmoi.homeDir }}` (.chezmoidata is static and cannot hold
+#                 homeDir), mirroring the tsNodeModulesRel idiom in .chezmoi.toml.tmpl.
+#   command     = used as-is (already resolvable on PATH).
+mcpServers:
+  - { name: nixos,      command_rel: ".local/share/mise/shims/uvx", args: ["mcp-nixos"],               agents: [claude, codex] }
+  - { name: playwright, command: "npx",                             args: ["@playwright/mcp@latest"], agents: [claude, codex] }

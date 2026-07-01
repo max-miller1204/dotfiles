@@ -1,15 +1,27 @@
+{{- /* Derive the LSP server set from the single-source lspLanguages table in
+       .chezmoi.toml.tmpl, the same table that drives the install script and the
+       plugin install, so this upgrade helper can never drift from either. */ -}}
+{{- $miseTools := list -}}
+{{- $rustupLangs := list -}}
+{{- $osLangs := list -}}
+{{- range .lspLanguages -}}
+{{-   if eq .method "mise" -}}{{- range .miseTools -}}{{- $miseTools = append $miseTools . -}}{{- end -}}{{- end -}}
+{{-   if eq .method "rustup" -}}{{- $rustupLangs = append $rustupLangs . -}}{{- end -}}
+{{-   if eq .method "os" -}}{{- $osLangs = append $osLangs . -}}{{- end -}}
+{{- end -}}
 function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
 
     echo "$section==> mise LSP servers$reset"
-    mise upgrade {{ .lspMiseTools | join " " }}
+    mise upgrade {{ $miseTools | join " " }}
+{{- range $rustupLangs }}
 
     if command -q rustup
-        echo "$section==> rust-analyzer$reset"
-        # rust-analyzer is a rustup component pinned to the active rust
+        echo "$section==> {{ .rustupComponent }}$reset"
+        # {{ .rustupComponent }} is a rustup component pinned to the active rust
         # toolchain, and that toolchain is mise-managed. A bare
-        # `rustup component add rust-analyzer` only re-adds it to the current
+        # `rustup component add {{ .rustupComponent }}` only re-adds it to the current
         # toolchain, so it no-ops once present and never pulls a newer version.
         # Advance the mise-managed rust first, then add the component for the
         # toolchain mise now resolves, queried fresh via `mise current` (this
@@ -22,16 +34,19 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
         mise upgrade rust
         set -l rust_toolchain (mise current rust | string split -n ' ')
         if test (count $rust_toolchain) -eq 1
-            rustup component add --toolchain $rust_toolchain rust-analyzer
+            rustup component add --toolchain $rust_toolchain {{ .rustupComponent }}
         else
-            rustup component add rust-analyzer
+            rustup component add {{ .rustupComponent }}
         end
     end
+{{- end }}
+{{- range $osLangs }}
 
-    echo "$section==> clangd$reset"
-    {{- if eq .chezmoi.os "darwin" }}
-    brew upgrade llvm
+    echo "$section==> {{ .verifyBin }}$reset"
+    {{- if eq $.chezmoi.os "darwin" }}
+    brew upgrade {{ .brewFormula }}
     {{- else }}
-    sudo apt-get install --only-upgrade -y clangd
+    sudo apt-get install --only-upgrade -y {{ .aptPackage }}
     {{- end }}
+{{- end }}
 end

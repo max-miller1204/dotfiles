@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Re-assert the Claude Code marketplace + plugins via the `claude plugin` CLI, so
+# the plugin/marketplace state is owned by the tool instead of hand-vendored into
+# dot_claude/settings.json.
+#
+# This MUST be a plain `run_after_` script (runs on EVERY apply), not a
+# `run_onchange_after_`. `enabledPlugins` and `extraKnownMarketplaces` live only
+# in the settings.json family, which chezmoi fully manages and rewrites from
+# source each apply, stripping those blocks. A `run_onchange_` keyed to this
+# script's own hash would not re-fire after that strip and would silently leave
+# the plugins disabled. Running every apply re-asserts them. The plugin git repos
+# and the marketplace clone persist under ~/.claude/plugins (not chezmoi-managed),
+# so re-enabling an already-installed plugin is a cheap settings.json flip, not a
+# fresh clone. The resulting per-apply settings.json drift is intended - see
+# AGENTS.md and README "Ambient-context hooks (axi)".
+#
+# Ordered after run_once_before_10 installs the coding agents and after
+# run_after_60 wires the axi hooks, so the two settings.json writers run
+# deterministically in name order (60 then 65).
+#
+# The LSP plugin set derives from the single-source `lspLanguages` in
+# .chezmoi.toml.tmpl (the same table that drives run_onchange_after_50's server
+# install, so plugins and servers can never drift); the non-LSP plugins are
+# `extraClaudePlugins`.
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+MARKETPLACE_NAME="claude-plugins-official"
+MARKETPLACE_URL="https://github.com/anthropics/claude-plugins-official.git"
+
+# claude is installed by run_once_before_10 to ~/.local/bin; not necessarily on
+# PATH in a non-interactive apply. Guard so a not-yet-installed agent degrades to
+# a skip instead of failing the whole apply (self-heals on the next apply).
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+if ! command -v claude >/dev/null 2>&1; then
+    log "skip: claude not on PATH yet (will set up plugins on next apply)"
+    exit 0
+fi
+command -v jq >/dev/null 2>&1 || { echo "jq required on PATH" >&2; exit 1; }
+
+# Register the marketplace. Idempotent and cheap: when it is already on disk this
+# only re-declares it in settings.json (no re-clone); on a fresh machine it clones
+# and declares it. Tolerate a transient failure and retry on the next apply.
+log "Registering marketplace: $MARKETPLACE_NAME"
+claude plugin marketplace add "$MARKETPLACE_URL" >/dev/null \
+    || log "warn: marketplace add failed (retries next apply)"
+
+# Desired plugins: LSP plugins from the single-source lspLanguages, plus the
+# non-LSP extras. All live in the one official marketplace.
+PLUGINS=(
+{{- range .lspLanguages }}
+    "{{ .plugin }}"
+{{- end }}
+{{- range .extraClaudePlugins }}
+    "{{ . }}"
+{{- end }}
+)
+
+# One `list --json` snapshot drives the cheap path: an installed-but-disabled
+# plugin (chezmoi stripped enabledPlugins) is a re-enable, not a re-install.
+installed_json="$(claude plugin list --json 2>/dev/null || echo '[]')"
+for name in "${PLUGINS[@]}"; do
+    id="${name}@${MARKETPLACE_NAME}"
+    state="$(printf '%s' "$installed_json" \
+        | jq -r --arg id "$id" 'map(select(.id == $id)) | if length == 0 then "absent" elif .[0].enabled then "enabled" else "disabled" end')"
+    case "$state" in
+        absent)
+            log "Installing plugin: $id"
+            claude plugin install "$id" >/dev/null \
+                || log "warn: install failed for $id (retries next apply)" ;;
+        disabled)
+            log "Re-enabling plugin: $id"
+            claude plugin enable "$id" >/dev/null \
+                || log "warn: enable failed for $id (retries next apply)" ;;
+        enabled)
+            log "Already enabled: $id" ;;
+    esac
+done
+
+log "Claude plugins re-asserted"

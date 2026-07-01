@@ -2,14 +2,53 @@
 [data]
     managedMcpNames = ["nixos", "playwright"]
     isWSL = {{ if $isWSL }}true{{ else }}false{{ end }}
-    # Single source of truth for the mise-managed tools, consumed by both the
-    # install scripts and the *-upgrade fish functions so the two never drift.
-    lspMiseTools = ["npm:pyright", "npm:typescript-language-server", "npm:typescript", "go:golang.org/x/tools/gopls"]
+    # Single source of truth for the axi CLIs, consumed by both the install
+    # script and the axi-upgrade fish function so the two never drift.
     axiMiseTools = ["npm:gh-axi", "npm:chrome-devtools-axi", "npm:lavish-axi", "npm:tasks-axi"]
     # The mise typescript prefix relative to $HOME, shared by the fish config's
     # NODE_PATH and the install script's resolution check (each prepends its own
     # shell's home) so the derived path can't drift between the two.
     tsNodeModulesRel = ".local/share/mise/installs/npm-typescript/latest/lib/node_modules"
+    # Non-LSP Claude Code plugins (marketplace-qualified in the install script).
+    # Installed/enabled by run_after_65-setup-claude-plugins.
+    extraClaudePlugins = ["agent-sdk-dev", "skill-creator"]
+
+# Single source of truth for the Claude Code LSP language set. Each entry couples
+# the marketplace plugin (installed by run_after_65-setup-claude-plugins) to how
+# that language's server is installed (consumed by
+# run_onchange_after_50-install-lsp-servers and the lsp-upgrade fish function), so
+# adding or removing an LSP language is a one-place edit here. The plugin list and
+# the server-install list can no longer drift because both derive from this table.
+#   method = "mise"   -> miseTools installed via `mise use -g`
+#   method = "rustup" -> rustupComponent added to the active rust toolchain
+#   method = "os"     -> OS package (aptPackage on Linux, brewFormula on macOS)
+[[data.lspLanguages]]
+    plugin = "rust-analyzer-lsp"
+    method = "rustup"
+    rustupComponent = "rust-analyzer"
+    verifyBin = "rust-analyzer"
+[[data.lspLanguages]]
+    plugin = "pyright-lsp"
+    method = "mise"
+    miseTools = ["npm:pyright"]
+    verifyBin = "pyright-langserver"
+[[data.lspLanguages]]
+    plugin = "typescript-lsp"
+    method = "mise"
+    miseTools = ["npm:typescript-language-server", "npm:typescript"]
+    verifyBin = "typescript-language-server"
+    verifyTsResolve = true
+[[data.lspLanguages]]
+    plugin = "gopls-lsp"
+    method = "mise"
+    miseTools = ["go:golang.org/x/tools/gopls"]
+    verifyBin = "gopls"
+[[data.lspLanguages]]
+    plugin = "clangd-lsp"
+    method = "os"
+    verifyBin = "clangd"
+    aptPackage = "clangd"
+    brewFormula = "llvm"
 
 {{- if $isWSL }}
 

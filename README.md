@@ -71,7 +71,13 @@ That's it — the install scripts run during `apply` and handle the rest:
   typescript-language-server (+ typescript) and gopls as mise-managed tools,
   rust-analyzer via the rustup component, and clangd from apt (Linux) or
   Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
-  when that script changes
+  when that script changes. The language set (plugin + server install method)
+  lives once in the `lspLanguages` table in `.chezmoi.toml.tmpl`, shared by the
+  server install and the plugin install so the two can't drift
+- installs/enables the **Claude Code plugins** from the official marketplace via
+  the `claude plugin` CLI (`run_after_65`, every apply) rather than vendoring
+  `enabledPlugins` into `settings.json` - see
+  [Agents (multi-agent)](#agents-multi-agent)
 - installs the **1Password CLI** (`op`) — the secrets backend (Homebrew cask
   `1password-cli` on macOS, official apt repo on Linux); see
   [Secrets](#secrets-1password)
@@ -200,6 +206,12 @@ A `run_onchange_` keyed to the script's own hash would not re-fire after that st
 The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because `setup hooks` (and the plugin re-assert below) re-add their blocks. That drift is by design, not a bug (see [AGENTS.md](AGENTS.md)).
 Codex's `hooks.json` and the OpenCode plugins are not chezmoi-managed targets, so re-running is a cheap no-op there.
 
+**Claude plugins + marketplace (CLI-owned, same story as the hooks).**
+The Claude Code plugins and their marketplace are owned by the `claude plugin` CLI, not hand-vendored into `dot_claude/settings.json` (`enabledPlugins` / `extraKnownMarketplaces`).
+`run_after_65-setup-claude-plugins.sh.tmpl` registers the `claude-plugins-official` marketplace and installs/enables each plugin on every apply, for the same reason the hooks script does: that state lives only in the chezmoi-rewritten settings.json, so it must be re-asserted each apply (a `run_onchange_` would not re-fire after the strip).
+It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
+The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
+
 **Codex config ownership.**
 `~/.codex/config.toml` is assembled (not a single chezmoi target) so several managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
 
@@ -275,8 +287,9 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
-- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew) whenever the script changes
+- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew), all derived from the single-source `lspLanguages` table, whenever the script changes
 - `.chezmoiscripts/run_after_60-setup-axi-hooks.sh.tmpl` - wires the axi ambient-context hooks into all three agents (Claude, Codex, OpenCode) via each CLI's `setup hooks`, on every apply (Claude's hooks live in the chezmoi-rewritten settings.json, so they must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
+- `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (same chezmoi-rewritten-settings.json reason as the hooks; see [Agents (multi-agent)](#agents-multi-agent))
 
 ## WSL Ubuntu
 

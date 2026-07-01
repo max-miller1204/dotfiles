@@ -268,7 +268,7 @@ To update the snapshot after changing settings: re-export from Raycast
 `raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, agent axi CLIs, fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, the coding agents (Claude, Codex, OpenCode), agent axi CLIs, fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
@@ -298,8 +298,9 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-The first apply installs CLIs, mise toolchains, Nix, Claude Code, and the
-1Password CLI, then sets fish as your login shell.
+The first apply installs CLIs, mise toolchains, Nix, the coding agents
+(Claude, Codex, OpenCode), and the 1Password CLI, then sets fish as your
+login shell.
 
 ### 1Password sign-in from WSL
 
@@ -400,14 +401,15 @@ the repo and need manual hand-off.
    the repo has no secrets, so this can wait until after bootstrap),
    GitHub (`gh auth login`), Atuin (`atuin login` + `atuin sync` —
    `auto_sync` is off by default), Discord, Spotify, Obsidian, Zed account,
-   Claude Code (`claude` → follow the login flow).
+   Claude Code, Codex, and OpenCode (run `claude`, `codex`, and `opencode`
+   and follow each login flow).
 
 7. **Verify**:
 
    ```sh
    claude mcp list           # should show nixos + playwright
    mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & axi CLIs)
-   which brew fish claude op # sanity-check everything's on PATH
+   which brew fish claude codex opencode op # sanity-check everything's on PATH
    op whoami                 # confirms 1Password sign-in
    ```
 

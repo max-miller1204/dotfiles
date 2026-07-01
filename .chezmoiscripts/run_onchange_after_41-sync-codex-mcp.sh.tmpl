@@ -2,7 +2,7 @@
 # Sync managed [mcp_servers.*] sections into ~/.codex/config.toml.
 # Strips sections named in the staging TOML, then appends the staging TOML.
 #
-# staging hash: {{ include "dot_config/codex/mcp-servers.toml.tmpl" | sha256sum }}
+# staging hash: {{ include "dot_config/codex/mcp-servers.toml.tmpl" | sha256sum }} {{ include ".chezmoidata/mcp.yaml" | sha256sum }}
 
 set -euo pipefail
 

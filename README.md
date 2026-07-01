@@ -218,7 +218,7 @@ The five LSP plugins are not hand-listed here: they derive from the single-sourc
 
 - `run_onchange_after_42-sync-codex-base.sh.tmpl` owns a marker-delimited block at the top of the file with the durable base settings (`model`, `model_reasoning_effort`), sourced from `dot_config/codex/config-base.toml.tmpl`.
 - `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
-- `run_onchange_after_60-setup-axi-hooks.sh.tmpl` owns `[features] hooks = true`.
+- `run_after_60-setup-axi-hooks.sh.tmpl` owns `[features] hooks = true`.
 
 **Codex hook-trust caveat (one manual follow-up on Ubuntu).**
 Codex gates hooks behind persisted trust, so the first Codex session after a fresh apply may prompt to trust the hooks (or need `--dangerously-bypass-hook-trust`).

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Install the brev agent skill via `brev agent-skill`, which writes the skill into
+# every agent harness (Claude, Codex, OpenCode). This replaces the previously
+# vendored dot_claude/skills/brev-cli/ tree: the skill is now owned by the brev
+# CLI, not chezmoi.
+#
+# run_once_after_: brev writes files that are NOT chezmoi-managed targets (they
+# are .chezmoiignore'd), so there is no chezmoi-vs-CLI conflict and no need to run
+# on every apply. Ordered after run_once_before_10 installs brev and the coding
+# agents. `brev agent-skill` overwrites the skill files, so it is idempotent.
+set -euo pipefail
+
+log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+
+# brev is installed by run_once_before_10 (brevdev tap on macOS, official curl
+# installer on Linux). It is not necessarily on PATH in a non-interactive apply,
+# so probe the standard install locations. Require it (rather than skip): this is
+# a run_once script, so a silent skip would be recorded as done and never retry;
+# failing instead re-runs on the next apply once brev is present.
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+if ! command -v brev >/dev/null 2>&1; then
+    echo "brev not found on PATH; cannot install the brev agent skill" >&2
+    exit 1
+fi
+
+log "Installing the brev agent skill (brev agent-skill)"
+brev agent-skill

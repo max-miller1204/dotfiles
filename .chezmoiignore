@@ -2,6 +2,10 @@ README.md
 CLAUDE.md
 raycast-export
 
+# Written by `brev agent-skill` (run_once_after_70), not chezmoi. Ignored so
+# chezmoi never treats the CLI-owned skill tree as unmanaged state to remove.
+.claude/skills/brev-cli
+
 {{- if eq .chezmoi.os "darwin" }}
 .local/bin/zenity-askpass
 {{- else }}

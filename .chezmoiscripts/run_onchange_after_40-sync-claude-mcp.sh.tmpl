@@ -2,20 +2,30 @@
 # Sync managed MCP servers into ~/.claude.json at user scope via the
 # official `claude mcp` CLI. Re-runs whenever the staging template changes.
 #
+# The managed server names are derived from the staging JSON itself
+# (.mcpServers keys), mirroring how run_onchange_after_41-sync-codex-mcp derives
+# them from its staging TOML. We manage exactly the names declared in staging, so
+# entries added by other tools (or by Codex's own plugin registry) are never
+# touched. One consequence: removing a server from staging leaves its old entry
+# behind in ~/.claude.json and needs a one-time manual cleanup
+# (`claude mcp remove --scope user <name>`), since only currently-declared names
+# are removed and re-added.
+#
 # staging hash: {{ include "dot_config/claude-code/mcp-servers.json.tmpl" | sha256sum }}
 
 set -euo pipefail
 
 MCP_SOURCE="${HOME}/.config/claude-code/mcp-servers.json"
-MANAGED=({{- range .managedMcpNames }} "{{ . }}"{{- end }})
 
 command -v claude >/dev/null || { echo "claude CLI required on PATH" >&2; exit 1; }
 command -v jq     >/dev/null || { echo "jq required on PATH"        >&2; exit 1; }
 [ -r "$MCP_SOURCE" ] || { echo "staging file missing: $MCP_SOURCE" >&2; exit 1; }
 
-for name in "${MANAGED[@]}"; do
-  claude mcp remove --scope user "$name" >/dev/null 2>&1 || true
-done
+# Remove exactly the currently-declared managed servers first, then re-add them.
+jq -r '.mcpServers | keys[]' "$MCP_SOURCE" \
+  | while IFS= read -r name; do
+      claude mcp remove --scope user "$name" >/dev/null 2>&1 || true
+    done
 
 jq -r '.mcpServers | to_entries[] | [.key, (.value | tojson)] | @tsv' "$MCP_SOURCE" \
   | while IFS=$'\t' read -r name json; do

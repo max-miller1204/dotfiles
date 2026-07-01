@@ -21,8 +21,11 @@ elif [[ -x /usr/local/bin/brew ]]; then
 fi
 
 log "Installing packages via Homebrew"
+# fzf is intentionally omitted here: it is installed via mise (fzf@latest) below,
+# which the README designates as its owner. Installing it twice would let brew and
+# mise fight over the same binary on PATH.
 brew install \
-    fish git tmux eza fzf zoxide starship bat fd ripgrep jq \
+    fish git tmux eza zoxide starship bat fd ripgrep jq \
     atuin mise pfetch gh gum 1password-cli
 
 # brev — Nvidia cloud GPU CLI (from the brevdev tap)

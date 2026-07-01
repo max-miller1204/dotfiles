@@ -161,9 +161,10 @@ them in place:
 - `~/.claude.json` (user scope) — via `claude mcp remove` + `claude mcp add-json`
 - `~/.codex/config.toml` — via awk-strip + append
 
-The Claude sync touches only the names listed in `.chezmoi.toml.tmpl` under
-`[data] managedMcpNames`; the Codex sync touches only the section names
-declared in its staging TOML. Anything else you've added manually (or that
+The Claude sync touches only the server names declared in its own staging JSON
+(`.mcpServers` keys); the Codex sync touches only the section names declared in
+its staging TOML. Neither keeps a second hand-maintained name list. Anything
+else you've added manually (or that
 Codex's own plugin registry manages) in `~/.claude.json` or
 `~/.codex/config.toml` is preserved. One consequence: removing a server from
 the staging files means deleting its leftover section from

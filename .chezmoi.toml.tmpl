@@ -1,6 +1,5 @@
 {{- $isWSL := and (eq .chezmoi.os "linux") (or (contains "microsoft" (lower .chezmoi.kernel.osrelease)) (contains "wsl" (lower .chezmoi.kernel.osrelease))) -}}
 [data]
-    managedMcpNames = ["nixos", "playwright"]
     isWSL = {{ if $isWSL }}true{{ else }}false{{ end }}
     # Single source of truth for the axi CLIs, consumed by both the install
     # script and the axi-upgrade fish function so the two never drift.

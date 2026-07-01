@@ -44,8 +44,9 @@ That's it - the install scripts run during `apply` and handle the rest:
   That manifest is the single source of truth: it describes each tool once and
   carries its per-OS install method as data, so it is the one place to look (and
   the one place to edit), not a hand-kept list here.
-  GUI desktop apps are skipped on WSL, where the Windows-native versions are used
-  instead; the non-GUI CLI tools install everywhere
+  GUI desktop apps are skipped on WSL (where the Windows-native versions are used
+  instead) and on headless/server machines; the non-GUI CLI tools install
+  everywhere
 - installs **toolchains via mise**: `node@lts`, `python@latest`,
   `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`,
   `uv@latest` (so fzf/bun/neovim are mise-managed, not apt/brew)

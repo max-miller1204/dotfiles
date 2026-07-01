@@ -16,8 +16,9 @@
 #
 # Per-package fields:
 #   name  - human label, used in log lines
-#   gui   - true for desktop apps; GUI packages are skipped on WSL (Windows-native
-#           versions are used there instead). Non-GUI CLI tools install everywhere.
+#   gui   - true for desktop apps; GUI packages are skipped when headless or on WSL
+#           (Windows-native versions are used there instead). Non-GUI CLI tools
+#           install everywhere.
 #   bin   - the command the method guards on (command -v <bin>) where the method
 #           needs a command-name guard (apt+ppa, deburl, mise); omit where the
 #           method carries its own guard (flatpak app id, script dpkg, aptrepo
@@ -179,7 +180,7 @@ packages:
     darwin: { brew: brevdev/homebrew-brev/brev, tolerant: true }
     linux:  { script: "sudo bash -c \"$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)\"" }
 
-  # ---- GUI desktop apps (cask on macOS; skipped on WSL) ----
+  # ---- GUI desktop apps (cask on macOS; skipped when headless or on WSL) ----
   - name: ghostty
     gui: true
     bin: ghostty

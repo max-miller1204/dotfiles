@@ -5,13 +5,29 @@ on:
   pull_request:
 
 jobs:
+  # The static-analysis jobs that render templates (shellcheck + fish-syntax)
+  # run on macOS as well as Linux. `chezmoi execute-template` renders with the
+  # runner's OS, so only the macos-latest leg exercises the darwin half of every
+  # template ({{ if eq .chezmoi.os "darwin" }} ... {{ end }}); on ubuntu those
+  # blocks are stripped before shellcheck / fish -n ever see them. Both legs stay
+  # STATIC (render + lint only) - no real brew package installs of the manifest.
   shellcheck:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-chezmoi
-      - name: Install shellcheck
+      - name: Install shellcheck (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get install -y -qq shellcheck
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install shellcheck
       - name: Shellcheck plain scripts
         run: |
           set -euo pipefail
@@ -28,12 +44,22 @@ jobs:
           done < <(find .chezmoiscripts -name '*.sh.tmpl' -print0)
 
   fish-syntax:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-chezmoi
-      - name: Install fish
+      - name: Install fish (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get install -y -qq fish
+      - name: Install fish (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install fish
       - name: fish -n on plain fish files
         run: |
           set -euo pipefail
@@ -47,7 +73,10 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            tmp=$(mktemp --suffix=.fish)
+            # Explicit template rather than `mktemp --suffix=.fish`: the GNU-only
+            # --suffix flag is absent on the macOS leg's BSD mktemp. `fish -n`
+            # parses by content, so the file extension is irrelevant.
+            tmp=$(mktemp "${TMPDIR:-/tmp}/ci-fish.XXXXXX")
             chezmoi execute-template < "$f" > "$tmp"
             fish -n "$tmp"
             rm -f "$tmp"

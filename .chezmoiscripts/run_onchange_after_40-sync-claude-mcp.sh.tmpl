@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Sync managed MCP servers into ~/.claude.json at user scope via the
-# official `claude mcp` CLI. Re-runs whenever the staging template changes.
+# official `claude mcp` CLI. Re-runs whenever the staging template or its
+# single-source `.chezmoidata/mcp.yaml` data changes (both are in the hash below).
 #
 # The managed server names are derived from the staging JSON itself
 # (.mcpServers keys), mirroring how run_onchange_after_41-sync-codex-mcp derives

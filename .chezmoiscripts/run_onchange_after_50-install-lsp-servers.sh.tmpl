@@ -10,17 +10,11 @@
 # a node/go upgrade (a raw `npm install -g` lands in the version-pinned runtime
 # dir and vanishes when mise repoints the version). clangd comes from the OS
 # package manager and rust-analyzer from rustup. Re-runs when this script changes.
-set -euo pipefail
+{{ template "lib-log.sh" . }}
 
-log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+{{ template "lib-resolve.sh" . }}
 
-# Resolve mise the same way as the package bootstrap (no reliance on PATH activation).
-MISE_BIN=""
-if command -v mise >/dev/null 2>&1; then
-    MISE_BIN="$(command -v mise)"
-elif [[ -x "$HOME/.local/bin/mise" ]]; then
-    MISE_BIN="$HOME/.local/bin/mise"
-fi
+MISE_BIN="$(resolve_mise)"
 if [[ -z "$MISE_BIN" ]]; then
     echo "mise not found; cannot install LSP servers" >&2
     exit 1
@@ -41,16 +35,9 @@ log "Installing mise-backed LSP servers ({{ $miseTools | join " " }})"
 {{- end }}
 
 # ---- rustup component servers (rust-analyzer) --------------------
-# Resolve rustup without relying on PATH activation: the mise rust bootstrap
-# installs it under ~/.cargo/bin, which is not on PATH in a non-interactive apply.
 {{- range .lspLanguages }}
 {{-   if eq .method "rustup" }}
-RUSTUP_BIN=""
-if command -v rustup >/dev/null 2>&1; then
-    RUSTUP_BIN="$(command -v rustup)"
-elif [[ -x "$HOME/.cargo/bin/rustup" ]]; then
-    RUSTUP_BIN="$HOME/.cargo/bin/rustup"
-fi
+RUSTUP_BIN="$(resolve_rustup rustup)"
 if [[ -n "$RUSTUP_BIN" ]]; then
     log "Ensuring {{ .rustupComponent }} (rustup component for {{ .plugin }})"
     "$RUSTUP_BIN" component add {{ .rustupComponent }} || true
@@ -107,12 +94,7 @@ fi
 {{- end }}
 {{- range .lspLanguages }}
 {{-   if eq .method "rustup" }}
-RA_BIN=""
-if command -v {{ .verifyBin }} >/dev/null 2>&1; then
-    RA_BIN="$(command -v {{ .verifyBin }})"
-elif [[ -x "$HOME/.cargo/bin/{{ .verifyBin }}" ]]; then
-    RA_BIN="$HOME/.cargo/bin/{{ .verifyBin }}"
-fi
+RA_BIN="$(resolve_rustup {{ .verifyBin }})"
 if [[ -z "$RA_BIN" ]] || ! "$RA_BIN" --version >/dev/null 2>&1; then
     echo "MISSING: {{ .verifyBin }}" >&2; fail=1
 fi

@@ -62,11 +62,11 @@ install_flatpak() {
 }
 
 # .deb fetched from a URL and installed via apt (which resolves its deps). Guarded
-# on the command name; matches the discord/obsidian download-and-install blocks.
-# The URL may itself be a command substitution resolved by the caller (obsidian).
+# at the call site (like install_aptrepo), so obsidian's URL - a GitHub-API lookup
+# - is resolved into a variable only inside the caller's `command -v` guard and
+# never on an already-installed re-run; matches the discord/obsidian download blocks.
 install_deburl() {
     local bin="$1" url="$2"
-    command -v "$bin" >/dev/null 2>&1 && return 0
     log "Installing $bin from a downloaded .deb"
     local deb
     deb="$(mktemp --suffix=.deb)"

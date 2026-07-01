@@ -87,7 +87,10 @@ fi
 {{-     else if hasKey $os "flatpak" }}
 install_flatpak "{{ $os.flatpak }}"
 {{-     else if hasKey $os "deburl" }}
-install_deburl "{{ get $pkg "bin" }}" "{{ $os.deburl }}"
+if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1; then
+    DEB_URL="{{ $os.deburl }}"
+    install_deburl "{{ get $pkg "bin" }}" "$DEB_URL"
+fi
 {{-     else if hasKey $os "script" }}
 {{-       if hasKey $os "dpkg" }}
 if ! dpkg -s {{ $os.dpkg }} >/dev/null 2>&1; then

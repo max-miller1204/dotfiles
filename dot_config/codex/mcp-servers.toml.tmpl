@@ -1,3 +1,22 @@
-[mcp_servers.nixos]
-command = "{{ .chezmoi.homeDir }}/.local/share/mise/shims/uvx"
-args = ["mcp-nixos"]
+{{- /* Staging TOML for Codex MCP servers, derived from the single-source
+       mcpServers table in .chezmoidata/mcp.yaml (shared with the Claude staging
+       template) so the two can never drift. We emit only servers tagged `codex`,
+       prepending {{ .chezmoi.homeDir }} to any command_rel since .chezmoidata is
+       static and cannot hold homeDir. run_onchange_after_41-sync-codex-mcp derives
+       the managed section names by matching `^[mcp_servers.<name>]$` lines in the
+       rendered file, so each server must stay a standalone [mcp_servers.<name>]
+       table header on its own line. */ -}}
+{{- $codexServers := list -}}
+{{- range .mcpServers -}}
+{{-   if has "codex" .agents -}}{{- $codexServers = append $codexServers . -}}{{- end -}}
+{{- end -}}
+{{- range $i, $s := $codexServers }}
+{{- $rel := get $s "command_rel" }}
+{{- $cmd := get $s "command" }}
+{{- if and (not $rel) (not $cmd) }}{{ fail (printf "mcp.yaml: server %q has neither command_rel nor command" $s.name) }}{{- end }}
+{{- if $i }}
+
+{{ end }}[mcp_servers.{{ $s.name }}]
+command = {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson $cmd }}{{ end }}
+args = {{ toJson $s.args }}
+{{- end }}

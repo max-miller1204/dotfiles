@@ -1,14 +1,25 @@
+{{- /* Staging JSON for Claude Code MCP servers, derived from the single-source
+       mcpServers table in .chezmoidata/mcp.yaml (shared with the Codex staging
+       template) so the two can never drift. We emit only servers tagged `claude`,
+       prepending {{ .chezmoi.homeDir }} to any command_rel since .chezmoidata is
+       static and cannot hold homeDir. run_onchange_after_40-sync-claude-mcp reads
+       the .mcpServers keys of the rendered file to know which names it manages, so
+       this must stay a JSON object keyed by server name. */ -}}
+{{- $claudeServers := list -}}
+{{- range .mcpServers -}}
+{{-   if has "claude" .agents -}}{{- $claudeServers = append $claudeServers . -}}{{- end -}}
+{{- end -}}
 {
   "mcpServers": {
-    "nixos": {
+{{- range $i, $s := $claudeServers }}
+{{- $rel := get $s "command_rel" }}
+{{- $cmd := get $s "command" }}
+{{- if and (not $rel) (not $cmd) }}{{ fail (printf "mcp.yaml: server %q has neither command_rel nor command" $s.name) }}{{- end }}
+    {{ toJson $s.name }}: {
       "type": "stdio",
-      "command": "{{ .chezmoi.homeDir }}/.local/share/mise/shims/uvx",
-      "args": ["mcp-nixos"]
-    },
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"]
-    }
+      "command": {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson $cmd }}{{ end }},
+      "args": {{ toJson $s.args }}
+    }{{ if lt (add1 $i) (len $claudeServers) }},{{ end }}
+{{- end }}
   }
 }

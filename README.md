@@ -153,13 +153,19 @@ runner script as above.
 
 ## MCP servers (Claude Code + Codex)
 
-Declared once in `dot_config/claude-code/mcp-servers.json.tmpl` and
-`dot_config/codex/mcp-servers.toml.tmpl` — these are staging files. On every
-`chezmoi apply` where either changes, a `run_onchange_after_*` script syncs
-them in place:
+Declared once in `.chezmoidata/mcp.yaml`, the single source of truth. chezmoi
+auto-loads `.chezmoidata/*` as template data, so each agent's staging template
+renders its own view of that one table (each server is tagged with the agents
+that should get it), and the two can no longer drift:
 
-- `~/.claude.json` (user scope) — via `claude mcp remove` + `claude mcp add-json`
-- `~/.codex/config.toml` — via awk-strip + append
+- `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON, servers tagged `claude`
+- `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML, servers tagged `codex`
+
+Both agents currently get `nixos` + `playwright`. On every `chezmoi apply` where
+a staging file changes, a `run_onchange_after_*` script syncs it in place:
+
+- `~/.claude.json` (user scope) - via `claude mcp remove` + `claude mcp add-json`
+- `~/.codex/config.toml` - via awk-strip + append
 
 The Claude sync touches only the server names declared in its own staging JSON
 (`.mcpServers` keys); the Codex sync touches only the section names declared in
@@ -167,7 +173,7 @@ its staging TOML. Neither keeps a second hand-maintained name list. Anything
 else you've added manually (or that
 Codex's own plugin registry manages) in `~/.claude.json` or
 `~/.codex/config.toml` is preserved. One consequence: removing a server from
-the staging files means deleting its leftover section from
+`.chezmoidata/mcp.yaml` means deleting its leftover section from
 `~/.codex/config.toml` by hand once. Verify with `claude mcp list`.
 
 ## Agents (multi-agent)
@@ -236,8 +242,9 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
-- `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
-- `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
+- `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; both staging templates below render from it, tagging each server per agent
+- `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
+- `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_config/codex/config-base.toml.tmpl` - staging TOML; base Codex settings (`model`, reasoning effort) sync'd into `~/.codex/config.toml` by `run_onchange_after_42-sync-codex-base.sh.tmpl`
 - `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`

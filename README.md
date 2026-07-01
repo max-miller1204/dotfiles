@@ -57,10 +57,16 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
+- installs the **Codex** and **OpenCode** agents via their own official
+  installers too, so all three coding agents (Claude, Codex, OpenCode) are
+  present and interchangeable - see
+  [Agents (multi-agent)](#agents-multi-agent)
 - installs the **agent "axi" CLIs** (`gh-axi`, `chrome-devtools-axi`,
-  `lavish-axi`, `tasks-axi`) - ergonomic wrappers Claude Code drives from its SessionStart
-  hooks, installed as mise-managed npm tools so they survive a node upgrade
-  instead of orphaning in the version-pinned runtime dir
+  `lavish-axi`, `tasks-axi`) - ergonomic wrappers the coding agents drive from their
+  SessionStart hooks, installed as mise-managed npm tools so they survive a node upgrade
+  instead of orphaning in the version-pinned runtime dir. `run_onchange_after_60` then
+  wires their hooks into every agent (Claude, Codex, OpenCode) - see
+  [Agents (multi-agent)](#agents-multi-agent)
 - installs the **language servers** Claude Code's LSP plugins need: pyright,
   typescript-language-server (+ typescript) and gopls as mise-managed tools,
   rust-analyzer via the rustup component, and clangd from apt (Linux) or
@@ -157,6 +163,53 @@ Codex's own plugin registry manages) in `~/.claude.json` or
 the staging files means deleting its leftover section from
 `~/.codex/config.toml` by hand once. Verify with `claude mcp list`.
 
+## Agents (multi-agent)
+
+Three coding agents are first-class and interchangeable: **Claude Code**, **Codex**, and **OpenCode**.
+They share one set of global instructions and one set of ambient-context hooks, so you can switch between them with the same tools and the same rules.
+
+All three agents install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS), so a fresh apply has all three present.
+
+### Shared instructions (single-source AGENTS.md)
+
+The global agent instructions live in one real file at `~/AGENTS.md` (source: the chezmoi-root `AGENTS.md`).
+No agent directory is the privileged home; every agent reaches that one file through a relative symlink, so there is exactly one place to edit:
+
+- `~/.claude/CLAUDE.md` -> `../AGENTS.md` (source: `dot_claude/symlink_CLAUDE.md`) for Claude Code.
+- `~/.codex/AGENTS.md` -> `../AGENTS.md` (source: `dot_codex/symlink_AGENTS.md`) for Codex, which reads the `AGENTS.md` convention natively.
+- `~/.config/opencode/AGENTS.md` -> `../../AGENTS.md` (source: `dot_config/opencode/symlink_AGENTS.md`) for OpenCode, whose documented global-rules path is `~/.config/opencode/AGENTS.md`.
+
+(The chezmoi-root `AGENTS.md` is both the source of `~/AGENTS.md` and this repo's own agent-memory file; `README.md`, `CLAUDE.md`, and `raycast-export` stay `.chezmoiignore`d, but `AGENTS.md` is intentionally applied.)
+
+### Ambient-context hooks (axi)
+
+Each axi CLI ships a `<tool> setup hooks` subcommand (from the shared `axi-sdk-js`) that, in one idempotent call, wires that tool into all three agents:
+
+- Claude: a SessionStart hook in `~/.claude/settings.json`.
+- Codex: a SessionStart hook in `~/.codex/hooks.json` plus `[features] hooks = true` in `~/.codex/config.toml`.
+- OpenCode: an ambient-context plugin at `~/.config/opencode/plugins/axi-<tool>.js`.
+
+`run_onchange_after_60-setup-axi-hooks.sh.tmpl` runs `setup hooks` for all four CLIs, after the CLIs are installed and after the agent config files are applied.
+It puts the mise shim dir on `PATH` and skips (rather than fails) any CLI that is not yet installed, so a partial first apply self-heals on the next run.
+
+**Single source of truth for the hooks.**
+`setup hooks` is the one mechanism that wires axi hooks across all three agents.
+Claude's four axi SessionStart hooks are also vendored in `dot_claude/settings.json`, byte-identical to what `setup hooks` emits (bare command, `timeout: 10`).
+That is deliberate: `~/.claude/settings.json` is a fully chezmoi-managed file, so if the source lacked the hooks and only the script added them, every `chezmoi apply` would strip them (rewriting the file from source) and the next `chezmoi status` would show perpetual drift.
+Keeping them vendored makes `setup hooks` a no-op for Claude (it still wires Codex and OpenCode, and self-repairs all three) and keeps the managed file drift-free.
+Codex's `hooks.json` and the OpenCode plugins are not chezmoi-managed targets, so the script is their sole owner with no drift.
+
+**Codex config ownership.**
+`~/.codex/config.toml` is assembled (not a single chezmoi target) so several managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
+
+- `run_onchange_after_42-sync-codex-base.sh.tmpl` owns a marker-delimited block at the top of the file with the durable base settings (`model`, `model_reasoning_effort`), sourced from `dot_config/codex/config-base.toml.tmpl`.
+- `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
+- `run_onchange_after_60-setup-axi-hooks.sh.tmpl` owns `[features] hooks = true`.
+
+**Codex hook-trust caveat (one manual follow-up on Ubuntu).**
+Codex gates hooks behind persisted trust, so the first Codex session after a fresh apply may prompt to trust the hooks (or need `--dangerously-bypass-hook-trust`).
+Running a Codex session once and accepting that prompt is the only manual step; the exact `hooks.json` shape is left to the official `setup hooks` command so it stays correct against the installed Codex version.
+
 ## What's here
 
 Cross-platform:
@@ -171,9 +224,13 @@ Cross-platform:
 - `dot_config/starship.toml` — prompt
 - `dot_config/claude-code/mcp-servers.json.tmpl` — staging JSON; sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` — staging TOML; sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
+- `dot_config/codex/config-base.toml.tmpl` - staging TOML; base Codex settings (`model`, reasoning effort) sync'd into `~/.codex/config.toml` by `run_onchange_after_42-sync-codex-base.sh.tmpl`
+- `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
+- `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
+- `dot_codex/symlink_AGENTS.md` - materializes `~/.codex/AGENTS.md` -> `~/AGENTS.md`
+- `dot_config/opencode/symlink_AGENTS.md` - materializes `~/.config/opencode/AGENTS.md` -> `~/AGENTS.md`
 - `dot_claude/settings.json` + `executable_statusline.sh`
 - `dot_claude/skills/` — Claude skills (brev-cli, codex-review)
-- `dot_codex/skills/` — Codex skills
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
@@ -211,12 +268,14 @@ To update the snapshot after changing settings: re-export from Raycast
 `raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, Claude Code, agent axi CLIs, fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, the coding agents (Claude, Codex, OpenCode), agent axi CLIs, fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
+- `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew) whenever the script changes
+- `.chezmoiscripts/run_onchange_after_60-setup-axi-hooks.sh.tmpl` - wires the axi ambient-context hooks into all three agents (Claude, Codex, OpenCode) via each CLI's `setup hooks`, whenever the tool list changes (see [Agents (multi-agent)](#agents-multi-agent))
 
 ## WSL Ubuntu
 
@@ -239,8 +298,9 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-The first apply installs CLIs, mise toolchains, Nix, Claude Code, and the
-1Password CLI, then sets fish as your login shell.
+The first apply installs CLIs, mise toolchains, Nix, the coding agents
+(Claude, Codex, OpenCode), and the 1Password CLI, then sets fish as your
+login shell.
 
 ### 1Password sign-in from WSL
 
@@ -341,14 +401,15 @@ the repo and need manual hand-off.
    the repo has no secrets, so this can wait until after bootstrap),
    GitHub (`gh auth login`), Atuin (`atuin login` + `atuin sync` —
    `auto_sync` is off by default), Discord, Spotify, Obsidian, Zed account,
-   Claude Code (`claude` → follow the login flow).
+   Claude Code, Codex, and OpenCode (run `claude`, `codex`, and `opencode`
+   and follow each login flow).
 
 7. **Verify**:
 
    ```sh
    claude mcp list           # should show nixos + playwright
    mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & axi CLIs)
-   which brew fish claude op # sanity-check everything's on PATH
+   which brew fish claude codex opencode op # sanity-check everything's on PATH
    op whoami                 # confirms 1Password sign-in
    ```
 

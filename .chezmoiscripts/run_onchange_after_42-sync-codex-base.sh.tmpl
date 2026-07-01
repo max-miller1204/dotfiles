@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Sync the managed base settings (durable, portable Codex preferences: model +
+# reasoning effort) into ~/.codex/config.toml as a marker-delimited block at the
+# TOP of the file, so they land as valid top-level TOML keys ahead of any section.
+#
+# Ownership of ~/.codex/config.toml is split across three managed mechanisms that
+# never touch each other's keys:
+#   - this script                          -> the marker block (model, effort)
+#   - run_onchange_after_41-sync-codex-mcp -> [mcp_servers.*] (appended at end)
+#   - run_onchange_after_60-setup-axi-hooks-> [features] hooks = true (via `setup hooks`)
+# Everything else (machine-specific [projects.*] trust, [tui.*], sections added by
+# Codex itself) is preserved verbatim.
+#
+# staging hash: {{ include "dot_config/codex/config-base.toml.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+CODEX_CONFIG="${HOME}/.codex/config.toml"
+BASE_SOURCE="${HOME}/.config/codex/config-base.toml"
+BEGIN_MARKER="# >>> chezmoi codex-base (managed) >>>"
+END_MARKER="# <<< chezmoi codex-base (managed) <<<"
+
+[ -r "$BASE_SOURCE" ] || { echo "staging file missing: $BASE_SOURCE" >&2; exit 1; }
+
+mkdir -p "$(dirname "$CODEX_CONFIG")"
+[ -f "$CODEX_CONFIG" ] || : > "$CODEX_CONFIG"
+
+# 1. Drop any prior managed block, plus stray top-level `model` /
+#    `model_reasoning_effort` keys that appear before the first TOML section
+#    header (so re-inserting the block can't create duplicate keys). Keys inside
+#    sections and every other line are preserved untouched. Leading blank lines
+#    left by the strip are suppressed in the same pass so the output is byte-stable
+#    across re-runs (idempotent) - and it stays portable (no `sed -i`, which needs
+#    a backup-suffix arg on BSD/macOS sed).
+awk -v b="$BEGIN_MARKER" -v e="$END_MARKER" '
+  BEGIN { inblock = 0; seen_section = 0; started = 0 }
+  $0 == b { inblock = 1; next }
+  $0 == e { inblock = 0; next }
+  inblock { next }
+  /^\[/ { seen_section = 1 }
+  (!seen_section) && /^[[:space:]]*model[[:space:]]*=/ { next }
+  (!seen_section) && /^[[:space:]]*model_reasoning_effort[[:space:]]*=/ { next }
+  { if (!started && $0 ~ /^[[:space:]]*$/) next; started = 1; print }
+' "$CODEX_CONFIG" > "$CODEX_CONFIG.tmp"
+
+# 2. Emit the fresh managed block at the top, then the preserved remainder with a
+#    single blank-line separator when there is any remainder.
+{
+  printf '%s\n' "$BEGIN_MARKER"
+  cat "$BASE_SOURCE"
+  printf '%s\n' "$END_MARKER"
+  if [ -s "$CODEX_CONFIG.tmp" ]; then
+    printf '\n'
+    cat "$CODEX_CONFIG.tmp"
+  fi
+} > "$CODEX_CONFIG"
+rm -f "$CODEX_CONFIG.tmp"
+
+echo "Synced base settings into ~/.codex/config.toml"

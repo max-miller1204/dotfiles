@@ -111,7 +111,15 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            rendered=$(chezmoi execute-template < "$f")
+            # .chezmoi.toml.tmpl uses the `headless` promptBoolOnce INIT function,
+            # so it must render with --init (which resolves the prompt to its
+            # false default non-interactively). --promptDefaults is NOT passed:
+            # execute-template rejects that flag. Every other config template
+            # renders with plain execute-template so it still sees the user [data].
+            case "$f" in
+              *.chezmoi.toml.tmpl) rendered=$(chezmoi execute-template --init < "$f") ;;
+              *)                   rendered=$(chezmoi execute-template < "$f") ;;
+            esac
             case "$f" in
               *.toml.tmpl)
                 printf '%s' "$rendered" | python3 -c 'import sys, tomllib; tomllib.load(sys.stdin.buffer)'

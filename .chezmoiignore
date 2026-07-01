@@ -15,6 +15,9 @@ raycast-export
 .local/bin/mac-askpass
 {{- end }}
 
-{{- if .isWSL }}
+{{- /* Ghostty is a GUI terminal: skip its config on headless/WSL Linux boxes
+       that will not install it. Defensive `get` so an existing machine whose
+       persisted config predates `headless` falls back to isWSL-only. */}}
+{{- if (or .isWSL (get . "headless")) }}
 .config/ghostty
 {{- end }}

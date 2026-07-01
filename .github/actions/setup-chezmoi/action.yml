@@ -23,4 +23,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        chezmoi init
+        # --promptDefaults resolves the Linux-only `headless` promptBoolOnce in
+        # .chezmoi.toml.tmpl to its false default; without it, `chezmoi init`
+        # prompts for headless and hangs / fails on the TTY-less CI runner.
+        chezmoi init --promptDefaults

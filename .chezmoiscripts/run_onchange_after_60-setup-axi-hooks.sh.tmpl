@@ -34,7 +34,7 @@ export PATH="$HOME/.local/share/mise/shims:$PATH"
 for tool in {{ $axiBins | join " " }}; do
     if command -v "$tool" >/dev/null 2>&1; then
         log "Wiring agent hooks: $tool setup hooks"
-        "$tool" setup hooks
+        "$tool" setup hooks || log "warn: setup hooks failed for $tool (retries next apply)"
     else
         log "skip: $tool not on PATH yet (will wire on next apply)"
     fi

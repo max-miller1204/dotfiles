@@ -236,12 +236,6 @@ if [[ -n "$MISE_BIN" ]]; then
     # Installed as mise-managed npm tools so they survive node upgrades.
     log "Installing agent axi CLIs (gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi)"
     "$MISE_BIN" use -g {{ .axiMiseTools | join " " }}
-
-    # opencode coding agent - mise resolves the bare name to aqua:anomalyco/opencode
-    # (prebuilt release binaries), keeping it a first-class agent alongside claude
-    # and codex. Its axi hooks + ~/AGENTS.md instructions are wired by later scripts.
-    log "Installing opencode agent via mise"
-    "$MISE_BIN" use -g {{ .agentMiseTools | join " " }}
 fi
 
 {{- if eq .chezmoi.os "linux" }}
@@ -252,10 +246,20 @@ if ! command -v nix >/dev/null 2>&1 && [[ ! -d /nix ]]; then
 fi
 {{- end }}
 
-# ---- Claude Code (native installer, not npm) ----------------------
+# ---- Coding agents (native installers, not npm) -------------------
 if ! command -v claude >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/claude" ]]; then
     log "Installing Claude Code via official installer"
     curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+if ! command -v codex >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/codex" ]]; then
+    log "Installing Codex CLI via official installer"
+    curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+fi
+
+if ! command -v opencode >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/opencode" ]]; then
+    log "Installing OpenCode via official installer"
+    XDG_BIN_DIR="$HOME/.local/bin" curl -fsSL https://opencode.ai/install | bash
 fi
 
 # ---- Make fish a login shell --------------------------------------

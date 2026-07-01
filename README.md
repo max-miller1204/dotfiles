@@ -57,9 +57,9 @@ That's it — the install scripts run during `apply` and handle the rest:
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
-- installs the **OpenCode agent** via mise (`agentMiseTools`, resolved to
-  `aqua:anomalyco/opencode` prebuilt binaries) so all three coding agents
-  (Claude, Codex, OpenCode) are present and interchangeable - see
+- installs the **Codex** and **OpenCode** agents via their own official
+  installers too, so all three coding agents (Claude, Codex, OpenCode) are
+  present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
 - installs the **agent "axi" CLIs** (`gh-axi`, `chrome-devtools-axi`,
   `lavish-axi`, `tasks-axi`) - ergonomic wrappers the coding agents drive from their
@@ -168,7 +168,7 @@ the staging files means deleting its leftover section from
 Three coding agents are first-class and interchangeable: **Claude Code**, **Codex**, and **OpenCode**.
 They share one set of global instructions and one set of ambient-context hooks, so you can switch between them with the same tools and the same rules.
 
-Claude and Codex install via their own native installers; OpenCode installs via mise (`agentMiseTools` in `.chezmoi.toml.tmpl`, resolved to `aqua:anomalyco/opencode` prebuilt binaries) so a fresh apply has all three present.
+All three agents install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS), so a fresh apply has all three present.
 
 ### Shared instructions (single-source AGENTS.md)
 

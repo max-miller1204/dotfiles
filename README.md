@@ -242,6 +242,7 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
+- `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, per-OS install method) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; both staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
@@ -291,7 +292,7 @@ To update the snapshot after changing settings: re-export from Raycast
 `raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages, toolchains, Nix, the coding agents (Claude, Codex, OpenCode), agent axi CLIs, fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, the coding agents (Claude, Codex, OpenCode), agent axi CLIs, fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
@@ -303,7 +304,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode); the skill is `.chezmoiignore`d, so brev owns it with no chezmoi conflict
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
-`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (eza, gum, 1Password).
+`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (eza, gum, 1Password); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method.
 The three MCP sync scripts (`run_onchange_after_4x`) deliberately keep their own bare preamble instead.
 See [AGENTS.md](AGENTS.md) for the convention.
 

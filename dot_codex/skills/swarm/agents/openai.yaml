@@ -1,4 +1,0 @@
-interface:
-  display_name: "Swarm"
-  short_description: "Run parallel Codex worker execution waves"
-  default_prompt: "Use $swarm to execute this SPEC.md with scaffold work, parallel Codex worker agents, and coordinated integration."

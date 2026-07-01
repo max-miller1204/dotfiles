@@ -113,7 +113,6 @@
     }
   },
   "effortLevel": "xhigh",
-  "advisorModel": "opus",
   "tui": "fullscreen",
   "voice": {
     "enabled": true,
@@ -121,6 +120,7 @@
   },
   "autoMemoryEnabled": true,
   "autoDreamEnabled": true,
+  "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "editorMode": "normal",

@@ -243,7 +243,9 @@ Cross-platform:
 - `dot_codex/symlink_AGENTS.md` - materializes `~/.codex/AGENTS.md` -> `~/AGENTS.md`
 - `dot_config/opencode/symlink_AGENTS.md` - materializes `~/.config/opencode/AGENTS.md` -> `~/AGENTS.md`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/skills/` — Claude skills (brev-cli, codex-review)
+- `dot_claude/skills/` — vendored Claude skills (codex-review). The brev-cli
+  skill is not vendored: `brev agent-skill` writes it into every agent harness
+  (`run_once_after_70`), so the brev CLI owns it
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`
@@ -290,6 +292,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew), all derived from the single-source `lspLanguages` table, whenever the script changes
 - `.chezmoiscripts/run_after_60-setup-axi-hooks.sh.tmpl` - wires the axi ambient-context hooks into all three agents (Claude, Codex, OpenCode) via each CLI's `setup hooks`, on every apply (Claude's hooks live in the chezmoi-rewritten settings.json, so they must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
 - `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (same chezmoi-rewritten-settings.json reason as the hooks; see [Agents (multi-agent)](#agents-multi-agent))
+- `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode); the skill is `.chezmoiignore`d, so brev owns it with no chezmoi conflict
 
 ## WSL Ubuntu
 

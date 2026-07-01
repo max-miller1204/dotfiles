@@ -1,0 +1,253 @@
+# Single source of truth for every package the bootstrap installs, described once
+# with its per-platform install method carried as data. chezmoi auto-loads
+# .chezmoidata/*, so `packages` is available as `.packages` (and `aptrepos` as
+# `.aptrepos`) in every template; run_once_before_10-install-packages.sh.tmpl
+# walks `.packages` in one loop and dispatches each entry to the matching helper
+# in .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
+# (one-stanza) edit here - no shell edits.
+#
+# Per-package fields:
+#   name  - human label, used in log lines
+#   gui   - true for desktop apps; GUI packages are skipped on WSL (Windows-native
+#           versions are used there instead). Non-GUI CLI tools install everywhere.
+#   bin   - the command the method guards on (command -v <bin>) where the method
+#           needs a command-name guard (apt+ppa, deburl); omit where the method
+#           carries its own guard (flatpak app id, script dpkg, aptrepo lookup).
+#   darwin / linux - the install method for that OS, as a single-key map:
+#     brew:    <formula>            strict `brew install` (core CLI formulae)
+#     cask:    <cask>               `brew install --cask` (tolerant, `|| true`)
+#     apt:     <pkg> [ppa: <ppa>]   apt package; optional PPA added first
+#     aptrepo: <name>               third-party apt repo; params from `aptrepos.<name>`
+#     flatpak: <app-id>             flatpak from flathub
+#     deburl:  <url>                download a .deb from <url> and apt-install it
+#     script:  <cmd> [altpath/dpkg] curl-style vendor installer run verbatim
+#     mise:    <tool>              mise-managed tool (method available; unused today)
+#   tolerant - on a brew entry, append `|| true` (optional/extra formula, e.g. brev)
+#
+# fzf is intentionally absent: the README designates mise (fzf@latest, installed in
+# the mise toolchains block) as its owner, so it must not also come from brew/apt.
+
+packages:
+  # ---- core CLI, cross-platform (brew on macOS, apt on Ubuntu) ----
+  - name: fish
+    gui: false
+    bin: fish
+    darwin: { brew: fish }
+    linux:  { apt: fish }
+  - name: git
+    gui: false
+    bin: git
+    darwin: { brew: git }
+    linux:  { apt: git }
+  - name: tmux
+    gui: false
+    bin: tmux
+    darwin: { brew: tmux }
+    linux:  { apt: tmux }
+  - name: zoxide
+    gui: false
+    bin: zoxide
+    darwin: { brew: zoxide }
+    linux:  { apt: zoxide }
+  - name: bat
+    gui: false
+    bin: bat
+    darwin: { brew: bat }
+    linux:  { apt: bat }
+  - name: ripgrep
+    gui: false
+    bin: rg
+    darwin: { brew: ripgrep }
+    linux:  { apt: ripgrep }
+  - name: jq
+    gui: false
+    bin: jq
+    darwin: { brew: jq }
+    linux:  { apt: jq }
+  - name: fd
+    gui: false
+    bin: fd
+    darwin: { brew: fd }
+    linux:  { apt: fd-find }
+  - name: gh
+    gui: false
+    bin: gh
+    darwin: { brew: gh }
+
+  # ---- Ubuntu base apt packages (no macOS counterpart) ----
+  - name: curl
+    gui: false
+    bin: curl
+    linux: { apt: curl }
+  - name: wget
+    gui: false
+    bin: wget
+    linux: { apt: wget }
+  - name: ca-certificates
+    gui: false
+    linux: { apt: ca-certificates }
+  - name: gnupg
+    gui: false
+    bin: gpg
+    linux: { apt: gnupg }
+  - name: build-essential
+    gui: false
+    linux: { apt: build-essential }
+  - name: software-properties-common
+    gui: false
+    bin: add-apt-repository
+    linux: { apt: software-properties-common }
+  - name: zenity
+    gui: false
+    bin: zenity
+    linux: { apt: zenity }
+
+  # ---- third-party apt-repo CLI tools (brew on macOS) ----
+  - name: eza
+    gui: false
+    bin: eza
+    darwin: { brew: eza }
+    linux:  { aptrepo: eza }
+  - name: gum
+    gui: false
+    bin: gum
+    darwin: { brew: gum }
+    linux:  { aptrepo: gum }
+  - name: 1password-cli
+    gui: false
+    bin: op
+    darwin: { brew: 1password-cli }
+    linux:  { aptrepo: 1password-cli }
+
+  # ---- curl-installed CLI tools (brew on macOS, vendor installer on Ubuntu) ----
+  - name: starship
+    gui: false
+    bin: starship
+    darwin: { brew: starship }
+    linux:  { script: "curl -sS https://starship.rs/install.sh | sh -s -- -y" }
+  - name: atuin
+    gui: false
+    bin: atuin
+    darwin: { brew: atuin }
+    linux:
+      script: "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh"
+      altpath: "$HOME/.atuin/bin/atuin"
+  - name: mise
+    gui: false
+    bin: mise
+    darwin: { brew: mise }
+    linux:
+      script: "curl https://mise.run | sh"
+      altpath: "$HOME/.local/bin/mise"
+  - name: pfetch
+    gui: false
+    bin: pfetch
+    darwin: { brew: pfetch }
+    linux:  { script: "curl -fsSL https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch -o \"$HOME/.local/bin/pfetch\" && chmod +x \"$HOME/.local/bin/pfetch\"" }
+  - name: brev
+    gui: false
+    bin: brev
+    darwin: { brew: brevdev/homebrew-brev/brev, tolerant: true }
+    linux:  { script: "sudo bash -c \"$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)\"" }
+
+  # ---- GUI desktop apps (cask on macOS; skipped on WSL) ----
+  - name: ghostty
+    gui: true
+    bin: ghostty
+    darwin: { cask: ghostty }
+    linux:  { apt: ghostty, ppa: "ppa:mkasberg/ghostty-ubuntu" }
+  - name: discord
+    gui: true
+    bin: discord
+    darwin: { cask: discord }
+    linux:  { deburl: "https://discord.com/api/download?platform=linux&format=deb" }
+  - name: voquill
+    gui: true
+    darwin: { cask: voquill/voquill/voquill-desktop }
+    linux:
+      script: "curl -fsSL https://voquill.github.io/apt/install.sh | bash"
+      dpkg: voquill-desktop
+  - name: obsidian
+    gui: true
+    bin: obsidian
+    darwin: { cask: obsidian }
+    linux:  { deburl: "$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | jq -r '.assets[] | select(.name | endswith(\"_amd64.deb\")) | .browser_download_url' | head -n1)" }
+  - name: anki
+    gui: true
+    darwin: { cask: anki }
+    linux:  { flatpak: net.ankiweb.Anki }
+  - name: spotify
+    gui: true
+    darwin: { cask: spotify }
+    linux:  { flatpak: com.spotify.Client }
+  - name: zoom
+    gui: true
+    darwin: { cask: zoom }
+    linux:  { flatpak: us.zoom.Zoom }
+
+  # ---- macOS-only GUI casks ----
+  - name: firefox
+    gui: true
+    darwin: { cask: firefox }
+  - name: google-chrome
+    gui: true
+    darwin: { cask: google-chrome }
+  - name: aerospace
+    gui: true
+    darwin: { cask: nikitabobko/tap/aerospace }
+  - name: karabiner-elements
+    gui: true
+    darwin: { cask: karabiner-elements }
+  - name: raycast
+    gui: true
+    darwin: { cask: raycast }
+  - name: zed
+    gui: true
+    darwin: { cask: zed }
+  - name: neovide-app
+    gui: true
+    darwin: { cask: neovide-app }
+  - name: balenaetcher
+    gui: true
+    darwin: { cask: balenaetcher }
+  - name: macdown-3000
+    gui: true
+    darwin: { cask: macdown-3000 }
+  - name: pearcleaner
+    gui: true
+    darwin: { cask: pearcleaner }
+  - name: font-jetbrains-mono-nerd-font
+    gui: true
+    darwin: { cask: font-jetbrains-mono-nerd-font }
+
+# ---- third-party apt-repo definitions, keyed by the `aptrepo:` value above ----
+# Each carries the six positional args A's install_aptrepo helper needs
+# (LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE). 1Password additionally
+# ships a debsig policy + keyring (independent of the apt keyring/list), carried
+# as the `debsig` block and applied by install_debsig before install_aptrepo.
+aptrepos:
+  eza:
+    label: eza
+    keyring: /etc/apt/keyrings/gierens.gpg
+    key_url: https://raw.githubusercontent.com/eza-community/eza/main/deb.asc
+    repo_line: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
+    list_path: /etc/apt/sources.list.d/gierens.list
+    package: eza
+  gum:
+    label: gum
+    keyring: /etc/apt/keyrings/charm.gpg
+    key_url: https://repo.charm.sh/apt/gpg.key
+    repo_line: "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *"
+    list_path: /etc/apt/sources.list.d/charm.list
+    package: gum
+  1password-cli:
+    label: "1Password CLI"
+    keyring: /usr/share/keyrings/1password-archive-keyring.gpg
+    key_url: https://downloads.1password.com/linux/keys/1password.asc
+    repo_line: "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main"
+    list_path: /etc/apt/sources.list.d/1password.list
+    package: 1password-cli
+    debsig:
+      policy_id: AC2D62742012EA22
+      pol_url: https://downloads.1password.com/linux/debian/debsig/1password.pol
+      key_url: https://downloads.1password.com/linux/keys/1password.asc

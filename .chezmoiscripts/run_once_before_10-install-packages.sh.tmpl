@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
-# Install every CLI tool these dotfiles expect. Runs exactly once per
-# unique content hash (rerun only if this script changes).
+# Install every CLI tool and desktop app these dotfiles expect. Runs exactly once
+# per unique content hash (rerun only if this script changes).
+#
+# The package set is data, not code: .chezmoidata/packages.yaml describes each
+# package once with its per-OS install method, and the single loop below walks
+# `.packages` and dispatches each entry to the matching install_* helper in
+# .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
+# manifest edit. GUI packages are skipped on WSL (Windows-native versions are used
+# there). Everything after the loop (mise toolchains, Nix, coding agents, login
+# shell) is not part of the manifest and is unchanged.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
 
 {{ template "lib-apt.sh" . }}
 
+{{ template "lib-install.sh" . }}
+
 {{- if eq .chezmoi.os "darwin" }}
 
-# ---- macOS --------------------------------------------------------
+# ---- macOS prep: Homebrew -----------------------------------------
 if ! command -v brew >/dev/null 2>&1; then
     log "Installing Homebrew"
     NONINTERACTIVE=1 /bin/bash -c \
@@ -22,41 +32,9 @@ elif [[ -x /usr/local/bin/brew ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
 fi
 
-log "Installing packages via Homebrew"
-# fzf is intentionally omitted here: it is installed via mise (fzf@latest) below,
-# which the README designates as its owner. Installing it twice would let brew and
-# mise fight over the same binary on PATH.
-brew install \
-    fish git tmux eza zoxide starship bat fd ripgrep jq \
-    atuin mise pfetch gh gum 1password-cli
-
-# brev — Nvidia cloud GPU CLI (from the brevdev tap)
-brew install brevdev/homebrew-brev/brev || true
-
-brew install --cask firefox || true
-brew install --cask google-chrome || true
-brew install --cask ghostty || true
-brew install --cask nikitabobko/tap/aerospace || true
-brew install --cask karabiner-elements || true
-brew install --cask raycast || true
-brew install --cask discord || true
-brew install --cask zed || true
-brew install --cask neovide-app || true
-brew install --cask voquill/voquill/voquill-desktop || true
-brew install --cask zoom || true
-brew install --cask anki || true
-brew install --cask obsidian || true
-brew install --cask spotify || true
-brew install --cask balenaetcher || true
-brew install --cask macdown-3000 || true
-brew install --cask pearcleaner || true
-brew install --cask font-jetbrains-mono-nerd-font || true
-
 {{- else if eq .chezmoi.os "linux" }}
 
-# ---- Ubuntu / Debian ----------------------------------------------
-IS_WSL={{ if .isWSL }}1{{ else }}0{{ end }}
-
+# ---- Ubuntu / Debian prep -----------------------------------------
 if ! command -v apt-get >/dev/null 2>&1; then
     echo "This bootstrap only supports apt-based Linux (Ubuntu/Debian)." >&2
     exit 1
@@ -65,13 +43,77 @@ fi
 log "Updating apt"
 sudo apt-get update -y
 
-log "Installing base apt packages"
-sudo apt-get install -y \
-    fish git tmux zoxide bat ripgrep jq curl wget \
-    fd-find ca-certificates gnupg build-essential \
-    software-properties-common zenity
+# ~/.local/bin is where several tools land (pfetch, the batcat/fdfind shims);
+# ensure it exists before the package loop populates it.
+mkdir -p "$HOME/.local/bin"
+{{- if .isWSL }}
+log "WSL detected - skipping GUI desktop apps (Windows-native versions are used)"
+{{- end }}
+{{- end }}
 
-# Ubuntu names them batcat/fdfind — symlink to the canonical names.
+# ---- Package manifest (.chezmoidata/packages.yaml) ----------------
+# One loop over every package; each dispatches to its install_* helper by OS +
+# method. GUI packages are skipped on WSL.
+{{- range $pkg := .packages }}
+{{-   $os := dict }}
+{{-   $hasOS := false }}
+{{-   if and (eq $.chezmoi.os "darwin") (hasKey $pkg "darwin") }}
+{{-     $os = get $pkg "darwin" }}
+{{-     $hasOS = true }}
+{{-   else if and (eq $.chezmoi.os "linux") (hasKey $pkg "linux") }}
+{{-     $os = get $pkg "linux" }}
+{{-     $hasOS = true }}
+{{-   end }}
+{{-   if and $hasOS (not (and (get $pkg "gui") $.isWSL)) }}
+{{-     if hasKey $os "brew" }}
+install_brew "{{ $os.brew }}"{{ if get $os "tolerant" }} || true{{ end }}
+{{-     else if hasKey $os "cask" }}
+install_cask "{{ $os.cask }}"
+{{-     else if hasKey $os "apt" }}
+install_apt "{{ get $pkg "bin" }}" "{{ $os.apt }}"{{ if hasKey $os "ppa" }} "{{ $os.ppa }}"{{ end }}
+{{-     else if hasKey $os "aptrepo" }}
+{{-       $repo := index $.aptrepos (get $os "aptrepo") }}
+if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1; then
+{{-       if hasKey $repo "debsig" }}
+    install_debsig "{{ $repo.debsig.policy_id }}" "{{ $repo.debsig.pol_url }}" "{{ $repo.debsig.key_url }}"
+{{-       end }}
+    install_aptrepo "{{ $repo.label }}" \
+        "{{ $repo.keyring }}" \
+        "{{ $repo.key_url }}" \
+        "{{ $repo.repo_line }}" \
+        "{{ $repo.list_path }}" \
+        "{{ $repo.package }}"
+fi
+{{-     else if hasKey $os "flatpak" }}
+install_flatpak "{{ $os.flatpak }}"
+{{-     else if hasKey $os "deburl" }}
+install_deburl "{{ get $pkg "bin" }}" "{{ $os.deburl }}"
+{{-     else if hasKey $os "script" }}
+{{-       if hasKey $os "dpkg" }}
+if ! dpkg -s {{ $os.dpkg }} >/dev/null 2>&1; then
+    log "Installing {{ $pkg.name }}"
+    {{ $os.script }}
+fi
+{{-       else if hasKey $os "altpath" }}
+if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1 && [[ ! -x "{{ $os.altpath }}" ]]; then
+    log "Installing {{ $pkg.name }}"
+    {{ $os.script }}
+fi
+{{-       else }}
+if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1; then
+    log "Installing {{ $pkg.name }}"
+    {{ $os.script }}
+fi
+{{-       end }}
+{{-     else if hasKey $os "mise" }}
+install_mise "{{ get $pkg "bin" }}" "{{ $os.mise }}"
+{{-     end }}
+{{-   end }}
+{{- end }}
+
+{{- if eq .chezmoi.os "linux" }}
+
+# Ubuntu names them batcat/fdfind - symlink to the canonical names.
 mkdir -p "$HOME/.local/bin"
 if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
     ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
@@ -79,145 +121,6 @@ fi
 if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
     ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
 fi
-
-# eza — not in default apt repos on older Ubuntu.
-if ! command -v eza >/dev/null 2>&1; then
-    install_aptrepo eza \
-        /etc/apt/keyrings/gierens.gpg \
-        https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
-        "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
-        /etc/apt/sources.list.d/gierens.list \
-        eza
-fi
-
-# starship
-if ! command -v starship >/dev/null 2>&1; then
-    log "Installing starship"
-    curl -sS https://starship.rs/install.sh | sh -s -- -y
-fi
-
-# atuin
-if ! command -v atuin >/dev/null 2>&1 && [[ ! -x "$HOME/.atuin/bin/atuin" ]]; then
-    log "Installing atuin"
-    curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh
-fi
-
-# mise
-if ! command -v mise >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/mise" ]]; then
-    log "Installing mise"
-    curl https://mise.run | sh
-fi
-
-# pfetch — tiny system info fetcher printed at fish startup
-if ! command -v pfetch >/dev/null 2>&1; then
-    log "Installing pfetch"
-    curl -fsSL https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch \
-        -o "$HOME/.local/bin/pfetch"
-    chmod +x "$HOME/.local/bin/pfetch"
-fi
-
-# gum — used by the git worktree fish functions for confirmations
-if ! command -v gum >/dev/null 2>&1; then
-    install_aptrepo gum \
-        /etc/apt/keyrings/charm.gpg \
-        https://repo.charm.sh/apt/gpg.key \
-        "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
-        /etc/apt/sources.list.d/charm.list \
-        gum
-fi
-
-# 1Password CLI — official apt repo. Installed on plain Ubuntu and WSL
-# Ubuntu alike; on WSL it's a fallback, since chezmoi is configured (see
-# .chezmoi.toml.tmpl) to prefer the Windows-side op.exe there, which
-# unlocks via the Windows 1Password app.
-if ! command -v op >/dev/null 2>&1; then
-    # 1Password additionally ships a debsig verification policy + keyring; set
-    # those up (they are independent of the apt keyring/list) before installing.
-    sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
-    curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol \
-        | sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
-    sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
-    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc \
-        | sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
-    install_aptrepo "1Password CLI" \
-        /usr/share/keyrings/1password-archive-keyring.gpg \
-        https://downloads.1password.com/linux/keys/1password.asc \
-        "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" \
-        /etc/apt/sources.list.d/1password.list \
-        1password-cli
-fi
-
-# brev — Nvidia cloud GPU CLI; vendor installer drops the binary in a standard path
-if ! command -v brev >/dev/null 2>&1; then
-    log "Installing brev via the official installer"
-    sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
-fi
-
-if [[ "$IS_WSL" -eq 1 ]]; then
-    log "WSL detected — skipping Linux desktop apps (use Windows-native versions)"
-else
-    # ghostty — PPA has a current release; not in default apt repos
-    if ! command -v ghostty >/dev/null 2>&1; then
-        log "Installing ghostty from mkasberg/ghostty-ubuntu"
-        sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu
-        sudo apt-get update -y
-        sudo apt-get install -y ghostty
-    fi
-
-    # discord — no official apt repo; grab the latest .deb and let apt resolve deps
-    if ! command -v discord >/dev/null 2>&1; then
-        log "Installing discord from the official .deb"
-        DISCORD_DEB="$(mktemp --suffix=.deb)"
-        curl -fsSL -o "$DISCORD_DEB" "https://discord.com/api/download?platform=linux&format=deb"
-        sudo apt-get install -y "$DISCORD_DEB"
-        rm -f "$DISCORD_DEB"
-    fi
-
-    # voquill — vendor apt repo + package install. The installed binary is
-    # voquill-desktop, so guard on the dpkg package state rather than a command name.
-    if ! dpkg -s voquill-desktop >/dev/null 2>&1; then
-        log "Installing voquill"
-        curl -fsSL https://voquill.github.io/apt/install.sh | bash
-    fi
-
-    # flatpak + flathub — needed for anki, spotify, and zoom
-    if ! command -v flatpak >/dev/null 2>&1; then
-        log "Installing flatpak"
-        sudo apt-get install -y flatpak
-    fi
-    sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-    # anki — flatpak from flathub
-    if ! flatpak info net.ankiweb.Anki >/dev/null 2>&1; then
-        log "Installing anki via flatpak"
-        sudo flatpak install -y flathub net.ankiweb.Anki
-    fi
-
-    # spotify — flatpak from flathub
-    if ! flatpak info com.spotify.Client >/dev/null 2>&1; then
-        log "Installing spotify via flatpak"
-        sudo flatpak install -y flathub com.spotify.Client
-    fi
-
-    # zoom — flatpak from flathub
-    if ! flatpak info us.zoom.Zoom >/dev/null 2>&1; then
-        log "Installing zoom via flatpak"
-        sudo flatpak install -y flathub us.zoom.Zoom
-    fi
-
-    # obsidian — no apt repo; fetch latest .deb from the GitHub releases
-    if ! command -v obsidian >/dev/null 2>&1; then
-        log "Installing obsidian from the latest GitHub .deb"
-        OBSIDIAN_DEB_URL="$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest \
-            | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | .browser_download_url' | head -n1)"
-        OBSIDIAN_DEB="$(mktemp --suffix=.deb)"
-        curl -fsSL -o "$OBSIDIAN_DEB" "$OBSIDIAN_DEB_URL"
-        sudo apt-get install -y "$OBSIDIAN_DEB"
-        rm -f "$OBSIDIAN_DEB"
-    fi
-
-fi
-
 {{- end }}
 
 # ---- mise toolchains (node needed for npx / MCP runners) ---------
@@ -236,7 +139,7 @@ if [[ -n "$MISE_BIN" ]]; then
 fi
 
 {{- if eq .chezmoi.os "linux" }}
-# ---- Nix (Determinate installer) — macOS uses the .pkg manually ---
+# ---- Nix (Determinate installer) - macOS uses the .pkg manually ---
 if ! command -v nix >/dev/null 2>&1 && [[ ! -d /nix ]]; then
     log "Installing Nix via Determinate installer"
     curl -fsSL https://install.determinate.systems/nix | sh -s -- install --no-confirm

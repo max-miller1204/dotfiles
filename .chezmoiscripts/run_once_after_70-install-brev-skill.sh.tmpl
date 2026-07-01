@@ -8,16 +8,16 @@
 # are .chezmoiignore'd), so there is no chezmoi-vs-CLI conflict and no need to run
 # on every apply. Ordered after run_once_before_10 installs brev and the coding
 # agents. `brev agent-skill` overwrites the skill files, so it is idempotent.
-set -euo pipefail
+{{ template "lib-log.sh" . }}
 
-log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+{{ template "lib-resolve.sh" . }}
 
 # brev is installed by run_once_before_10 (brevdev tap on macOS, official curl
 # installer on Linux). It is not necessarily on PATH in a non-interactive apply,
 # so probe the standard install locations. Require it (rather than skip): this is
 # a run_once script, so a silent skip would be recorded as done and never retry;
 # failing instead re-runs on the next apply once brev is present.
-export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+prepend_path "$HOME/.local/bin" "/usr/local/bin" "/opt/homebrew/bin"
 if ! command -v brev >/dev/null 2>&1; then
     echo "brev not found on PATH; cannot install the brev agent skill" >&2
     exit 1

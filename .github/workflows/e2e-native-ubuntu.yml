@@ -31,6 +31,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Assert environment (Ubuntu 24.04, non-WSL kernel, pinned tree)
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
         run: |
           set -euo pipefail
           . /etc/os-release
@@ -39,8 +41,8 @@ jobs:
           case "$(uname -r)" in *[Mm]icrosoft*) echo "WSL kernel on runner?!"; exit 1 ;; esac
           HEAD="$(git rev-parse HEAD)"
           echo "tree HEAD: $HEAD"
-          if [ -n "${{ inputs.expected_head }}" ]; then
-            [ "$HEAD" = "${{ inputs.expected_head }}" ]
+          if [ -n "$EXPECTED_HEAD" ]; then
+            [ "$HEAD" = "$EXPECTED_HEAD" ]
           fi
 
       - name: Preflight inventory (preexisting bins are not proven by this job)

@@ -28,10 +28,10 @@ DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
 FAILURES=0
 
 run_case() {
-    local answer="$1" expected="$2" tmp
+    local answer="$1" expected="$2" tmp expect_rc
     tmp="$(mktemp -d)"
     HOME="$tmp" XDG_CONFIG_HOME="$tmp/.config" XDG_DATA_HOME="$tmp/.local/share" \
-    XDG_CACHE_HOME="$tmp/.cache" expect <<EOF >/dev/null 2>&1
+    XDG_CACHE_HOME="$tmp/.cache" expect <<EOF >"$tmp/expect.log" 2>&1
 set timeout 180
 set stty_init "rows 40 cols 120"
 spawn env HOME=$tmp XDG_CONFIG_HOME=$tmp/.config XDG_DATA_HOME=$tmp/.local/share XDG_CACHE_HOME=$tmp/.cache TERM=xterm-256color $CHEZMOI_BIN init $DOTFILES_REPO --branch $DOTFILES_BRANCH
@@ -41,6 +41,7 @@ expect {
 }
 expect eof
 EOF
+    expect_rc=$?
     local got
     got="$(grep -E '^\s*headless' "$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null | tr -d ' ')"
     if [ "$got" = "headless=$expected" ]; then
@@ -48,6 +49,8 @@ EOF
     else
         echo "PROMPT-TEST FAIL: answer '$answer' -> '$got' (expected headless=$expected)"
         echo "--- config was:"; head -20 "$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null
+        echo "--- expect exited $expect_rc; transcript:"
+        cat "$tmp/expect.log" 2>/dev/null
         FAILURES=$((FAILURES + 1))
     fi
     rm -rf "$tmp"

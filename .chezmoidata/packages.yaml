@@ -109,7 +109,7 @@ packages:
   #      Consolidated onto mise on Linux - these were previously apt (bat/fd/
   #      ripgrep/zoxide), third-party apt-repo+keyring (eza/gum), or curl vendor
   #      installers (starship/atuin). Every entry here must follow the mise entry
-  #      above. gh gains a Linux install this way (it was macOS-only before). ----
+  #      above. ----
   - name: eza
     gui: false
     bin: eza
@@ -150,11 +150,18 @@ packages:
     bin: zoxide
     darwin: { brew: zoxide }
     linux:  { mise: "aqua:ajeetdsouza/zoxide" }
+  # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
+  #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
+  #      from the base apt block above; params in `aptrepos.gh`). Deliberately NOT
+  #      mise: a mise-shim gh is invisible to any process launched with a sanitized
+  #      PATH that drops the shims dir - notably the no-mistakes daemon's git
+  #      subprocess - whereas an apt gh at /usr/bin/gh sits on the plain system
+  #      PATH everything sees, so no per-machine symlink stopgap is needed. ----
   - name: gh
     gui: false
     bin: gh
     darwin: { brew: gh }
-    linux:  { mise: "aqua:cli/cli" }
+    linux:  { aptrepo: gh }
 
   # ---- op (1Password CLI): deliberately NOT moved to mise. Stays native on Linux
   #      via a debsig-verified third-party apt-repo (needs gnupg above); brew on
@@ -277,12 +284,22 @@ packages:
     darwin: { cask: font-jetbrains-mono-nerd-font }
 
 # ---- third-party apt-repo definitions, keyed by the `aptrepo:` value above ----
-# Only 1Password remains here: eza and gum moved to mise (their apt-repos were
-# removed). Each entry carries the six positional args A's install_aptrepo helper
-# needs (LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE). 1Password additionally
+# GitHub CLI (gh) and 1Password (op) are the native apt-repo installs; eza and gum
+# used to live here too but moved to mise (their apt-repos were removed). Each entry
+# carries the six positional args the install_aptrepo helper needs (LABEL KEYRING
+# KEY_URL REPO_LINE LIST_PATH PACKAGE). gh's published keyring is already binary, but
+# install_aptrepo's `gpg --dearmor` is a byte-for-byte pass-through on binary OpenPGP
+# input, so the same code path works and gh needs no debsig. 1Password additionally
 # ships a debsig policy + keyring (independent of the apt keyring/list), carried as
 # the `debsig` block and applied by install_debsig before install_aptrepo.
 aptrepos:
+  gh:
+    label: "GitHub CLI"
+    keyring: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    key_url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    repo_line: "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+    list_path: /etc/apt/sources.list.d/github-cli.list
+    package: gh
   1password-cli:
     label: "1Password CLI"
     keyring: /usr/share/keyrings/1password-archive-keyring.gpg

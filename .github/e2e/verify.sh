@@ -109,7 +109,7 @@ echo "== agent config end state (not exit codes - the scripts swallow failures) 
 hard "claude settings.json has SessionStart hooks" \
     bash -c "jq -e '.hooks.SessionStart | length > 0' \"\$HOME/.claude/settings.json\""
 hard "claude plugins: 7 enabled (5 LSP + agent-sdk-dev + skill-creator)" \
-    bash -c "fish -l -i -c 'claude plugin list --json' 2>/dev/null | jq -e 'map(select(.enabled)) | length >= 7'"
+    bash -c "PATH=\"\$HOME/.local/bin:\$PATH\" claude plugin list --json 2>/dev/null | jq -e 'map(select(.enabled)) | length >= 7'"
 hard "claude MCP servers synced into ~/.claude.json" \
     bash -c "jq -e '.mcpServers | length >= 1' \"\$HOME/.claude.json\""
 hard "codex MCP servers in ~/.codex/config.toml" grep -q '^\[mcp_servers\.' "$HOME/.codex/config.toml"
@@ -126,7 +126,10 @@ fi
 
 echo "== apply-log warning scan (scripts deliberately swallow these) =="
 if [[ -n "$APPLY_LOG" && -f "$APPLY_LOG" ]]; then
-    SWALLOWED="$(grep -En 'warn:|skip:' "$APPLY_LOG" || true)"
+    # chezmoi apply -v prints each script's SOURCE as a diff before running it;
+    # those '+'-prefixed listing lines contain the warn/skip patterns verbatim
+    # and are not runtime warnings - exclude them.
+    SWALLOWED="$(grep -En 'warn:|skip:' "$APPLY_LOG" | grep -vE '^[0-9]+:\+' || true)"
     if [[ -z "$SWALLOWED" ]]; then
         echo "PASS: no swallowed warn:/skip: lines in apply log"; PASS=$((PASS + 1))
     else
@@ -152,9 +155,16 @@ for app in "${FLATPAK_APPS[@]}"; do
 done
 
 echo "== versions (for the report) =="
+# Resolve each binary's path through interactive fish (whose config prints the
+# pfetch banner - take the LAST line, immune to the banner and to SIGPIPE under
+# pipefail), then invoke the binary directly for its version.
 for b in chezmoi mise fish starship atuin eza gh op; do
-    v="$(fish -l -i -c "command -q $b" 2>/dev/null && fish -l -i -c "$b --version" 2>/dev/null | head -1 || echo absent)"
-    echo "VERSION: $b = $v"
+    p="$(fish -l -i -c "command -v $b" 2>/dev/null | tail -1 || true)"
+    if [[ -n "$p" && -x "$p" ]]; then
+        echo "VERSION: $b = $("$p" --version 2>/dev/null | head -1)"
+    else
+        echo "VERSION: $b = absent"
+    fi
 done
 
 echo

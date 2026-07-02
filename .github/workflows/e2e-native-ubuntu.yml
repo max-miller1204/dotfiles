@@ -58,6 +58,20 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
+      - name: Normalize sudo to stock Ubuntu behavior
+        run: |
+          set -euo pipefail
+          # GitHub runners configure sudo to preserve HOME (env_keep), unlike a
+          # stock Ubuntu install, which resets HOME to the target user's. Under
+          # the runner's sudo, root-elevated installers that touch $HOME (e.g.
+          # the Nix installer's fish self-test) write root-owned files into the
+          # runner user's home and break chezmoi's later chmod - an artifact a
+          # real machine never hits. Drop the override so sudo behaves like a
+          # fresh desktop.
+          sudo grep -rlE 'env_keep.*HOME|always_set_home' /etc/sudoers /etc/sudoers.d/ 2>/dev/null \
+            | while read -r f; do sudo sed -i -E '/env_keep.*HOME/d' "$f"; done
+          [ "$(sudo sh -c 'echo $HOME')" = /root ] || { echo "sudo still preserves HOME" >&2; exit 1; }
+
       - name: Stage source where a real init would clone it
         run: |
           set -euo pipefail

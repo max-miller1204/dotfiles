@@ -4,9 +4,10 @@
 #                 into ~/.claude.json by run_onchange_after_40 via `claude mcp`)
 #   - dot_config/codex/mcp-servers.toml.tmpl        (servers tagged `codex`; merged
 #                 into ~/.codex/config.toml by run_onchange_after_41)
-#   - dot_config/opencode/opencode.jsonc.tmpl       (servers tagged `opencode`;
-#                 rendered directly - opencode reads this file, so no post-apply CLI
-#                 sync is needed the way claude/codex's CLI-owned configs require).
+#   - dot_config/opencode/opencode.json.tmpl        (servers tagged `opencode`;
+#                 rendered as an MCP-only file opencode merges with the user's
+#                 hand-owned opencode.jsonc, so no post-apply CLI sync is needed the
+#                 way claude/codex's CLI-owned configs require).
 # chezmoi auto-loads .chezmoidata/*, so `mcpServers` is available as `.mcpServers`
 # in every template. Each record uses exactly one of:
 #   command_rel = a path relative to $HOME; the rendering template prepends

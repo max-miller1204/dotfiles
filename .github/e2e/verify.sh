@@ -125,8 +125,8 @@ hard "claude MCP servers synced into ~/.claude.json" \
 hard "codex MCP servers in ~/.codex/config.toml" grep -q '^\[mcp_servers\.' "$HOME/.codex/config.toml"
 hard "codex hooks.json written by axi setup" test -s "$HOME/.codex/hooks.json"
 hard "opencode axi plugins written" bash -c "ls \"\$HOME/.config/opencode/plugins/\"axi-*.js"
-hard "opencode MCP servers in ~/.config/opencode/opencode.jsonc" \
-    bash -c "jq -e '.mcp | length >= 1' \"\$HOME/.config/opencode/opencode.jsonc\""
+hard "opencode MCP servers in ~/.config/opencode/opencode.json" \
+    bash -c "jq -e '.mcp | length >= 1' \"\$HOME/.config/opencode/opencode.json\""
 
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain

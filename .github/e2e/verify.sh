@@ -127,7 +127,11 @@ hard "codex hooks.json written by axi setup" test -s "$HOME/.codex/hooks.json"
 hard "opencode axi plugins written" bash -c "ls \"\$HOME/.config/opencode/plugins/\"axi-*.js"
 
 echo "== chezmoi drift (only settings.json may differ, by design) =="
-UNEXPECTED_DRIFT="$(chezmoi status 2>/dev/null | awk '{print $NF}' | grep -v '^\.claude/settings\.json$' || true)"
+# .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain
+# run_after_ hook/plugin re-assert scripts fire on every apply by design (see
+# CLAUDE.md), so chezmoi status always lists them.
+UNEXPECTED_DRIFT="$(chezmoi status 2>/dev/null | awk '{print $NF}' \
+    | grep -v '^\.claude/settings\.json$' | grep -v '^\.chezmoiscripts/' || true)"
 if [[ -z "$UNEXPECTED_DRIFT" ]]; then
     echo "PASS: chezmoi status shows only the by-design settings.json drift"; PASS=$((PASS + 1))
 else
@@ -138,8 +142,10 @@ echo "== apply-log warning scan (scripts deliberately swallow these) =="
 if [[ -n "$APPLY_LOG" && -f "$APPLY_LOG" ]]; then
     # chezmoi apply -v prints each script's SOURCE as a diff before running it;
     # those '+'-prefixed listing lines contain the warn/skip patterns verbatim
-    # and are not runtime warnings - exclude them.
-    SWALLOWED="$(grep -En 'warn:|skip:' "$APPLY_LOG" | grep -vE '^[0-9]+:\+' || true)"
+    # and are not runtime warnings - exclude them. The sandbox driver prefixes
+    # its re-apply section with "SECOND-APPLY: ", so allow one such label
+    # between the line number and the '+'.
+    SWALLOWED="$(grep -En 'warn:|skip:' "$APPLY_LOG" | grep -vE '^[0-9]+:([A-Z-]+: )?\+' || true)"
     if [[ -z "$SWALLOWED" ]]; then
         echo "PASS: no swallowed warn:/skip: lines in apply log"; PASS=$((PASS + 1))
     else
@@ -167,9 +173,11 @@ done
 echo "== versions (for the report) =="
 # Resolve each binary's path through interactive fish (whose config prints the
 # pfetch banner - take the LAST line, immune to the banner and to SIGPIPE under
-# pipefail), then invoke the binary directly for its version.
+# pipefail), then invoke the binary directly for its version. pfetch's last
+# escape sequence (ESC[?7h) has no trailing newline and lands on the path's
+# line, so strip ANSI/DEC escapes before picking the line.
 for b in chezmoi mise fish starship atuin eza gh op; do
-    p="$(fish -l -i -c "command -v $b" 2>/dev/null | tail -1 || true)"
+    p="$(fish -l -i -c "command -v $b" 2>/dev/null | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1 || true)"
     if [[ -n "$p" && -x "$p" ]]; then
         echo "VERSION: $b = $("$p" --version 2>/dev/null | head -1)"
     else

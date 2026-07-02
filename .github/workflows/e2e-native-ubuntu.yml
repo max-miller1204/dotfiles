@@ -88,13 +88,13 @@ jobs:
           sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
           "$HOME/.local/bin/chezmoi" --version
 
-      - name: Render check (confirm the nix invocation that will execute)
+      - name: Source check (confirm the nix invocation in the staged tree)
         run: |
           set -euo pipefail
-          export PATH="$HOME/.local/bin:$PATH"
-          chezmoi --source "$HOME/.local/share/chezmoi" execute-template \
-            < "$HOME/.local/share/chezmoi/.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl" \
-            | grep -n -B2 -A2 'determinate'
+          # Plain grep of the template text: rendering needs the chezmoi config,
+          # which does not exist until the init --apply step below.
+          grep -n -B2 -A2 'determinate' \
+            "$HOME/.local/share/chezmoi/.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
 
       - name: Arm config watcher (attribute who creates ~/.config/fish)
         run: |

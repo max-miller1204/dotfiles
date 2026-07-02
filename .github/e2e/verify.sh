@@ -18,8 +18,8 @@ APPLY_LOG="${APPLY_LOG:-}"
 # profile) plus the mise toolchains block, axi CLIs, coding agents, and LSP
 # servers. Kept as an explicit list so this file doubles as the checklist spec.
 MANIFEST_BINS=(fish git tmux jq curl wget gpg add-apt-repository zenity mise
-    eza gum starship atuin bat fd rg zoxide gh op pfetch brev)
-GUI_BINS=(ghostty discord obsidian)
+    eza gum starship atuin bat fd rg zoxide gh op pfetch brev treehouse no-mistakes)
+GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv)
 AXI_BINS=(gh-axi chrome-devtools-axi lavish-axi tasks-axi)
@@ -125,6 +125,8 @@ hard "claude MCP servers synced into ~/.claude.json" \
 hard "codex MCP servers in ~/.codex/config.toml" grep -q '^\[mcp_servers\.' "$HOME/.codex/config.toml"
 hard "codex hooks.json written by axi setup" test -s "$HOME/.codex/hooks.json"
 hard "opencode axi plugins written" bash -c "ls \"\$HOME/.config/opencode/plugins/\"axi-*.js"
+hard "opencode MCP servers in ~/.config/opencode/opencode.jsonc" \
+    bash -c "jq -e '.mcp | length >= 1' \"\$HOME/.config/opencode/opencode.jsonc\""
 
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain

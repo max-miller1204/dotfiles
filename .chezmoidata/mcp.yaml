@@ -1,7 +1,12 @@
-# Single source of truth for the MCP servers, consumed by both agent staging
-# templates so the two can never drift:
-#   - dot_config/claude-code/mcp-servers.json.tmpl (emits servers tagged `claude`)
-#   - dot_config/codex/mcp-servers.toml.tmpl        (emits servers tagged `codex`)
+# Single source of truth for the MCP servers, consumed by three agent staging
+# templates so they can never drift:
+#   - dot_config/claude-code/mcp-servers.json.tmpl (servers tagged `claude`; synced
+#                 into ~/.claude.json by run_onchange_after_40 via `claude mcp`)
+#   - dot_config/codex/mcp-servers.toml.tmpl        (servers tagged `codex`; merged
+#                 into ~/.codex/config.toml by run_onchange_after_41)
+#   - dot_config/opencode/opencode.jsonc.tmpl       (servers tagged `opencode`;
+#                 rendered directly - opencode reads this file, so no post-apply CLI
+#                 sync is needed the way claude/codex's CLI-owned configs require).
 # chezmoi auto-loads .chezmoidata/*, so `mcpServers` is available as `.mcpServers`
 # in every template. Each record uses exactly one of:
 #   command_rel = a path relative to $HOME; the rendering template prepends
@@ -9,5 +14,5 @@
 #                 homeDir), mirroring the tsNodeModulesRel idiom in .chezmoi.toml.tmpl.
 #   command     = used as-is (already resolvable on PATH).
 mcpServers:
-  - { name: nixos,      command_rel: ".local/share/mise/shims/uvx", args: ["mcp-nixos"],               agents: [claude, codex] }
-  - { name: playwright, command: "npx",                             args: ["@playwright/mcp@latest"], agents: [claude, codex] }
+  - { name: nixos,      command_rel: ".local/share/mise/shims/uvx", args: ["mcp-nixos"],               agents: [claude, codex, opencode] }
+  - { name: playwright, command: "npx",                             args: ["@playwright/mcp@latest"], agents: [claude, codex, opencode] }

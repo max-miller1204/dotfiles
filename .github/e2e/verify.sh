@@ -125,22 +125,35 @@ hard "claude MCP servers synced into ~/.claude.json" \
 hard "codex MCP servers in ~/.codex/config.toml" grep -q '^\[mcp_servers\.' "$HOME/.codex/config.toml"
 hard "codex hooks.json written by axi setup" test -s "$HOME/.codex/hooks.json"
 hard "opencode axi plugins written" bash -c "ls \"\$HOME/.config/opencode/plugins/\"axi-*.js"
-# Query opencode's own resolver (not just the file chezmoi rendered) so this
-# proves opencode LOADED and merged the servers. From a neutral cwd with
-# ~/.opencode/bin on PATH, list configured servers and match on their names (a
-# name is listed for every configured server regardless of connect state, so
-# this is not flaky on a transient hiccup); an empty list would also catch any
-# future .json/.jsonc shadowing regression.
-opencode_mcp_loaded() {
+# HARD gate: assert opencode's RESOLVED config carries both servers, which
+# proves opencode LOADED and merged the chezmoi-written mcp-only opencode.json
+# with the user's hand-owned opencode.jsonc (an empty/absent .mcp would also
+# catch any future .json/.jsonc shadowing regression). `opencode debug config`
+# only resolves config - it never connects to the MCP servers - so it does no
+# network I/O and cannot hang or flake; no timeout needed. From a neutral cwd
+# with ~/.opencode/bin on PATH.
+opencode_mcp_resolved() {
+    ( cd "$HOME" && PATH="$HOME/.opencode/bin:$PATH" opencode debug config 2>/dev/null ) \
+        | jq -e '.mcp // {} | has("nixos") and has("playwright")'
+}
+hard "opencode loaded+merged the MCP servers (resolved config, not just the rendered file)" \
+    opencode_mcp_resolved
+
+# INFO (never gates): the live-connectivity signal. `opencode mcp list` connects
+# to each server to report state, which on a fresh box triggers first-run
+# package fetches (uvx mcp-nixos, npx @playwright/mcp), so it must never be an
+# un-timeouted hard gate - wrap it in a timeout like every other network check
+# here and match on server NAMES (listed for every configured server regardless
+# of connect state).
+opencode_mcp_listed() {
     local out
-    out="$(cd "$HOME" && PATH="$HOME/.opencode/bin:$PATH" opencode mcp list 2>/dev/null \
+    out="$(cd "$HOME" && PATH="$HOME/.opencode/bin:$PATH" timeout 120 opencode mcp list 2>/dev/null \
         | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g')"
-    printf '%s\n' "$out" | grep -q 'No MCP servers configured' && return 1
     printf '%s\n' "$out" | grep -q 'nixos' \
         && printf '%s\n' "$out" | grep -q 'playwright'
 }
-hard "opencode loaded nixos+playwright MCP servers (queries opencode mcp list)" \
-    opencode_mcp_loaded
+info "opencode mcp list shows nixos+playwright (live connectivity)" \
+    opencode_mcp_listed
 
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain

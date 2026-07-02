@@ -2,7 +2,11 @@
        (~/.config/opencode/opencode.json) that opencode MERGES with the user's
        hand-owned ~/.config/opencode/opencode.jsonc; chezmoi never owns the .jsonc,
        so settings the user keeps there (e.g. `lsp: true`) stay hand-owned and are
-       never overwritten. Unlike Claude (~/.claude.json) and Codex
+       never overwritten. The merge is verified live (opencode 1.17.13 loads both
+       files and the resolved config carries both `lsp: true` and the MCP servers);
+       the first-match resolveConfigPath in opencode's cli/cmd/mcp.ts is the write
+       target for `opencode mcp add`, not the runtime loader, which merges every
+       config in the dir. Unlike Claude (~/.claude.json) and Codex
        (~/.codex/config.toml), which are CLI-owned and rewritten on use (so their MCP
        servers are injected post-apply by run_onchange_after_40/41), opencode reads
        these static files and never rewrites them, so chezmoi renders this one

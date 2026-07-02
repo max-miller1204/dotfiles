@@ -1,0 +1,97 @@
+# On-demand native-Ubuntu E2E: run the real bootstrap (chezmoi init --apply) on a
+# clean GitHub-hosted Ubuntu VM - a genuine non-WSL kernel where the isWSL data
+# computes false naturally - then verify the installed end state with
+# .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and GUI
+# packages and takes ~an hour, so it must never run on push/PR.
+#
+# Caveats (documented in the E2E validation plan):
+# - runners are preloaded VMs, so the preflight step inventories preexisting bins;
+#   their install paths are NOT proven by this job (the clean-rootfs sandbox pass
+#   owns that proof).
+# - --promptDefaults is the one deviation from the README one-liner (no TTY here);
+#   it resolves the linux-only `headless` prompt to its false default, so this
+#   exercises the full desktop profile.
+name: e2e-native-ubuntu
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Commit SHA the dispatched ref must resolve to (assert before apply)
+        required: false
+        default: ""
+  # workflow_dispatch only works once the file exists on the default branch, so
+  # the validation branch itself triggers on push while the refactor validation
+  # is in flight. Scoped to exactly that branch - never main, never PRs.
+  push:
+    branches: [e2e/native-ubuntu-validation]
+
+jobs:
+  e2e:
+    # Pinned OS version, not ubuntu-latest: -latest is a moving label and this
+    # job's claim is "works on Ubuntu 24.04", the target machine's release.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert environment (Ubuntu 24.04, non-WSL kernel, pinned tree)
+        run: |
+          set -euo pipefail
+          . /etc/os-release
+          echo "os: $PRETTY_NAME  kernel: $(uname -r)"
+          [ "$VERSION_ID" = "24.04" ]
+          case "$(uname -r)" in *[Mm]icrosoft*) echo "WSL kernel on runner?!"; exit 1 ;; esac
+          HEAD="$(git rev-parse HEAD)"
+          echo "tree HEAD: $HEAD"
+          if [ -n "${{ inputs.expected_head }}" ]; then
+            [ "$HEAD" = "${{ inputs.expected_head }}" ]
+          fi
+
+      - name: Preflight inventory (preexisting bins are not proven by this job)
+        run: bash .github/e2e/verify.sh preflight | tee preflight.txt
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Stage source where a real init would clone it
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/chezmoi"
+          cp -a "$GITHUB_WORKSPACE/." "$HOME/.local/share/chezmoi/"
+          git -C "$HOME/.local/share/chezmoi" rev-parse HEAD
+
+      - name: Install chezmoi (README one-liner)
+        run: |
+          set -euo pipefail
+          sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          "$HOME/.local/bin/chezmoi" --version
+
+      - name: chezmoi init --apply (the real bootstrap)
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Verify end state
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          APPLY_LOG="$PWD/apply.log" bash .github/e2e/verify.sh verify runner | tee verify-report.txt
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-native-ubuntu
+          path: |
+            apply.log
+            preflight.txt
+            verify-report.txt
+            ~/.config/chezmoi/chezmoi.toml

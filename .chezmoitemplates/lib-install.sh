@@ -87,7 +87,7 @@ install_debsig() {
 }
 
 # mise-managed tool. Backs the Linux CLI tools (eza, gum, starship, atuin, bat, fd,
-# ripgrep, zoxide) via mise's aqua backend; the separate `mise use -g` toolchains
+# ripgrep, zoxide, direnv) via mise's aqua backend; the separate `mise use -g` toolchains
 # block owns the language runtimes and is NOT part of the manifest. Guarded on the
 # command name, then installed through the resolved mise (not on PATH in a non-interactive apply).
 install_mise() {

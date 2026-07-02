@@ -66,8 +66,8 @@ packages:
 
   # ---- Ubuntu base apt packages (no macOS counterpart). curl + ca-certificates
   #      come first because the mise bootstrap below curls its installer over
-  #      https; gnupg backs the op apt-repo and software-properties-common backs
-  #      the ghostty PPA further down. ----
+  #      https; gnupg backs the op and gh apt-repos and software-properties-common
+  #      backs the ghostty PPA further down. ----
   - name: curl
     gui: false
     bin: curl

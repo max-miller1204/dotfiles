@@ -6,6 +6,8 @@
     # false so macOS stays fully unaffected. Prompted once on a real interactive
     # `chezmoi init` and persisted; defaults false so a normal desktop is
     # unchanged. Non-interactive `chezmoi init` must pass --promptDefaults.
+    # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
+    # its own question mark, so a literal one would double up.
     headless = {{ if eq .chezmoi.os "linux" }}{{ promptBoolOnce . "headless" "Is this machine headless/server-only (skip GUI desktop apps)" false }}{{ else }}false{{ end }}
     # Single source of truth for the axi CLIs, consumed by both the install
     # script and the axi-upgrade fish function so the two never drift.

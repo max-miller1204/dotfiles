@@ -4,7 +4,7 @@
 # .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and GUI
 # packages and takes ~an hour, so it must never run on push/PR.
 #
-# Caveats (documented in the E2E validation plan):
+# Caveats:
 # - runners are preloaded VMs, so the preflight step inventories preexisting bins;
 #   their install paths are NOT proven by this job (the clean-rootfs sandbox pass
 #   owns that proof).

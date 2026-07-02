@@ -58,11 +58,13 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
-      - name: Make sudo reset HOME like stock Ubuntu
+      - name: Make sudo env stock-Ubuntu-like (HOME reset, no XDG_CONFIG_HOME)
         run: |
           set -euo pipefail
           echo "sudo HOME before: $(sudo sh -c 'echo $HOME')"
+          echo "sudo XDG_CONFIG_HOME before: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
           sudo grep -rn 'env_reset\|env_keep\|always_set_home' /etc/sudoers /etc/sudoers.d/ || true
+          grep -n 'XDG' /etc/environment || true
           if [ "$(sudo sh -c 'echo $HOME')" != /root ]; then
             # Runner sudo preserves the caller's environment (!env_reset style),
             # so root-elevated installers touching $HOME (e.g. the Nix
@@ -74,6 +76,16 @@ jobs:
             sudo chmod 440 /etc/sudoers.d/zzz-e2e-always-set-home
           fi
           [ "$(sudo sh -c 'echo $HOME')" = /root ] || { echo "sudo still preserves HOME" >&2; exit 1; }
+          # The runner image also writes XDG_CONFIG_HOME=$HOME/.config into
+          # /etc/environment (actions/runner-images configure-environment.sh);
+          # the job env carries it EXPANDED (/home/runner/.config), and it
+          # reaches root-elevated processes during the apply (run 28558929981
+          # forensics: the nix installer's root fish self-test created a
+          # root-owned ~/.config/fish that broke chezmoi's chmod). Stock Ubuntu
+          # sets no XDG vars in /etc/environment, so remove the artifact and
+          # keep it out of the apply step's env below.
+          sudo sed -i '/^XDG_CONFIG_HOME=/d' /etc/environment
+          echo "sudo XDG_CONFIG_HOME after: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
 
       - name: Stage source where a real init would clone it
         run: |
@@ -117,6 +129,9 @@ jobs:
       - name: chezmoi init --apply (the real bootstrap)
         run: |
           set -euo pipefail
+          # A real login session on stock Ubuntu exports no XDG_CONFIG_HOME;
+          # the runner's worker process injected one (see the sudo-env step).
+          unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
           exit "${PIPESTATUS[0]}"
@@ -124,6 +139,7 @@ jobs:
       - name: Verify end state
         run: |
           set -euo pipefail
+          unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           APPLY_LOG="$PWD/apply.log" bash .github/e2e/verify.sh verify runner | tee verify-report.txt
           exit "${PIPESTATUS[0]}"
@@ -148,4 +164,5 @@ jobs:
             apply.log
             preflight.txt
             verify-report.txt
+            ~/fishwatch.log
             ~/.config/chezmoi/chezmoi.toml

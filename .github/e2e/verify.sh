@@ -95,6 +95,16 @@ hard "nvim seeded with LazyVim starter" test -e "$HOME/.config/nvim/init.lua"
 hard "TPM cloned" test -d "$HOME/.config/tmux/plugins/tpm"
 hard "fish config present" test -f "$HOME/.config/fish/config.fish"
 
+echo "== home ownership (root-elevated installers must not write here) =="
+# Guards the class behind the run-28558929981 failure: a root-run installer
+# step (nix's fish self-test) creating root-owned dirs in the user's home.
+ROOT_OWNED="$(find "$HOME/.config" "$HOME/.local" "$HOME/.cache" -user root 2>/dev/null || true)"
+if [[ -z "$ROOT_OWNED" ]]; then
+    echo "PASS: no root-owned files under ~/.config ~/.local ~/.cache"; PASS=$((PASS + 1))
+else
+    echo "FAIL: root-owned files in user home:"; echo "$ROOT_OWNED" | sed 's/^/    /'; FAIL=$((FAIL + 1))
+fi
+
 echo "== interactive fish sanity =="
 hard "login fish runs" fish -l -i -c status
 FISH_ERR="$(fish -l -i -c 'echo ok' 2>&1 >/dev/null || true)"

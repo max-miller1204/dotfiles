@@ -135,15 +135,19 @@ fi
 
 {{- if eq .chezmoi.os "linux" }}
 # ---- Nix (Determinate installer) - macOS uses the .pkg manually ---
-# Run the installer as root with an explicit HOME=/root: its internal privilege
-# escalation can carry the invoking user's HOME into root-run steps (observed on
-# native Ubuntu 24.04: the fish shell self-test created a root-owned
-# ~/.config/fish in the USER's home, which then broke chezmoi's own write of the
-# fish config). Starting it as root with a root HOME closes every such path;
+# Run the installer as root with HOME and XDG_CONFIG_HOME pinned to root's own:
+# the installer's shell self-test launches root-run INTERACTIVE user shells
+# (fish -ic), and fish creates its config dir at $XDG_CONFIG_HOME/fish on
+# startup. On hosts whose environment leaks the invoking user's paths into
+# root's env (GitHub runners put XDG_CONFIG_HOME=$HOME/.config in
+# /etc/environment; some setups env_keep it through sudo), that self-test
+# created a root-owned ~/.config/fish in the USER's home, which then broke
+# chezmoi's own write of the fish config. Pinning both variables makes the
+# self-test write under /root regardless of the host's sudo/env quirks;
 # sudo still exposes SUDO_USER so the installer can see the real user.
 if ! command -v nix >/dev/null 2>&1 && [[ ! -d /nix ]]; then
     log "Installing Nix via Determinate installer"
-    curl -fsSL https://install.determinate.systems/nix | sudo HOME=/root sh -s -- install --no-confirm
+    curl -fsSL https://install.determinate.systems/nix | sudo HOME=/root XDG_CONFIG_HOME=/root/.config sh -s -- install --no-confirm
 fi
 {{- end }}
 

@@ -18,8 +18,8 @@ APPLY_LOG="${APPLY_LOG:-}"
 # profile) plus the mise toolchains block, axi CLIs, coding agents, and LSP
 # servers. Kept as an explicit list so this file doubles as the checklist spec.
 MANIFEST_BINS=(fish git tmux jq curl wget gpg add-apt-repository zenity mise
-    eza gum starship atuin bat fd rg zoxide gh op pfetch brev)
-GUI_BINS=(ghostty discord obsidian)
+    eza gum starship atuin bat fd rg zoxide gh op pfetch brev treehouse no-mistakes)
+GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv)
 AXI_BINS=(gh-axi chrome-devtools-axi lavish-axi tasks-axi)
@@ -125,6 +125,35 @@ hard "claude MCP servers synced into ~/.claude.json" \
 hard "codex MCP servers in ~/.codex/config.toml" grep -q '^\[mcp_servers\.' "$HOME/.codex/config.toml"
 hard "codex hooks.json written by axi setup" test -s "$HOME/.codex/hooks.json"
 hard "opencode axi plugins written" bash -c "ls \"\$HOME/.config/opencode/plugins/\"axi-*.js"
+# HARD gate: assert opencode's RESOLVED config carries both servers, which
+# proves opencode LOADED and merged the chezmoi-written mcp-only opencode.json
+# with the user's hand-owned opencode.jsonc (an empty/absent .mcp would also
+# catch any future .json/.jsonc shadowing regression). `opencode debug config`
+# only resolves config - it never connects to the MCP servers - so it does no
+# network I/O and cannot hang or flake; no timeout needed. From a neutral cwd
+# with ~/.opencode/bin on PATH.
+opencode_mcp_resolved() {
+    ( cd "$HOME" && PATH="$HOME/.opencode/bin:$PATH" opencode debug config 2>/dev/null ) \
+        | jq -e '.mcp // {} | has("nixos") and has("playwright")'
+}
+hard "opencode loaded+merged the MCP servers (resolved config, not just the rendered file)" \
+    opencode_mcp_resolved
+
+# INFO (never gates): the live-connectivity signal. `opencode mcp list` connects
+# to each server to report state, which on a fresh box triggers first-run
+# package fetches (uvx mcp-nixos, npx @playwright/mcp), so it must never be an
+# un-timeouted hard gate - wrap it in a timeout like every other network check
+# here and match on server NAMES (listed for every configured server regardless
+# of connect state).
+opencode_mcp_listed() {
+    local out
+    out="$(cd "$HOME" && PATH="$HOME/.opencode/bin:$PATH" timeout 120 opencode mcp list 2>/dev/null \
+        | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g')"
+    printf '%s\n' "$out" | grep -q 'nixos' \
+        && printf '%s\n' "$out" | grep -q 'playwright'
+}
+info "opencode mcp list shows nixos+playwright (live connectivity)" \
+    opencode_mcp_listed
 
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain

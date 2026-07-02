@@ -150,6 +150,11 @@ packages:
     bin: zoxide
     darwin: { brew: zoxide }
     linux:  { mise: "aqua:ajeetdsouza/zoxide" }
+  - name: direnv
+    gui: false
+    bin: direnv
+    darwin: { brew: direnv }
+    linux:  { mise: "aqua:direnv/direnv" }
   # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
   #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
   #      from the base apt block above; params in `aptrepos.gh`). Deliberately NOT

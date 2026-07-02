@@ -147,21 +147,30 @@ op item edit NAME --vault=Personal "credential[concealed]=NEW-SECRET"
 Then reference it via `op://Personal/NAME/credential` from a template or
 runner script as above.
 
-## MCP servers (Claude Code + Codex)
+## MCP servers (Claude Code + Codex + OpenCode)
 
 Declared once in `.chezmoidata/mcp.yaml`, the single source of truth. chezmoi
 auto-loads `.chezmoidata/*` as template data, so each agent's staging template
 renders its own view of that one table (each server is tagged with the agents
-that should get it), and the two can no longer drift:
+that should get it), and the three can no longer drift:
 
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON, servers tagged `claude`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML, servers tagged `codex`
+- `dot_config/opencode/opencode.json.tmpl` - MCP-only config, servers tagged `opencode`
 
-Both agents currently get `nixos` + `playwright`. On every `chezmoi apply` where
-a staging file changes, a `run_onchange_after_*` script syncs it in place:
+All three agents currently get `nixos` + `playwright`. Claude and Codex keep
+CLI-owned configs that get rewritten on use, so on every `chezmoi apply` where
+their staging file changes a `run_onchange_after_*` script syncs it in place:
 
 - `~/.claude.json` (user scope) - via `claude mcp remove` + `claude mcp add-json`
 - `~/.codex/config.toml` - via awk-strip + append
+
+OpenCode needs no such sync: it only reads its config files and never rewrites
+them, so chezmoi renders `dot_config/opencode/opencode.json.tmpl` straight to
+`~/.config/opencode/opencode.json`, an MCP-only file. OpenCode merges every
+config in that directory, so it layers on top of your hand-owned
+`~/.config/opencode/opencode.jsonc` (which chezmoi never touches, so settings
+you keep there such as `lsp: true` stay yours).
 
 The Claude sync touches only the server names declared in its own staging JSON
 (`.mcpServers` keys); the Codex sync touches only the section names declared in
@@ -170,7 +179,8 @@ else you've added manually (or that
 Codex's own plugin registry manages) in `~/.claude.json` or
 `~/.codex/config.toml` is preserved. One consequence: removing a server from
 `.chezmoidata/mcp.yaml` means deleting its leftover section from
-`~/.codex/config.toml` by hand once. Verify with `claude mcp list`.
+`~/.codex/config.toml` by hand once. Verify with `claude mcp list` (and
+`opencode mcp list` for OpenCode).
 
 ## Agents (multi-agent)
 
@@ -239,9 +249,10 @@ Cross-platform:
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, per-OS install method) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
-- `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; both staging templates below render from it, tagging each server per agent
+- `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the three staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
+- `dot_config/opencode/opencode.json.tmpl` - MCP-only config (OpenCode servers from `.chezmoidata/mcp.yaml`); rendered straight to `~/.config/opencode/opencode.json` (no sync script - OpenCode reads it as-is and merges it with the user's hand-owned `opencode.jsonc`)
 - `dot_config/codex/config-base.toml.tmpl` - staging TOML; base Codex settings (`model`, reasoning effort) sync'd into `~/.codex/config.toml` by `run_onchange_after_42-sync-codex-base.sh.tmpl`
 - `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
@@ -266,8 +277,9 @@ Linux-only (gated via `.chezmoiignore`):
 
 WSL-only adjustments (gated via the `isWSL` flag in `.chezmoi.toml.tmpl`):
 - `.chezmoiignore` skips `dot_config/ghostty` (use Windows Terminal instead)
-- The bootstrap skips the Linux desktop-app block (ghostty, discord, voquill,
-  obsidian, anki, spotify, zoom) so WSL only gets CLI tools
+- The bootstrap skips the Linux desktop-app block (ghostty, discord,
+  google-chrome, 1password, voquill, obsidian, anki, spotify, zoom) so WSL only
+  gets CLI tools
 - chezmoi uses the Windows-side `op.exe` for 1Password reads (see
   [Secrets](#secrets-1password))
 

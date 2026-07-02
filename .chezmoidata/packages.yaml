@@ -182,6 +182,17 @@ packages:
     # $HOME/.local/bin, so running it under sudo strands brev in /root/.local/bin
     # where no user PATH (nor run_once_after_70's probe) can see it.
     linux:  { script: "bash -c \"$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)\"" }
+  # treehouse and no-mistakes are self-contained prebuilt binaries their curl
+  # installers drop into ~/.local/bin (created above), so like brev/pfetch they need
+  # no toolchain and are safe here in the loop, ahead of the mise toolchains block.
+  - name: treehouse
+    gui: false
+    bin: treehouse
+    linux:  { script: "curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh" }
+  - name: no-mistakes
+    gui: false
+    bin: no-mistakes
+    linux:  { script: "curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh" }
 
   # ---- GUI desktop apps (cask on macOS; skipped when headless or on WSL) ----
   - name: ghostty
@@ -194,6 +205,21 @@ packages:
     bin: discord
     darwin: { cask: discord }
     linux:  { deburl: "https://discord.com/api/download?platform=linux&format=deb" }
+  - name: google-chrome
+    gui: true
+    bin: google-chrome-stable
+    darwin: { cask: google-chrome }
+    linux:  { deburl: "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" }
+  # 1Password desktop app, distinct from the `op` CLI (1password-cli) above (its
+  # cask is `1password`, the CLI's is `1password-cli`). On Linux, a direct .deb
+  # download per the user's request; apt resolves its deps and does not enforce
+  # debsig on a local .deb, so this is independent of the CLI's apt-repo/debsig setup.
+  # $(dpkg --print-architecture) is evaluated at the call site (like obsidian's URL).
+  - name: 1password
+    gui: true
+    bin: 1password
+    darwin: { cask: 1password }
+    linux:  { deburl: "https://downloads.1password.com/linux/debian/$(dpkg --print-architecture)/stable/1password-latest.deb" }
   - name: voquill
     gui: true
     darwin: { cask: voquill/voquill/voquill-desktop }
@@ -222,9 +248,6 @@ packages:
   - name: firefox
     gui: true
     darwin: { cask: firefox }
-  - name: google-chrome
-    gui: true
-    darwin: { cask: google-chrome }
   - name: aerospace
     gui: true
     darwin: { cask: nikitabobko/tap/aerospace }

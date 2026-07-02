@@ -10,7 +10,7 @@
 # precede its consumers. `curl` + `ca-certificates` come before `mise` (its
 # installer curls over https); `mise` comes before every `mise:` tool (install_mise
 # silently no-ops if mise is not resolvable yet); `gnupg` (gpg) comes before the
-# `op` apt-repo; `software-properties-common` (add-apt-repository) comes before the
+# `op` and `gh` apt-repos; `software-properties-common` (add-apt-repository) comes before the
 # `ghostty` PPA. On macOS every method is brew/cask, which are order-independent
 # and idempotent, so the emission order is immaterial there.
 #

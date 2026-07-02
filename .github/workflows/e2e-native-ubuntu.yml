@@ -58,18 +58,21 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
-      - name: Normalize sudo to stock Ubuntu behavior
+      - name: Make sudo reset HOME like stock Ubuntu
         run: |
           set -euo pipefail
-          # GitHub runners configure sudo to preserve HOME (env_keep), unlike a
-          # stock Ubuntu install, which resets HOME to the target user's. Under
-          # the runner's sudo, root-elevated installers that touch $HOME (e.g.
-          # the Nix installer's fish self-test) write root-owned files into the
-          # runner user's home and break chezmoi's later chmod - an artifact a
-          # real machine never hits. Drop the override so sudo behaves like a
-          # fresh desktop.
-          sudo grep -rlE 'env_keep.*HOME|always_set_home' /etc/sudoers /etc/sudoers.d/ 2>/dev/null \
-            | while read -r f; do sudo sed -i -E '/env_keep.*HOME/d' "$f"; done
+          echo "sudo HOME before: $(sudo sh -c 'echo $HOME')"
+          sudo grep -rn 'env_reset\|env_keep\|always_set_home' /etc/sudoers /etc/sudoers.d/ || true
+          if [ "$(sudo sh -c 'echo $HOME')" != /root ]; then
+            # Runner sudo preserves the caller's environment (!env_reset style),
+            # so root-elevated installers touching $HOME (e.g. the Nix
+            # installer's fish self-test) write root-owned files into the runner
+            # user's home and break chezmoi's later chmod - an artifact stock
+            # Ubuntu (which resets HOME to the target user's) never hits. Force
+            # the stock behavior regardless of which mechanism preserves it.
+            echo 'Defaults always_set_home' | sudo tee /etc/sudoers.d/zzz-e2e-always-set-home >/dev/null
+            sudo chmod 440 /etc/sudoers.d/zzz-e2e-always-set-home
+          fi
           [ "$(sudo sh -c 'echo $HOME')" = /root ] || { echo "sudo still preserves HOME" >&2; exit 1; }
 
       - name: Stage source where a real init would clone it
@@ -98,6 +101,13 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           APPLY_LOG="$PWD/apply.log" bash .github/e2e/verify.sh verify runner | tee verify-report.txt
           exit "${PIPESTATUS[0]}"
+
+      - name: Ownership forensics on failure
+        if: failure()
+        run: |
+          ls -la "$HOME/.config" 2>/dev/null || true
+          stat -c 'owner=%U group=%G mode=%a %n' "$HOME/.config/fish" 2>/dev/null || true
+          sudo sh -c 'echo sudo HOME now: $HOME'
 
       - name: Upload artifacts
         if: always()

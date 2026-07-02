@@ -18,6 +18,14 @@ set -euo pipefail
 
 MCP_SOURCE="${HOME}/.config/claude-code/mcp-servers.json"
 
+# claude is installed by run_once_before_10 into ~/.local/bin, which is not
+# necessarily on the invoking shell's PATH during a fresh machine's first apply
+# (the login PATH predates that directory's creation). Prepend it so the guard
+# below resolves the just-installed claude. The hard exit stays as the backstop:
+# this is a run_onchange_ script, so a graceful skip would record the content
+# hash as run and never re-fire, silently leaving MCP servers unsynced.
+export PATH="$HOME/.local/bin:$PATH"
+
 command -v claude >/dev/null || { echo "claude CLI required on PATH" >&2; exit 1; }
 command -v jq     >/dev/null || { echo "jq required on PATH"        >&2; exit 1; }
 [ -r "$MCP_SOURCE" ] || { echo "staging file missing: $MCP_SOURCE" >&2; exit 1; }

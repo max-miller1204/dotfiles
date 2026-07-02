@@ -1,0 +1,165 @@
+# On-demand native-Ubuntu E2E: run the real bootstrap (chezmoi init --apply) on a
+# clean GitHub-hosted Ubuntu VM - a genuine non-WSL kernel where the isWSL data
+# computes false naturally - then verify the installed end state with
+# .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and GUI
+# packages and takes ~an hour, so it must never run on push/PR.
+#
+# Caveats:
+# - runners are preloaded VMs, so the preflight step inventories preexisting bins;
+#   their install paths are NOT proven by this job (the clean-rootfs sandbox pass
+#   owns that proof).
+# - --promptDefaults is the one deviation from the README one-liner (no TTY here);
+#   it resolves the linux-only `headless` prompt to its false default, so this
+#   exercises the full desktop profile.
+name: e2e-native-ubuntu
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Commit SHA the dispatched ref must resolve to (assert before apply)
+        required: false
+        default: ""
+
+jobs:
+  e2e:
+    # Pinned OS version, not ubuntu-latest: -latest is a moving label and this
+    # job's claim is "works on Ubuntu 24.04", the target machine's release.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert environment (Ubuntu 24.04, non-WSL kernel, pinned tree)
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          . /etc/os-release
+          echo "os: $PRETTY_NAME  kernel: $(uname -r)"
+          [ "$VERSION_ID" = "24.04" ]
+          case "$(uname -r)" in *[Mm]icrosoft*) echo "WSL kernel on runner?!"; exit 1 ;; esac
+          HEAD="$(git rev-parse HEAD)"
+          echo "tree HEAD: $HEAD"
+          if [ -n "$EXPECTED_HEAD" ]; then
+            [ "$HEAD" = "$EXPECTED_HEAD" ]
+          fi
+
+      - name: Preflight inventory (preexisting bins are not proven by this job)
+        run: bash .github/e2e/verify.sh preflight | tee preflight.txt
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Make sudo env stock-Ubuntu-like (HOME reset, no XDG_CONFIG_HOME)
+        run: |
+          set -euo pipefail
+          echo "sudo HOME before: $(sudo sh -c 'echo $HOME')"
+          echo "sudo XDG_CONFIG_HOME before: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
+          sudo grep -rn 'env_reset\|env_keep\|always_set_home' /etc/sudoers /etc/sudoers.d/ || true
+          grep -n 'XDG' /etc/environment || true
+          if [ "$(sudo sh -c 'echo $HOME')" != /root ]; then
+            # Runner sudo preserves the caller's environment (!env_reset style),
+            # so root-elevated installers touching $HOME (e.g. the Nix
+            # installer's fish self-test) write root-owned files into the runner
+            # user's home and break chezmoi's later chmod - an artifact stock
+            # Ubuntu (which resets HOME to the target user's) never hits. Force
+            # the stock behavior regardless of which mechanism preserves it.
+            echo 'Defaults always_set_home' | sudo tee /etc/sudoers.d/zzz-e2e-always-set-home >/dev/null
+            sudo chmod 440 /etc/sudoers.d/zzz-e2e-always-set-home
+          fi
+          [ "$(sudo sh -c 'echo $HOME')" = /root ] || { echo "sudo still preserves HOME" >&2; exit 1; }
+          # The runner image also writes XDG_CONFIG_HOME=$HOME/.config into
+          # /etc/environment (actions/runner-images configure-environment.sh);
+          # the job env carries it EXPANDED (/home/runner/.config), and it
+          # reaches root-elevated processes during the apply (run 28558929981
+          # forensics: the nix installer's root fish self-test created a
+          # root-owned ~/.config/fish that broke chezmoi's chmod). Stock Ubuntu
+          # sets no XDG vars in /etc/environment, so remove the artifact and
+          # keep it out of the apply step's env below.
+          sudo sed -i '/^XDG_CONFIG_HOME=/d' /etc/environment
+          echo "sudo XDG_CONFIG_HOME after: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
+
+      - name: Stage source where a real init would clone it
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/chezmoi"
+          cp -a "$GITHUB_WORKSPACE/." "$HOME/.local/share/chezmoi/"
+          git -C "$HOME/.local/share/chezmoi" rev-parse HEAD
+
+      - name: Install chezmoi (README one-liner)
+        run: |
+          set -euo pipefail
+          sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          "$HOME/.local/bin/chezmoi" --version
+
+      - name: Source check (confirm the nix invocation in the staged tree)
+        run: |
+          set -euo pipefail
+          # Plain grep of the template text: rendering needs the chezmoi config,
+          # which does not exist until the init --apply step below.
+          grep -n -B2 -A2 'determinate' \
+            "$HOME/.local/share/chezmoi/.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+
+      - name: Arm config watcher (attribute who creates ~/.config/fish)
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq inotify-tools
+          mkdir -p "$HOME/.config"
+          nohup bash -c '
+            inotifywait -m -e create -e moved_to --format "%T %w%f %e" --timefmt "%H:%M:%S" "$HOME/.config" 2>/dev/null \
+            | while read -r line; do
+                echo "$line" >> "$HOME/fishwatch.log"
+                case "$line" in
+                  *config/fish*)
+                    { stat -c "owner=%U group=%G mode=%a %n" "$HOME/.config/fish"
+                      echo "--- processes at creation ---"
+                      ps -ef | tail -50; } >> "$HOME/fishwatch.log" 2>&1 ;;
+                esac
+              done' >/dev/null 2>&1 &
+          echo "watcher pid $!"
+
+      - name: chezmoi init --apply (the real bootstrap)
+        run: |
+          set -euo pipefail
+          # A real login session on stock Ubuntu exports no XDG_CONFIG_HOME;
+          # the runner's worker process injected one (see the sudo-env step).
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Verify end state
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          APPLY_LOG="$PWD/apply.log" bash .github/e2e/verify.sh verify runner | tee verify-report.txt
+          exit "${PIPESTATUS[0]}"
+
+      - name: Ownership forensics on failure
+        if: failure()
+        run: |
+          ls -la "$HOME/.config" 2>/dev/null || true
+          stat -c 'owner=%U group=%G mode=%a %n' "$HOME/.config/fish" 2>/dev/null || true
+          echo "--- root's config ---"
+          sudo ls -la /root/.config/ /root/.config/fish 2>/dev/null || true
+          echo "--- watcher log ---"
+          cat "$HOME/fishwatch.log" 2>/dev/null || echo "no watcher log"
+          sudo sh -c 'echo sudo HOME now: $HOME'
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-native-ubuntu
+          path: |
+            apply.log
+            preflight.txt
+            verify-report.txt
+            ~/fishwatch.log
+            ~/.config/chezmoi/chezmoi.toml

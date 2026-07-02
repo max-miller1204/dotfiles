@@ -178,7 +178,10 @@ packages:
     gui: false
     bin: brev
     darwin: { brew: brevdev/homebrew-brev/brev, tolerant: true }
-    linux:  { script: "sudo bash -c \"$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)\"" }
+    # Deliberately NOT sudo: the upstream installer places the binary in
+    # $HOME/.local/bin, so running it under sudo strands brev in /root/.local/bin
+    # where no user PATH (nor run_once_after_70's probe) can see it.
+    linux:  { script: "bash -c \"$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)\"" }
 
   # ---- GUI desktop apps (cask on macOS; skipped when headless or on WSL) ----
   - name: ghostty

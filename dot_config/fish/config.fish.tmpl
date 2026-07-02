@@ -96,6 +96,13 @@ if status is-interactive
         atuin init fish | source
     end
 
+    # direnv per-directory env: loads a project's .envrc on cd (mise-installed, so
+    # probed after mise activation). With the nix-direnv rc in ~/.config/direnv/direnvrc
+    # this gives `use flake`, auto-loading a repo's Nix devshell for its LSP/toolchain.
+    if type -q direnv
+        direnv hook fish | source
+    end
+
     # eza replaces ls if installed. Probed here, after mise activation, so a
     # mise-installed eza (Linux) is on PATH; a system eza still resolves too.
     if type -q eza

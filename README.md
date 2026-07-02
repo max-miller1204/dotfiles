@@ -248,6 +248,7 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
+- `dot_config/direnv/direnvrc` - nix-direnv pin providing `use flake` for per-directory Nix devshells (cd into a flake repo and its devshell toolchain auto-loads for rust-analyzer and other LSPs); the `direnv hook fish` in `config.fish` runs after mise activation, and it stays inert on machines without Nix
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, per-OS install method) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the three staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`

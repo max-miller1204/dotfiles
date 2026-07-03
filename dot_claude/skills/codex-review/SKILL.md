@@ -90,6 +90,13 @@ Maintain `ROUND` (start 1) and `THREAD_ID` (empty until round 1 returns). Resolv
 **Round 1** (creates the session - capture `thread_id`):
 
 ```bash
+# Self-contained: shell state does not survive between Bash calls, so re-derive
+# REPO_ROOT + CR_DIR with the same one-liner as the scratch-dir section. THREAD_ID
+# (captured below) and PLAN_FILE (the resolved plan filename) are carried by the
+# orchestrator across rounds, not re-derived here.
+REPO_ROOT="$( git rev-parse --show-toplevel 2>/dev/null || pwd )"
+CR_DIR="${TMPDIR:-/tmp}/codex-review-$( printf '%s\n%s\n' "$REPO_ROOT" "${CLAUDE_CODE_SESSION_ID:-}" | cksum | cut -d' ' -f1)"
+mkdir -p "$CR_DIR"
 rm -f "$CR_DIR/verdict.txt"                         # never let a stale verdict from a prior/failed round be read as fresh
 cd "$REPO_ROOT" && codex exec -s read-only -c features.use_legacy_landlock=true --json \
   -o "$CR_DIR/verdict.txt" \
@@ -114,6 +121,11 @@ echo "THREAD_ID=$THREAD_ID"
 # inherits config.toml, possibly danger-full-access, and could WRITE files),
 # and cd into the repo root instead of passing --cd. Same legacy-landlock
 # backend so the read-only sandbox initializes when nested.
+# Self-contained: re-derive REPO_ROOT + CR_DIR (fresh shell has no prior vars).
+# THREAD_ID (captured in round 1) and PLAN_FILE are carried by the orchestrator.
+REPO_ROOT="$( git rev-parse --show-toplevel 2>/dev/null || pwd )"
+CR_DIR="${TMPDIR:-/tmp}/codex-review-$( printf '%s\n%s\n' "$REPO_ROOT" "${CLAUDE_CODE_SESSION_ID:-}" | cksum | cut -d' ' -f1)"
+mkdir -p "$CR_DIR"
 rm -f "$CR_DIR/verdict.txt"                         # stale-verdict guard, same as round 1
 cd "$REPO_ROOT" && codex exec resume "$THREAD_ID" \
   -c sandbox_mode="read-only" -c features.use_legacy_landlock=true --json \
@@ -128,12 +140,19 @@ Both `codex exec` and `codex exec resume` support `--json` (stream -> parse `thr
 
 **Each round, after Codex returns:**
 1. Confirm the call actually succeeded before trusting it: exit 0, a freshly written non-empty `$CR_DIR/verdict.txt` (it was `rm`-ed just before the call, so a non-empty file proves THIS round produced it - not a leftover), and on round 1 a non-empty `THREAD_ID`. The snippets above already `exit 1` on failure; never fall through to a stale verdict.
-2. Require a WELL-FORMED verdict before acting: the last non-blank line of `$CR_DIR/verdict.txt` must be exactly `VERDICT: APPROVED` or `VERDICT: REVISE`. Anything else (truncated/garbled output, missing verdict line) is malformed - stop and report, do not guess a verdict.
+2. Require a WELL-FORMED verdict before acting: take the last non-blank line of `$CR_DIR/verdict.txt`, strip surrounding whitespace and markdown emphasis (`*`, `_`, `` ` ``) so realistic output like `**VERDICT: APPROVED**` or a trailing space still matches, then require it to CONTAIN `VERDICT: APPROVED` or `VERDICT: REVISE` (checked in that order, APPROVED first). Anything else (truncated/garbled output, missing verdict line) is malformed - stop and report, do not guess a verdict. This stays fail-closed: a genuinely missing verdict falls through to the `*` case and hard-stops.
    ```bash
-   verdict_line="$(grep -v '^[[:space:]]*$' "$CR_DIR/verdict.txt" | tail -1)"
+   # Self-contained: re-derive REPO_ROOT + CR_DIR (fresh shell has no prior vars).
+   # PLAN_FILE and THREAD_ID are carried by the orchestrator, not needed here.
+   REPO_ROOT="$( git rev-parse --show-toplevel 2>/dev/null || pwd )"
+   CR_DIR="${TMPDIR:-/tmp}/codex-review-$( printf '%s\n%s\n' "$REPO_ROOT" "${CLAUDE_CODE_SESSION_ID:-}" | cksum | cut -d' ' -f1)"
+   mkdir -p "$CR_DIR"
+   raw_line="$(grep -v '^[[:space:]]*$' "$CR_DIR/verdict.txt" | tail -1)"
+   verdict_line="$(printf '%s' "$raw_line" | sed 's/^[[:space:]*_`]*//; s/[[:space:]*_`]*$//')"
    case "$verdict_line" in
-     "VERDICT: APPROVED"|"VERDICT: REVISE") echo "verdict: $verdict_line" ;;
-     *) echo "MALFORMED verdict (last non-blank line: '$verdict_line') - STOP" >&2; exit 1 ;;
+     *"VERDICT: APPROVED"*) verdict_line="VERDICT: APPROVED"; echo "verdict: $verdict_line" ;;
+     *"VERDICT: REVISE"*)   verdict_line="VERDICT: REVISE";   echo "verdict: $verdict_line" ;;
+     *) echo "MALFORMED verdict (last non-blank line: '$raw_line') - STOP" >&2; exit 1 ;;
    esac
    ```
 3. Append to `LOG_FILE`: `## Round <n> - Codex` + the full critique. Then branch on `$verdict_line`:

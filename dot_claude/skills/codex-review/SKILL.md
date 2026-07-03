@@ -97,6 +97,8 @@ Maintain `ROUND` (start 1) and `THREAD_ID` (empty until round 1 returns). Resolv
 REPO_ROOT="$( git rev-parse --show-toplevel 2>/dev/null || pwd )"
 CR_DIR="${TMPDIR:-/tmp}/codex-review-$( printf '%s\n%s\n' "$REPO_ROOT" "${CLAUDE_CODE_SESSION_ID:-}" | cksum | cut -d' ' -f1)"
 mkdir -p "$CR_DIR"
+test -s "$CR_DIR/prompt.txt" \
+  || { echo "review prompt missing at $CR_DIR/prompt.txt - write it first (Step 2)" >&2; exit 1; }
 rm -f "$CR_DIR/verdict.txt"                         # never let a stale verdict from a prior/failed round be read as fresh
 cd "$REPO_ROOT" && codex exec -s read-only -c features.use_legacy_landlock=true --json \
   -o "$CR_DIR/verdict.txt" \
@@ -112,7 +114,7 @@ echo "THREAD_ID=$THREAD_ID"
 
 > Note: stderr (cosmetic MCP/auth noise on some setups, plus any real error) is captured to `$CR_DIR/err.txt`, not discarded - inspect it whenever a round fails its success check. Success = exit 0 + a non-empty captured `THREAD_ID` + a fresh non-empty verdict; if any is missing the run failed (auth/model/sandbox), so stop and tell the user.
 >
-> **Sanity-check that Codex actually read the LOCAL repo.** If the verdict text says it is blocked, mentions `bwrap`/`sandbox`/`loopback`/`Operation not permitted`, says it "could not read" the plan, or reviews the repo via GitHub / a connector / "the indexed version" instead of the local file, then the sandbox failed to initialize and the verdict is worthless - stop and report it (this is exactly what `-c features.use_legacy_landlock=true` prevents; confirm the flag is present). A strong positive signal it read locally: the critique cites exact file:line locations for your uncommitted changes, which are absent from any GitHub view. Do NOT continue the loop on a fallback verdict.
+> **Sanity-check that Codex actually read the LOCAL repo.** If the verdict text says it is blocked, mentions `bwrap`/`sandbox`/`loopback`/`Operation not permitted`, says it "could not read" the plan, or reviews the repo via GitHub / a connector / "the indexed version" instead of the local file, then the sandbox failed to initialize and the verdict is worthless - stop and report it (this is exactly what `-c features.use_legacy_landlock=true` prevents; confirm the flag is present). A strong positive signal it read locally: the critique cites exact file:line locations for your uncommitted changes, which are absent from any GitHub view. Do NOT continue the loop on a fallback verdict. This check is mandatory after EVERY round, resumes included (each `codex exec resume` re-establishes the sandbox and can independently fall back) - it is step 2 of the per-round checklist below.
 
 **Rounds 2..MAX** (resume the SAME session - Codex remembers its earlier critiques, won't re-litigate settled points):
 
@@ -140,7 +142,8 @@ Both `codex exec` and `codex exec resume` support `--json` (stream -> parse `thr
 
 **Each round, after Codex returns:**
 1. Confirm the call actually succeeded before trusting it: exit 0, a freshly written non-empty `$CR_DIR/verdict.txt` (it was `rm`-ed just before the call, so a non-empty file proves THIS round produced it - not a leftover), and on round 1 a non-empty `THREAD_ID`. The snippets above already `exit 1` on failure; never fall through to a stale verdict.
-2. Require a WELL-FORMED verdict before acting: take the last non-blank line of `$CR_DIR/verdict.txt`, strip surrounding whitespace and markdown emphasis (`*`, `_`, `` ` ``) so realistic output like `**VERDICT: APPROVED**` or a trailing space still matches, then require it to CONTAIN `VERDICT: APPROVED` or `VERDICT: REVISE` (checked in that order, APPROVED first). Anything else (truncated/garbled output, missing verdict line) is malformed - stop and report, do not guess a verdict. This stays fail-closed: a genuinely missing verdict falls through to the `*` case and hard-stops.
+2. Verify Codex actually read the LOCAL repo (mandatory EVERY round, resumes included). Before accepting the verdict, confirm the critique in `$CR_DIR/verdict.txt` shows evidence of a real local read - it cites exact `file:line` locations for local/uncommitted content that no GitHub view has - and does NOT say it is blocked, mention `bwrap`/`sandbox`/`loopback`/`Operation not permitted`, claim it "could not read" the plan, or review the repo via GitHub / a connector / "the indexed version". Any of those means the sandbox failed to initialize or Codex fell back to its stale indexed view, so the verdict is worthless - hard-stop and report, do not continue the loop. Each `codex exec resume` re-establishes the sandbox, so this can regress on any round, not just round 1; the fuller explanation is under the Round 1 block above.
+3. Require a WELL-FORMED verdict before acting: take the last non-blank line of `$CR_DIR/verdict.txt`, strip surrounding whitespace and markdown emphasis (`*`, `_`, `` ` ``) so realistic output like `**VERDICT: APPROVED**` or a trailing space still matches, then require it to CONTAIN `VERDICT: APPROVED` or `VERDICT: REVISE` (checked in that order, APPROVED first). Anything else (truncated/garbled output, missing verdict line) is malformed - stop and report, do not guess a verdict. This stays fail-closed: a genuinely missing verdict falls through to the `*` case and hard-stops.
    ```bash
    # Self-contained: re-derive REPO_ROOT + CR_DIR (fresh shell has no prior vars).
    # PLAN_FILE and THREAD_ID are carried by the orchestrator, not needed here.
@@ -155,10 +158,10 @@ Both `codex exec` and `codex exec resume` support `--json` (stream -> parse `thr
      *) echo "MALFORMED verdict (last non-blank line: '$raw_line') - STOP" >&2; exit 1 ;;
    esac
    ```
-3. Append to `LOG_FILE`: `## Round <n> - Codex` + the full critique. Then branch on `$verdict_line`:
+4. Append to `LOG_FILE`: `## Round <n> - Codex` + the full critique. Then branch on `$verdict_line`:
    - `VERDICT: APPROVED` -> break the loop, go to Step 3 (converged).
    - `VERDICT: REVISE` -> Claude reads the critique, decides **what's actually worth acting on** (Claude has final say - Codex advises, it does not command). Revise `PLAN_FILE`. Append to `LOG_FILE`: `### Claude's response` + what you changed and what you rejected and why. Increment `ROUND`.
-4. If `ROUND > MAX_ROUNDS` -> break to Step 3 (deadlock).
+5. If `ROUND > MAX_ROUNDS` -> break to Step 3 (deadlock).
 
 ### Step 3 - Resolution (human gate #2)
 

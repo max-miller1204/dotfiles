@@ -128,6 +128,7 @@ Run the same command across N panes/windows. `tsl` is directory-only; `tslw`/`ts
 | `prefix` + `c` | New window |
 | `prefix` + `k` | Kill window |
 | `prefix` + `r` | Rename window |
+| `prefix` + `f` | Fuzzy-switch to any window across all sessions (fzf popup + live pane preview) |
 | `Alt+1` - `Alt+9` | Switch to window 1-9 |
 | `Alt+Left` | Previous window |
 | `Alt+Right` | Next window |

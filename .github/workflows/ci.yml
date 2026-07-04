@@ -34,6 +34,8 @@ jobs:
           shellcheck --severity=warning -s bash \
             dot_claude/executable_statusline.sh
           shellcheck --severity=warning -s sh private_dot_local/bin/executable_zenity-askpass
+          # tmux helper scripts (glob, so future ones are covered; no-op if none)
+          find dot_config/tmux -name 'executable_*.sh' -exec shellcheck --severity=warning -s bash {} +
       - name: Shellcheck rendered script templates
         run: |
           set -euo pipefail

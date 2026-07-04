@@ -28,7 +28,7 @@ else
   rc=$?
 fi
 [ "$rc" -eq 130 ] && exit 0                      # 130 = Esc/Ctrl-C: benign cancel
-if [ "$rc" -ne 0 ]; then printf 'agent-switch: fzf failed (rc=%s). Press any key.' "$rc"; read -r -n 1 -s _; exit "$rc"; fi
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then printf 'agent-switch: fzf failed (rc=%s). Press any key.' "$rc"; read -r -n 1 -s _; exit "$rc"; fi
 [ -z "${sel:-}" ] && exit 0
 
 pid="$(printf '%s' "$sel" | cut -f1)"

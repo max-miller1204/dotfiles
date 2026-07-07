@@ -1,4 +1,4 @@
-background-opacity = 0.750000
+background-opacity = 0.90
 confirm-close-surface = false
 copy-on-select = clipboard
 cursor-style = block
@@ -8,3 +8,4 @@ macos-option-as-alt = true
 mouse-hide-while-typing = true
 theme = catppuccin-mocha
 window-decoration = false
+mouse-scroll-multiplier = 0.375

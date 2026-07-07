@@ -18,7 +18,7 @@ APPLY_LOG="${APPLY_LOG:-}"
 # profile) plus the mise toolchains block, axi CLIs, coding agents, and LSP
 # servers. Kept as an explicit list so this file doubles as the checklist spec.
 MANIFEST_BINS=(fish git tmux jq curl wget gpg add-apt-repository zenity mise
-    eza gum starship atuin bat fd rg zoxide direnv gh op pfetch brev treehouse no-mistakes)
+    eza gum starship atuin bat fd rg zoxide direnv gh op pfetch brev treehouse no-mistakes herdr)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv)

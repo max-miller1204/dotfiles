@@ -1,0 +1,109 @@
+onboarding = false
+
+# ---------------------------------------------------------------------
+# Keybindings mirrored from ~/.config/tmux/tmux.conf
+# Model map: workspace = tmux session, tab = tmux window, pane = pane
+# ---------------------------------------------------------------------
+[keys]
+# tmux: set -g prefix C-a
+prefix = "ctrl+a"
+
+# tmux: bind q source-file (reload config)
+reload_config = "prefix+q"
+# tmux: prefix d detaches (tmux default)
+detach = "prefix+d"
+# tmux: bind f display-popup agent-switch.sh -> herdr's built-in fuzzy navigator
+goto = "prefix+f"
+
+# ---- Panes --------------------------------------------------------
+# tmux: bind v split-window -h  (side by side / vertical divider)
+split_vertical = "prefix+v"
+# tmux: bind h split-window -v  (stacked / horizontal divider)
+split_horizontal = "prefix+h"
+# tmux: bind x kill-pane
+close_pane = "prefix+x"
+# tmux: prefix z zoom (tmux default)
+zoom = "prefix+z"
+# tmux has no resize *mode*; directional resize is wired below as C-M-S-Arrow
+resize_mode = ""
+
+# tmux: bind -n C-M-Left/Right/Up/Down select-pane
+focus_pane_left = "ctrl+alt+left"
+focus_pane_down = "ctrl+alt+down"
+focus_pane_up = "ctrl+alt+up"
+focus_pane_right = "ctrl+alt+right"
+
+# ---- Tabs (tmux windows) ------------------------------------------
+# tmux: bind c new-window
+new_tab = "prefix+c"
+# tmux: bind r rename-window
+rename_tab = "prefix+r"
+# tmux: bind k kill-window
+close_tab = "prefix+k"
+# tmux: bind -n M-Left / M-Right select-window -1 / +1
+previous_tab = "alt+left"
+next_tab = "alt+right"
+# number switching handled by [keys.indexed] tabs = "alt" below (tmux M-1..9)
+switch_tab = ""
+
+# ---- Workspaces (tmux sessions) -----------------------------------
+# tmux: bind C new-session
+new_workspace = "prefix+shift+c"
+# tmux: bind R rename-session
+rename_workspace = "prefix+shift+r"
+# tmux: bind K kill-session
+close_workspace = "prefix+shift+k"
+# tmux: bind -n M-Up / M-Down switch-client -p / -n
+previous_workspace = "alt+up"
+next_workspace = "alt+down"
+
+# tmux: bind -n M-1..9 select-window -t N  ->  alt+1..9 switch tabs directly
+[keys.indexed]
+tabs = "alt"
+
+# ---- Directional pane resize (tmux: bind -n C-M-S-Arrow resize-pane) ----
+[[keys.command]]
+key = "ctrl+alt+shift+left"
+type = "shell"
+command = "herdr pane resize --direction left --current"
+
+[[keys.command]]
+key = "ctrl+alt+shift+down"
+type = "shell"
+command = "herdr pane resize --direction down --current"
+
+[[keys.command]]
+key = "ctrl+alt+shift+up"
+type = "shell"
+command = "herdr pane resize --direction up --current"
+
+[[keys.command]]
+key = "ctrl+alt+shift+right"
+type = "shell"
+command = "herdr pane resize --direction right --current"
+
+# ---- macOS pane-focus alternates (tmux: bind -n C-S-Arrow select-pane) ----
+# On macOS Option is reserved for Aerospace, so tmux adds Ctrl+Shift fallbacks.
+[[keys.command]]
+key = "ctrl+shift+left"
+type = "shell"
+command = "herdr pane focus --direction left --current"
+
+[[keys.command]]
+key = "ctrl+shift+down"
+type = "shell"
+command = "herdr pane focus --direction down --current"
+
+[[keys.command]]
+key = "ctrl+shift+up"
+type = "shell"
+command = "herdr pane focus --direction up --current"
+
+[[keys.command]]
+key = "ctrl+shift+right"
+type = "shell"
+command = "herdr pane focus --direction right --current"
+
+[ui]
+agent_panel_sort = "spaces"
+prompt_new_tab_name = false

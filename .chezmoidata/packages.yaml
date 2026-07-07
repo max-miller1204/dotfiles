@@ -205,6 +205,16 @@ packages:
     gui: false
     bin: no-mistakes
     linux:  { script: "curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh" }
+  # herdr (agent multiplexer / terminal workspace manager): its official curl
+  # installer drops a self-contained binary into ~/.local/bin, so the SAME script
+  # method covers macOS and Linux - curl works in every environment, no brew tap
+  # needed. Like treehouse/no-mistakes it needs no toolchain and is safe here in
+  # the loop; its config lives in dot_config/herdr/config.toml.
+  - name: herdr
+    gui: false
+    bin: herdr
+    darwin: { script: "curl -fsSL https://herdr.dev/install.sh | sh" }
+    linux:  { script: "curl -fsSL https://herdr.dev/install.sh | sh" }
 
   # ---- GUI desktop apps (cask on macOS; skipped when headless or on WSL) ----
   - name: ghostty

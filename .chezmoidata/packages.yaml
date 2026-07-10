@@ -200,6 +200,7 @@ packages:
   - name: treehouse
     gui: false
     bin: treehouse
+    darwin: { script: "curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh" }
     linux:  { script: "curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh" }
   - name: no-mistakes
     gui: false

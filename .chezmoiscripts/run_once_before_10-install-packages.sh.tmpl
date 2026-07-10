@@ -46,18 +46,28 @@ fi
 
 log "Updating apt"
 sudo apt-get update -y
-
-# ~/.local/bin is where pfetch lands; ensure it exists before the package loop
-# populates it.
-mkdir -p "$HOME/.local/bin"
 {{- if (or .isWSL $headlessVal) }}
 log "headless/WSL - skipping GUI desktop apps"
 {{- end }}
 {{- end }}
 
+# ---- ~/.local/bin ---------------------------------------------------
+# Every OS, before the package loop. The curl vendor installers (pfetch, mise,
+# brev, treehouse, no-mistakes, herdr) pick a user-owned install dir only when
+# ~/.local/bin BOTH exists and is a member of $PATH; a non-interactive
+# `chezmoi apply` inherits neither, so treehouse and no-mistakes would otherwise
+# sudo their binary into /usr/local/bin - root-owned, and on a `set -euo pipefail`
+# run any sudo failure aborts the whole bootstrap. Creating it and putting it on
+# PATH here also makes the loop's `command -v <bin>` guards see what the previous
+# apply installed.
+mkdir -p "$HOME/.local/bin"
+prepend_path "$HOME/.local/bin"
+
 # ---- Package manifest (.chezmoidata/packages.yaml) ----------------
 # One loop over every package; each dispatches to its install_* helper by OS +
-# method. GUI packages are skipped when headless or on WSL.
+# method, taking the OS-specific key when present and falling back to the shared
+# `any` key otherwise. GUI packages are skipped when headless or on WSL.
+{{- $supportedOS := or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux") }}
 {{- range $pkg := .packages }}
 {{-   $os := dict }}
 {{-   $hasOS := false }}
@@ -66,6 +76,9 @@ log "headless/WSL - skipping GUI desktop apps"
 {{-     $hasOS = true }}
 {{-   else if and (eq $.chezmoi.os "linux") (hasKey $pkg "linux") }}
 {{-     $os = get $pkg "linux" }}
+{{-     $hasOS = true }}
+{{-   else if and $supportedOS (hasKey $pkg "any") }}
+{{-     $os = get $pkg "any" }}
 {{-     $hasOS = true }}
 {{-   end }}
 {{-   if and $hasOS (not (and (get $pkg "gui") (or $.isWSL $headlessVal))) }}

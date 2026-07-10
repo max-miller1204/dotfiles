@@ -52,14 +52,22 @@ log "headless/WSL - skipping GUI desktop apps"
 {{- end }}
 
 # ---- ~/.local/bin ---------------------------------------------------
-# Every OS, before the package loop. The curl vendor installers (pfetch, mise,
-# brev, treehouse, no-mistakes, herdr) pick a user-owned install dir only when
-# ~/.local/bin BOTH exists and is a member of $PATH; a non-interactive
-# `chezmoi apply` inherits neither, so treehouse and no-mistakes would otherwise
-# sudo their binary into /usr/local/bin - root-owned, and on a `set -euo pipefail`
-# run any sudo failure aborts the whole bootstrap. Creating it and putting it on
-# PATH here also makes the loop's `command -v <bin>` guards see what the previous
-# apply installed.
+# Every OS, before the package loop. Both lines are load-bearing, for different
+# installers:
+#   prepend_path - treehouse (`grep -qx` over $PATH) and no-mistakes (`case ":$PATH:"`,
+#                  for its symlink dir; its binary always lands in ~/.no-mistakes/bin)
+#                  choose their target dir by $PATH MEMBERSHIP alone, and otherwise
+#                  fall back to a sudo install into /usr/local/bin. A non-interactive
+#                  `chezmoi apply` never inherits that PATH entry, and under
+#                  `set -euo pipefail` a failed sudo aborts the whole bootstrap.
+#   mkdir        - pfetch curls straight into "$HOME/.local/bin/pfetch" (Linux; brew
+#                  on macOS), which fails if the dir is absent. It also keeps
+#                  treehouse off that same sudo branch: treehouse guards its plain
+#                  `mv` on `[ -w "$INSTALL_DIR" ]`, which a nonexistent dir fails, so
+#                  PATH membership without the dir yields a root-owned ~/.local/bin.
+# mise, brev and herdr need neither line - each writes to ~/.local/bin unconditionally
+# and creates it itself. Both lines also make the loop's `command -v <bin>` guards see
+# what a previous apply installed there.
 mkdir -p "$HOME/.local/bin"
 prepend_path "$HOME/.local/bin"
 

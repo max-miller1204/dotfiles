@@ -205,12 +205,15 @@ packages:
   # manager) are self-contained prebuilt binaries whose official curl installers
   # behave identically on macOS and Linux - curl works in every environment, no
   # brew tap needed - so each declares its command ONCE under the shared `any:`
-  # key. Each installer targets ~/.local/bin for its binary (no-mistakes: for the
-  # symlink to it) only when that directory both exists and is a member of $PATH,
-  # otherwise falling back to a sudo install into /usr/local/bin; the bootstrap
-  # script guarantees both conditions before this loop runs. Like brev/pfetch they
-  # need no toolchain and are safe here in the loop, ahead of the mise toolchains
-  # block. herdr's config lives in dot_config/herdr/config.toml.
+  # key. treehouse and no-mistakes pick their target dir - the binary for
+  # treehouse, the symlink for no-mistakes, whose binary always lands in
+  # ~/.no-mistakes/bin - by testing ~/.local/bin for $PATH MEMBERSHIP alone, and
+  # otherwise fall back to a sudo install into /usr/local/bin. Before this loop
+  # runs, run_once_before_10 puts ~/.local/bin on PATH and creates it; the mkdir
+  # separately keeps treehouse's own `[ -w ]` check off that sudo branch.
+  # herdr always installs to ~/.local/bin and never uses sudo. Like brev/pfetch
+  # they need no toolchain and are safe here in the loop, ahead of the mise
+  # toolchains block. herdr's config lives in dot_config/herdr/config.toml.
   - name: treehouse
     gui: false
     bin: treehouse

@@ -43,7 +43,10 @@ close_tab = "prefix+k"
 # tmux: bind -n M-Left / M-Right select-window -1 / +1
 previous_tab = "alt+left"
 next_tab = "alt+right"
-# number switching handled by [keys.indexed] tabs = "alt" below (tmux M-1..9)
+# Direct tab switching by number is intentionally disabled: keep switch_tab
+# empty to suppress herdr's default prefix+1..9, and there is no [keys.indexed]
+# tabs entry. On macOS the old alt+1..9 collided with Aerospace's workspace
+# switches anyway, and tabs are navigated with the alt+arrows above.
 switch_tab = ""
 
 # ---- Workspaces (tmux sessions) -----------------------------------
@@ -56,10 +59,6 @@ close_workspace = "prefix+shift+k"
 # tmux: bind -n M-Up / M-Down switch-client -p / -n
 previous_workspace = "alt+up"
 next_workspace = "alt+down"
-
-# tmux: bind -n M-1..9 select-window -t N  ->  alt+1..9 switch tabs directly
-[keys.indexed]
-tabs = "alt"
 
 # ---- Directional pane resize (tmux: bind -n C-M-S-Arrow resize-pane) ----
 [[keys.command]]

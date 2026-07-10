@@ -264,6 +264,12 @@ Cross-platform:
 - `dot_claude/skills/` — vendored Claude skills (codex-review). The brev-cli
   skill is not vendored: `brev agent-skill` writes it into every agent harness
   (`run_once_after_70`), so the brev CLI owns it
+- `dot_codex/skills/` - vendored Codex skills (claude-review, the mirror of
+  codex-review: Codex builds and Claude Code is the read-only plan critic).
+  Rendered to `~/.codex/skills/` alongside Codex's own CLI-installed skills
+  (`dot_codex` is not `exact_`, so sibling skills are left untouched); the
+  `agents/openai.yaml` beside each `SKILL.md` carries the Codex UI interface
+  metadata
 
 macOS-only (gated via `.chezmoiignore`):
 - `dot_config/karabiner/karabiner.json`

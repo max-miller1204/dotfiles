@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Review"
+  short_description: "Adversarial plan review by Claude (read-only critic)"
+  default_prompt: "Use $claude-review to have Claude Code stress-test this implementation plan as a read-only adversarial critic, looping until it approves, before I write any code."

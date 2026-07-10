@@ -20,10 +20,11 @@
 #   gui   - true for desktop apps; GUI packages are skipped when headless or on WSL
 #           (Windows-native versions are used there instead). Non-GUI CLI tools
 #           install everywhere.
-#   bin   - the command the method guards on (command -v <bin>) where the method
-#           needs a command-name guard (apt+ppa, deburl, mise); omit where the
-#           method carries its own guard (flatpak app id, script dpkg, aptrepo
-#           lookup).
+#   bin   - the command the method guards on (command -v <bin>), required wherever
+#           the method needs a command-name guard (apt+ppa, aptrepo, deburl,
+#           script, mise); omit where the method carries its own guard (brew/cask
+#           are idempotent, flatpak guards on its app id, a `script` carrying
+#           `dpkg` guards on that package instead).
 #   darwin / linux / any - the install method, as a single-key map. `darwin` and
 #           `linux` are the per-OS methods; `any` is the shared fallback the loop
 #           uses when the current OS has no explicit key of its own, so a tool
@@ -185,9 +186,11 @@ packages:
     darwin: { brew: 1password-cli }
     linux:  { aptrepo: 1password-cli }
 
-  # ---- remaining curl-installed CLI tools (brew on macOS, vendor installer on
-  #      Ubuntu). mise itself lives above; these carry shell quoting that cannot
-  #      round-trip through a helper, so the loop emits them verbatim. ----
+  # ---- remaining curl-installed CLI tools. pfetch and brev take brew on macOS and
+  #      the vendor installer on Ubuntu; treehouse, no-mistakes and herdr curl the
+  #      same installer on both OSes (see their `any:` note below). mise itself
+  #      lives above; these carry shell quoting that cannot round-trip through a
+  #      helper, so the loop emits them verbatim. ----
   - name: pfetch
     gui: false
     bin: pfetch

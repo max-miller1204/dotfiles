@@ -3,11 +3,10 @@
 # reasoning effort) into ~/.codex/config.toml as a marker-delimited block at the
 # TOP of the file, so they land as valid top-level TOML keys ahead of any section.
 #
-# Ownership of ~/.codex/config.toml is split across three managed mechanisms that
+# Ownership of ~/.codex/config.toml is split across two managed mechanisms that
 # never touch each other's keys:
 #   - this script                          -> the marker block (model, effort)
 #   - run_onchange_after_41-sync-codex-mcp -> [mcp_servers.*] (appended at end)
-#   - run_after_60-setup-axi-hooks         -> [features] hooks = true (via `setup hooks`)
 # Everything else (machine-specific [projects.*] trust, [tui.*], sections added by
 # Codex itself) is preserved verbatim.
 #

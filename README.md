@@ -55,14 +55,10 @@ That's it - the install scripts run during `apply` and handle the rest:
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
 - installs the **Codex** and **OpenCode** agents via their own official
-  installers too, so all three coding agents (Claude, Codex, OpenCode) are
-  present and interchangeable - see
-  [Agents (multi-agent)](#agents-multi-agent)
-- installs the **agent "axi" CLIs** (`gh-axi`, `chrome-devtools-axi`,
-  `lavish-axi`, `tasks-axi`) - ergonomic wrappers the coding agents drive from their
-  SessionStart hooks, installed as mise-managed npm tools so they survive a node upgrade
-  instead of orphaning in the version-pinned runtime dir. `run_after_60` then
-  wires their hooks into every agent (Claude, Codex, OpenCode) on every apply - see
+  installers too, and the **pi** agent (`@earendil-works/pi-coding-agent`,
+  npm-distributed) as a mise-managed npm tool so it survives a node upgrade
+  instead of orphaning in the version-pinned runtime dir - so all four coding
+  agents (Claude, Codex, OpenCode, pi) are present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
 - installs the **language servers** Claude Code's LSP plugins need: pyright,
   typescript-language-server (+ typescript) and gopls as mise-managed tools,
@@ -147,18 +143,24 @@ op item edit NAME --vault=Personal "credential[concealed]=NEW-SECRET"
 Then reference it via `op://Personal/NAME/credential` from a template or
 runner script as above.
 
-## MCP servers (Claude Code + Codex + OpenCode)
+## MCP servers (Claude Code + Codex + OpenCode + pi)
 
 Declared once in `.chezmoidata/mcp.yaml`, the single source of truth. chezmoi
 auto-loads `.chezmoidata/*` as template data, so each agent's staging template
 renders its own view of that one table (each server is tagged with the agents
-that should get it), and the three can no longer drift:
+that should get it), and the four can no longer drift:
 
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON, servers tagged `claude`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML, servers tagged `codex`
-- `dot_config/opencode/opencode.json.tmpl` - MCP-only config, servers tagged `opencode`
+- `dot_config/opencode/opencode.json.tmpl` - opencode config (LSP enablement + MCP), servers tagged `opencode`
+- `dot_pi/agent/mcp.json.tmpl` - pi MCP config (adapter settings + MCP), servers tagged `pi`
 
-All three agents currently get `nixos` + `playwright`. Claude and Codex keep
+All four agents currently get `playwright` and `playwright-chrome` (the
+`--extension` variant that drives your real Chrome session - tabs, logged-in
+state - through the Playwright MCP Chrome extension instead of an isolated
+browser). The optional per-server `requestTimeoutMs` key in `mcp.yaml` is a
+pi-mcp-adapter setting rendered only by the pi template; the other agents have
+no per-server equivalent and ignore it. Claude and Codex keep
 CLI-owned configs that get rewritten on use, so on every `chezmoi apply` where
 their staging file changes a `run_onchange_after_*` script syncs it in place:
 
@@ -167,10 +169,15 @@ their staging file changes a `run_onchange_after_*` script syncs it in place:
 
 OpenCode needs no such sync: it only reads its config files and never rewrites
 them, so chezmoi renders `dot_config/opencode/opencode.json.tmpl` straight to
-`~/.config/opencode/opencode.json`, an MCP-only file. OpenCode merges every
-config in that directory, so it layers on top of your hand-owned
-`~/.config/opencode/opencode.jsonc` (which chezmoi never touches, so settings
-you keep there such as `lsp: true` stay yours).
+`~/.config/opencode/opencode.json`, which carries `lsp: true` and the MCP
+servers. OpenCode merges every config in that directory, so it layers on top of
+your hand-owned `~/.config/opencode/opencode.jsonc` (which chezmoi never
+touches, so user-owned settings you keep there such as `model` or `provider`
+stay yours).
+
+pi needs no sync either: `dot_pi/agent/mcp.json.tmpl` renders straight to
+`~/.pi/agent/mcp.json`, pi's global MCP config, which the `pi-mcp-adapter`
+extension reads as-is.
 
 The Claude sync touches only the server names declared in its own staging JSON
 (`.mcpServers` keys); the Codex sync touches only the section names declared in
@@ -184,10 +191,12 @@ Codex's own plugin registry manages) in `~/.claude.json` or
 
 ## Agents (multi-agent)
 
-Three coding agents are first-class and interchangeable: **Claude Code**, **Codex**, and **OpenCode**.
-They share one set of global instructions and one set of ambient-context hooks, so you can switch between them with the same tools and the same rules.
+Four coding agents are first-class and interchangeable: **Claude Code**, **Codex**, **OpenCode**, and **pi**.
+They share one set of global instructions, so you can switch between them with the same rules.
 
-All three agents install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS), so a fresh apply has all three present.
+Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
+pi is npm-distributed, so it installs as a mise-managed npm tool (`npm:@earendil-works/pi-coding-agent`) that survives node upgrades.
+A fresh apply has all four present.
 
 ### Shared instructions (single-source AGENTS.md)
 
@@ -197,51 +206,38 @@ No agent directory is the privileged home; every agent reaches that one file thr
 - `~/.claude/CLAUDE.md` -> `../AGENTS.md` (source: `dot_claude/symlink_CLAUDE.md`) for Claude Code.
 - `~/.codex/AGENTS.md` -> `../AGENTS.md` (source: `dot_codex/symlink_AGENTS.md`) for Codex, which reads the `AGENTS.md` convention natively.
 - `~/.config/opencode/AGENTS.md` -> `../../AGENTS.md` (source: `dot_config/opencode/symlink_AGENTS.md`) for OpenCode, whose documented global-rules path is `~/.config/opencode/AGENTS.md`.
+- pi needs no symlink: it walks every ancestor directory of the cwd collecting `AGENTS.md` files, so it picks up `~/AGENTS.md` natively (a `~/.pi/agent/AGENTS.md` symlink would make pi load the same content twice, since that global file and the ancestor walk are separate lookups).
 
 (The chezmoi-root `AGENTS.md` is both the source of `~/AGENTS.md` and this repo's own agent-memory file; `README.md`, `CLAUDE.md`, and `raycast-export` stay `.chezmoiignore`d, but `AGENTS.md` is intentionally applied.)
 
-### Ambient-context hooks (axi)
+### Claude plugins + marketplace (CLI-owned)
 
-Each axi CLI ships a `<tool> setup hooks` subcommand (from the shared `axi-sdk-js`) that, in one idempotent call, wires that tool into all three agents:
-
-- Claude: a SessionStart hook in `~/.claude/settings.json`.
-- Codex: a SessionStart hook in `~/.codex/hooks.json` plus `[features] hooks = true` in `~/.codex/config.toml`.
-- OpenCode: an ambient-context plugin at `~/.config/opencode/plugins/axi-<tool>.js`.
-
-`run_after_60-setup-axi-hooks.sh.tmpl` runs `setup hooks` for all four CLIs, after the CLIs are installed and after the agent config files are applied.
-It puts the mise shim dir on `PATH` and skips (rather than fails) any CLI that is not yet installed, so a partial first apply self-heals on the next run.
-
-**Single source of truth for the hooks - the CLI owns them, nothing is vendored.**
-`setup hooks` is the one mechanism that wires axi hooks across all three agents; the axi SessionStart hooks are no longer hand-vendored into `dot_claude/settings.json`.
-That is why this is a plain `run_after_` script (runs on every apply), not a `run_onchange_after_`.
-Claude's SessionStart hooks live only in the settings.json family, which chezmoi fully manages: every `chezmoi apply` rewrites `~/.claude/settings.json` from source and strips anything a CLI appended.
-A `run_onchange_` keyed to the script's own hash would not re-fire after that strip (its hash is unchanged), so the Claude hooks would be silently lost; running every apply re-asserts them.
-The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because `setup hooks` (and the plugin re-assert below) re-add their blocks. That drift is by design, not a bug (see [AGENTS.md](AGENTS.md)).
-Codex's `hooks.json` and the OpenCode plugins are not chezmoi-managed targets, so re-running is a cheap no-op there.
-
-**Claude plugins + marketplace (CLI-owned, same story as the hooks).**
 The Claude Code plugins and their marketplace are owned by the `claude plugin` CLI, not hand-vendored into `dot_claude/settings.json` (`enabledPlugins` / `extraKnownMarketplaces`).
-`run_after_65-setup-claude-plugins.sh.tmpl` registers the `claude-plugins-official` marketplace and installs/enables each plugin on every apply, for the same reason the hooks script does: that state lives only in the chezmoi-rewritten settings.json, so it must be re-asserted each apply (a `run_onchange_` would not re-fire after the strip).
+`run_after_65-setup-claude-plugins.sh.tmpl` registers the `claude-plugins-official` marketplace and installs/enables each plugin on every apply.
+It must be a plain `run_after_` script (runs on every apply), not a `run_onchange_after_`: that state lives only in the settings.json family, which chezmoi fully manages - every `chezmoi apply` rewrites `~/.claude/settings.json` from source and strips anything a CLI appended - and a `run_onchange_` keyed to the script's own hash would not re-fire after that strip (its hash is unchanged), silently leaving the plugins disabled.
+The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin re-assert re-adds its blocks. That drift is by design, not a bug (see [AGENTS.md](AGENTS.md)).
 It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
 The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
 
 **Codex config ownership.**
-`~/.codex/config.toml` is assembled (not a single chezmoi target) so several managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
+`~/.codex/config.toml` is assembled (not a single chezmoi target) so the managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
 
 - `run_onchange_after_42-sync-codex-base.sh.tmpl` owns a marker-delimited block at the top of the file with the durable base settings (`model`, `model_reasoning_effort`), sourced from `dot_config/codex/config-base.toml.tmpl`.
 - `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
-- `run_after_60-setup-axi-hooks.sh.tmpl` owns `[features] hooks = true`.
 
-**Codex hook-trust caveat (one manual follow-up on Ubuntu).**
-Codex gates hooks behind persisted trust, so the first Codex session after a fresh apply may prompt to trust the hooks (or need `--dangerously-bypass-hook-trust`).
-Running a Codex session once and accepting that prompt is the only manual step; the exact `hooks.json` shape is left to the official `setup hooks` command so it stays correct against the installed Codex version.
+**pi config ownership.**
+pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models, subagent routing, and published extension packages including `npm:pi-git-diff`), `agent/extensions/` and `agent/prompts/` (the custom status bar and prompt templates), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+The Git diff viewer is installed from npm rather than duplicated under `agent/extensions/`.
+pi's runtime state (`agent/auth.json`, `agent/sessions/`, `agent/npm/`, and the pi-mcp-adapter caches `agent/mcp-cache.json` / `agent/mcp-npx-cache.json`) is deliberately not managed.
+One caveat: pi itself rewrites `agent/settings.json` at runtime (model switches, `lastChangelogVersion` bumps), so `chezmoi status` can show it as modified; fold deliberate changes back with `chezmoi add ~/.pi/agent/settings.json`, or `chezmoi apply` to reset to the managed state.
 
 ## What's here
 
 Cross-platform:
+
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go; `lsp-upgrade` and `axi-upgrade` do targeted upgrades of just the Claude Code language servers or just the agent axi CLIs)
+- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go; `lsp-upgrade` does a targeted upgrade of just the Claude Code language servers)
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -251,10 +247,12 @@ Cross-platform:
 - `dot_config/starship.toml` — prompt
 - `dot_config/direnv/direnvrc` - nix-direnv pin providing `use flake` for per-directory Nix devshells (cd into a flake repo and its devshell toolchain auto-loads for rust-analyzer and other LSPs); the `direnv hook fish` in `config.fish` runs after mise activation, and it stays inert on machines without Nix
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, and its install method under `darwin:`/`linux:`, or the shared `any:` fallback for tools whose installer is identical on both) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
-- `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the three staging templates below render from it, tagging each server per agent
+- `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
-- `dot_config/opencode/opencode.json.tmpl` - MCP-only config (OpenCode servers from `.chezmoidata/mcp.yaml`); rendered straight to `~/.config/opencode/opencode.json` (no sync script - OpenCode reads it as-is and merges it with the user's hand-owned `opencode.jsonc`)
+- `dot_config/opencode/opencode.json.tmpl` - opencode config carrying `lsp: true` + MCP servers (from `.chezmoidata/mcp.yaml`); rendered straight to `~/.config/opencode/opencode.json` (no sync script - OpenCode reads it as-is and merges it with the user's hand-owned `opencode.jsonc`)
+- `dot_pi/agent/mcp.json.tmpl` - pi MCP config (pi servers from `.chezmoidata/mcp.yaml` + adapter settings); rendered straight to `~/.pi/agent/mcp.json` (no sync script - pi reads it as-is)
+- `dot_pi/` - the rest of the pi coding agent config: `agent/settings.json`, `agent/extensions/`, `agent/prompts/`, `web-search.json` (pi's runtime state - `agent/auth.json`, `agent/sessions/`, `agent/npm/`, the mcp caches - is not managed)
 - `dot_config/codex/config-base.toml.tmpl` - staging TOML; base Codex settings (`model`, reasoning effort) sync'd into `~/.codex/config.toml` by `run_onchange_after_42-sync-codex-base.sh.tmpl`
 - `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
@@ -266,6 +264,7 @@ Cross-platform:
   (`run_once_after_70`), so the brev CLI owns it
 
 macOS-only (gated via `.chezmoiignore`):
+
 - `dot_config/karabiner/karabiner.json`
 - `dot_config/aerospace/aerospace.toml`
 - `dot_config/raycast-scripts/*.sh` — Raycast Script Commands (plaintext
@@ -274,10 +273,12 @@ macOS-only (gated via `.chezmoiignore`):
   as `SUDO_ASKPASS` so Claude Code's `!` (no TTY) can run sudo commands
 
 Linux-only (gated via `.chezmoiignore`):
+
 - `private_dot_local/bin/executable_zenity-askpass` — zenity equivalent
   of mac-askpass
 
 WSL-only adjustments (gated via the `isWSL` flag in `.chezmoi.toml.tmpl`):
+
 - `.chezmoiignore` skips `dot_config/ghostty` (use Windows Terminal instead)
 - The bootstrap skips the Linux desktop-app block (ghostty, discord,
   google-chrome, 1password, voquill, obsidian, anki, spotify, zoom) so WSL only
@@ -302,15 +303,15 @@ To update the snapshot after changing settings: re-export from Raycast
 `raycast-export/raycast.rayconfig`.
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, the coding agents (Claude, Codex, OpenCode), agent axi CLIs, fish-as-login-shell
+
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` — packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, the coding agents (Claude, Codex, OpenCode, pi), fish-as-login-shell
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew), all derived from the single-source `lspLanguages` table, whenever the script changes
-- `.chezmoiscripts/run_after_60-setup-axi-hooks.sh.tmpl` - wires the axi ambient-context hooks into all three agents (Claude, Codex, OpenCode) via each CLI's `setup hooks`, on every apply (Claude's hooks live in the chezmoi-rewritten settings.json, so they must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
-- `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (same chezmoi-rewritten-settings.json reason as the hooks; see [Agents (multi-agent)](#agents-multi-agent))
+- `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (that state lives in the chezmoi-rewritten settings.json, so it must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode); the skill is `.chezmoiignore`d, so brev owns it with no chezmoi conflict
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
@@ -449,9 +450,9 @@ the repo and need manual hand-off.
 7. **Verify**:
 
    ```sh
-   claude mcp list           # should show nixos + playwright
-   mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & axi CLIs)
-   which brew fish claude codex opencode op # sanity-check everything's on PATH
+   claude mcp list           # should show playwright
+   mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & pi)
+   which brew fish claude codex opencode pi op # sanity-check everything's on PATH
    op whoami                 # confirms 1Password sign-in
    ```
 
@@ -465,4 +466,4 @@ the repo and need manual hand-off.
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The install script is `run_once` — it only reruns if its content changes
 - `update-all` (fish function) refreshes everything the bootstrap installs: brew (formulae + casks) on macOS or apt (+ PPAs) + flatpak on Ubuntu, plus mise toolchains, chezmoi itself, and atuin
-- `lsp-upgrade` and `axi-upgrade` (fish functions) do targeted upgrades of just the Claude Code language servers or just the agent axi CLIs. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage
+- `lsp-upgrade` (fish function) does a targeted upgrade of just the Claude Code language servers. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage

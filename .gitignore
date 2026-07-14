@@ -1,1 +1,8 @@
 .DS_Store
+
+# Runtime droppings from agent sessions run inside this repo (pi agent worklist
+# and subagent artifacts, Playwright MCP page/console snapshots) - never dotfiles
+# source. The managed pi config lives in dot_pi/, not .pi/.
+.pi/
+.pi-subagents/
+.playwright-mcp/

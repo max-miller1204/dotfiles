@@ -147,11 +147,11 @@ if [[ -n "$MISE_BIN" ]]; then
         node@lts python@latest rust@latest go@latest \
         fzf@latest bun@latest neovim@latest uv@latest
 
-    # Agent "axi" CLIs - ergonomic wrappers the coding agents drive via their
-    # SessionStart hooks and tools (gh, browser, lavish review, tasks surfaces).
-    # Installed as mise-managed npm tools so they survive node upgrades.
-    log "Installing agent axi CLIs (gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi)"
-    "$MISE_BIN" use -g {{ .axiMiseTools | join " " }}
+    # pi coding agent - npm-distributed (no native curl installer like the
+    # agents below), installed as a mise-managed npm tool so it survives node
+    # upgrades instead of orphaning in the version-pinned runtime dir.
+    log "Installing pi coding agent"
+    "$MISE_BIN" use -g npm:@earendil-works/pi-coding-agent
 fi
 
 {{- if eq .chezmoi.os "linux" }}

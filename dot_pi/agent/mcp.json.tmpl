@@ -1,0 +1,33 @@
+{{- /* pi MCP config, chezmoi-managed. Renders ~/.pi/agent/mcp.json, pi's global
+       MCP config file, read by the pi-mcp-adapter extension. Like opencode (and
+       unlike Claude/Codex, whose CLI-owned configs need post-apply sync scripts),
+       pi reads this file as-is, so chezmoi renders it directly - no sync script.
+       The `mcpServers` block derives from the single-source mcpServers table in
+       .chezmoidata/mcp.yaml (shared with the Claude/Codex/opencode staging
+       templates so the four can never drift); we emit only servers tagged `pi`,
+       prepending {{ .chezmoi.homeDir }} to any command_rel since .chezmoidata is
+       static and cannot hold homeDir. Optional pi-mcp-adapter server settings,
+       such as requestTimeoutMs, are rendered alongside each server. The global
+       `settings` block carries outputGuard. */ -}}
+{{- $piServers := list -}}
+{{- range .mcpServers -}}
+{{-   if has "pi" .agents -}}{{- $piServers = append $piServers . -}}{{- end -}}
+{{- end -}}
+{
+  "settings": {
+    "outputGuard": true
+  },
+  "mcpServers": {
+{{- range $i, $s := $piServers }}
+{{-   $rel := get $s "command_rel" }}
+{{-   $cmd := get $s "command" }}
+{{-   $requestTimeoutMs := get $s "requestTimeoutMs" }}
+{{-   if and (not $rel) (not $cmd) }}{{ fail (printf "mcp.yaml: server %q has neither command_rel nor command" $s.name) }}{{- end }}
+    {{ toJson $s.name }}: {
+      "command": {{ if $rel }}{{ toJson (printf "%s/%s" $.chezmoi.homeDir $rel) }}{{ else }}{{ toJson $cmd }}{{ end }},
+      "args": {{ toJson $s.args }}{{ if $requestTimeoutMs }},
+      "requestTimeoutMs": {{ $requestTimeoutMs }}{{ end }}
+    }{{ if lt (add1 $i) (len $piServers) }},{{ end }}
+{{- end }}
+  }
+}

@@ -342,7 +342,7 @@ chezmoi init --apply max-miller1204/dotfiles
 ```
 
 The first apply installs CLIs, mise toolchains, Nix, the coding agents
-(Claude, Codex, OpenCode), and the 1Password CLI, then sets fish as your
+(Claude, Codex, OpenCode, pi), and the 1Password CLI, then sets fish as your
 login shell.
 
 ### 1Password sign-in from WSL
@@ -450,7 +450,7 @@ the repo and need manual hand-off.
 7. **Verify**:
 
    ```sh
-   claude mcp list           # should show playwright
+   claude mcp list           # should show playwright + playwright-chrome
    mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & pi)
    which brew fish claude codex opencode pi op # sanity-check everything's on PATH
    op whoami                 # confirms 1Password sign-in

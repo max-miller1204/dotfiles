@@ -9,3 +9,11 @@ mouse-hide-while-typing = true
 theme = catppuccin-mocha
 window-decoration = false
 mouse-scroll-multiplier = 0.375
+
+# Ghostty defaults Option+Left/Right to word-motion (esc:b / esc:f), which
+# shadows macos-option-as-alt and hides the alt+left / alt+right arrows that
+# herdr binds to prev/next tab (Option+Up/Down have no such default, which is
+# why workspace switching already works). Unbind them so Option+Left/Right emit
+# real alt-arrows and herdr can switch tabs with them, matching Linux.
+keybind = alt+arrow_left=unbind
+keybind = alt+arrow_right=unbind

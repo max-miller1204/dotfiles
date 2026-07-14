@@ -1,19 +1,50 @@
-# Single source of truth for the MCP servers, consumed by three agent staging
-# templates so they can never drift:
-#   - dot_config/claude-code/mcp-servers.json.tmpl (servers tagged `claude`; synced
-#                 into ~/.claude.json by run_onchange_after_40 via `claude mcp`)
-#   - dot_config/codex/mcp-servers.toml.tmpl        (servers tagged `codex`; merged
-#                 into ~/.codex/config.toml by run_onchange_after_41)
-#   - dot_config/opencode/opencode.json.tmpl        (servers tagged `opencode`;
-#                 rendered as an MCP-only file opencode merges with the user's
-#                 hand-owned opencode.jsonc, so no post-apply CLI sync is needed the
-#                 way claude/codex's CLI-owned configs require).
-# chezmoi auto-loads .chezmoidata/*, so `mcpServers` is available as `.mcpServers`
-# in every template. Each record uses exactly one of:
-#   command_rel = a path relative to $HOME; the rendering template prepends
-#                 `{{ .chezmoi.homeDir }}` (.chezmoidata is static and cannot hold
-#                 homeDir), mirroring the tsNodeModulesRel idiom in .chezmoi.toml.tmpl.
-#   command     = used as-is (already resolvable on PATH).
+---
+# Single source of truth for MCP servers, consumed by four agent staging
+# templates so they cannot drift:
+#   - dot_config/claude-code/mcp-servers.json.tmpl
+#     Servers tagged `claude` are synced into ~/.claude.json by
+#     run_onchange_after_40 via `claude mcp`.
+#   - dot_config/codex/mcp-servers.toml.tmpl
+#     Servers tagged `codex` are merged into ~/.codex/config.toml by
+#     run_onchange_after_41.
+#   - dot_config/opencode/opencode.json.tmpl
+#     Servers tagged `opencode` are rendered into an opencode.json that also
+#     carries `lsp: true`. OpenCode merges it with the user's hand-owned
+#     opencode.jsonc, so it needs no post-apply CLI sync.
+#   - dot_pi/agent/mcp.json.tmpl
+#     Servers tagged `pi` are rendered into ~/.pi/agent/mcp.json, which the
+#     pi-mcp-adapter extension reads directly without a post-apply sync script.
+# chezmoi auto-loads .chezmoidata/*, making `mcpServers` available to every
+# template as `.mcpServers`. Each record uses exactly one command form:
+#   command_rel = path relative to $HOME. The rendering template prepends
+#                 `{{ .chezmoi.homeDir }}` because .chezmoidata is static.
+#   command     = command already resolvable on PATH.
+# Optional per-server keys:
+#   requestTimeoutMs = pi-mcp-adapter request timeout; rendered ONLY by the pi
+#                 template (the other agents have no per-server equivalent in
+#                 their schemas and simply ignore the key).
 mcpServers:
-  - { name: nixos,      command_rel: ".local/share/mise/shims/uvx", args: ["mcp-nixos"],               agents: [claude, codex, opencode] }
-  - { name: playwright, command: "npx",                             args: ["@playwright/mcp@latest"], agents: [claude, codex, opencode] }
+  - name: playwright
+    command: "npx"
+    args:
+      - "@playwright/mcp@latest"
+    agents:
+      - claude
+      - codex
+      - opencode
+      - pi
+  # The --extension variant drives the user's real Chrome session through the
+  # Playwright MCP Chrome extension (tabs, logged-in state) instead of an
+  # isolated browser. The long request timeout covers the manual click-to-
+  # connect handshake in Chrome on first use.
+  - name: playwright-chrome
+    command: "npx"
+    args:
+      - "@playwright/mcp@latest"
+      - "--extension"
+    requestTimeoutMs: 120000
+    agents:
+      - claude
+      - codex
+      - opencode
+      - pi

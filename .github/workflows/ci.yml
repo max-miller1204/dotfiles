@@ -8,9 +8,9 @@ jobs:
   # The static-analysis jobs that render templates (shellcheck + fish-syntax)
   # run on macOS as well as Linux. `chezmoi execute-template` renders with the
   # runner's OS, so only the macos-latest leg exercises the darwin half of every
-  # template ({{ if eq .chezmoi.os "darwin" }} ... {{ end }}); on ubuntu those
-  # blocks are stripped before shellcheck / fish -n ever see them. Both legs stay
-  # STATIC (render + lint only) - no real brew package installs of the manifest.
+  # template ({{ if eq .chezmoi.os "darwin" }} ... {{ end }}); on ubuntu
+  # those blocks are stripped before shellcheck / fish -n ever see them.
+  # Both legs stay STATIC (render + lint only) - no real brew package installs.
   shellcheck:
     strategy:
       fail-fast: false
@@ -33,15 +33,18 @@ jobs:
           set -euo pipefail
           shellcheck --severity=warning -s bash \
             dot_claude/executable_statusline.sh
-          shellcheck --severity=warning -s sh private_dot_local/bin/executable_zenity-askpass
-          # tmux helper scripts (glob, so future ones are covered; no-op if none)
-          find dot_config/tmux -name 'executable_*.sh' -exec shellcheck --severity=warning -s bash {} +
+          shellcheck --severity=warning -s sh \
+            private_dot_local/bin/executable_zenity-askpass
+          # Glob covers future tmux helpers and is a no-op if there are none.
+          find dot_config/tmux -name 'executable_*.sh' \
+            -exec shellcheck --severity=warning -s bash {} +
       - name: Shellcheck rendered script templates
         run: |
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            chezmoi execute-template < "$f" | shellcheck --severity=warning -s bash -
+            chezmoi execute-template < "$f" \
+              | shellcheck --severity=warning -s bash -
             echo "::endgroup::"
           done < <(find .chezmoiscripts -name '*.sh.tmpl' -print0)
 
@@ -75,7 +78,7 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            # Explicit template rather than `mktemp --suffix=.fish`: the GNU-only
+            # Use a template instead of `mktemp --suffix=.fish`, whose GNU-only
             # --suffix flag is absent on the macOS leg's BSD mktemp. `fish -n`
             # parses by content, so the file extension is irrelevant.
             tmp=$(mktemp "${TMPDIR:-/tmp}/ci-fish.XXXXXX")
@@ -97,7 +100,9 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f"
+            python3 -c \
+              'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' \
+              "$f"
             echo "::endgroup::"
           done < <(find . -name '*.toml' ! -path './.git/*' -print0)
       - name: Validate JSON files
@@ -113,25 +118,34 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' f; do
             echo "::group::$f"
-            # .chezmoi.toml.tmpl uses the `headless` promptBoolOnce INIT function,
-            # so it must render with --init (which resolves the prompt to its
-            # false default non-interactively). --promptDefaults is NOT passed:
-            # execute-template rejects that flag. Every other config template
-            # renders with plain execute-template so it still sees the user [data].
+            # .chezmoi.toml.tmpl uses the `headless` promptBoolOnce INIT
+            # function, so it must render with --init, which resolves the prompt
+            # to its false default non-interactively. --promptDefaults is NOT
+            # passed because execute-template rejects that flag. Every other
+            # config template uses plain rendering and still sees user [data].
             case "$f" in
-              *.chezmoi.toml.tmpl) rendered=$(chezmoi execute-template --init < "$f") ;;
-              *)                   rendered=$(chezmoi execute-template < "$f") ;;
+              *.chezmoi.toml.tmpl)
+                rendered=$(chezmoi execute-template --init < "$f")
+                ;;
+              *)
+                rendered=$(chezmoi execute-template < "$f")
+                ;;
             esac
             case "$f" in
               *.toml.tmpl)
-                printf '%s' "$rendered" | python3 -c 'import sys, tomllib; tomllib.load(sys.stdin.buffer)'
+                printf '%s' "$rendered" \
+                  | python3 -c \
+                    'import sys, tomllib; tomllib.load(sys.stdin.buffer)'
                 ;;
               *.json.tmpl)
                 printf '%s' "$rendered" | jq empty
                 ;;
             esac
             echo "::endgroup::"
-          done < <(find . \( -name '*.toml.tmpl' -o -name '*.json.tmpl' \) ! -path './.git/*' -print0)
+          done < <(
+            find . \( -name '*.toml.tmpl' -o -name '*.json.tmpl' \) \
+              ! -path './.git/*' -print0
+          )
 
   chezmoi-dry-run:
     runs-on: ubuntu-latest

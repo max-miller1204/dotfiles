@@ -47,7 +47,7 @@
 
 packages:
   # ---- core CLI, cross-platform, native on each OS (brew macOS / apt Linux) ----
-  # fish/git/tmux stay apt on Linux; jq deliberately stays native too - it is a
+  # fish/git stay apt on Linux; jq deliberately stays native too - it is a
   # `command -v jq || exit 1` dependency of the apply-time MCP/plugin scripts and
   # is used bare in obsidian's installer, so it must not depend on mise shims that
   # are not on PATH during a fresh apply.
@@ -61,11 +61,6 @@ packages:
     bin: git
     darwin: { brew: git }
     linux: { apt: git }
-  - name: tmux
-    gui: false
-    bin: tmux
-    darwin: { brew: tmux }
-    linux: { apt: tmux }
   - name: jq
     gui: false
     bin: jq
@@ -115,9 +110,11 @@ packages:
 
   # ---- cross-platform CLI tools: mise (aqua backend) on Linux, brew on macOS.
   #      Consolidated onto mise on Linux - these were previously apt (bat/fd/
-  #      ripgrep/zoxide), third-party apt-repo+keyring (eza/gum), or curl vendor
-  #      installers (starship/atuin). Every entry here must follow the mise entry
-  #      above. ----
+  #      ripgrep/zoxide/tmux), third-party apt-repo+keyring (eza/gum), or curl
+  #      vendor installers (starship/atuin). tmux specifically moved off apt so
+  #      Linux gets tmux 3.5+ (Ubuntu 24.04 apt ships 3.4, which lacks the
+  #      extended-keys-format option the tmux config sets). Every entry here must
+  #      follow the mise entry above. ----
   - name: eza
     gui: false
     bin: eza
@@ -163,6 +160,11 @@ packages:
     bin: direnv
     darwin: { brew: direnv }
     linux: { mise: "aqua:direnv/direnv" }
+  - name: tmux
+    gui: false
+    bin: tmux
+    darwin: { brew: tmux }
+    linux: { mise: "aqua:tmux/tmux-builds" }
   # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
   #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
   #      from the base apt block above; params in `aptrepos.gh`). Deliberately NOT

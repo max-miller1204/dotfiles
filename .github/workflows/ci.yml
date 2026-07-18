@@ -32,7 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --severity=warning -s bash \
-            dot_claude/executable_statusline.sh
+            dot_claude/executable_statusline.sh \
+            .github/scripts/check-pi-model-pins.sh
           shellcheck --severity=warning -s sh \
             private_dot_local/bin/executable_zenity-askpass
           # Glob covers future tmux helpers and is a no-op if there are none.
@@ -113,6 +114,11 @@ jobs:
             jq empty "$f"
             echo "::endgroup::"
           done < <(find . -name '*.json' ! -path './.git/*' -print0)
+      - name: Check pi subagent model pins against enabledModels
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-pi-model-pins.sh \
+            dot_pi/agent/agents dot_pi/agent/settings.json
       - name: Validate rendered TOML/JSON templates
         run: |
           set -euo pipefail

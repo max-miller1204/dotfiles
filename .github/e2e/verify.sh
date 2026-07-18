@@ -98,6 +98,17 @@ hard "pi settings materialized" test -f "$HOME/.pi/agent/settings.json"
 hard "pi git-diff package declared" \
 	jq -e '.packages | index("npm:pi-git-diff") != null' "$HOME/.pi/agent/settings.json"
 hard "pi local git-diff extension absent" test ! -e "$HOME/.pi/agent/extensions/git-diff"
+hard "pi subagents package declared" \
+	jq -e '.packages | index("npm:@tintinweb/pi-subagents") != null' "$HOME/.pi/agent/settings.json"
+hard "pi Explore subagent definition materialized" test -f "$HOME/.pi/agent/agents/Explore.md"
+hard "pi Plan subagent definition materialized" test -f "$HOME/.pi/agent/agents/Plan.md"
+# Shared with the CI job of the same name; run outside `hard` so its per-file
+# diagnostic survives (hard discards both of its command's output streams).
+PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \
+	"$HOME/.pi/agent/agents" "$HOME/.pi/agent/settings.json" 2>&1)
+PIN_RC=$?
+[[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
+hard "pi subagent model pins are all in enabledModels" test "$PIN_RC" -eq 0
 hard "pi Hunk review skill declared" \
 	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
 	"$HOME/.pi/agent/settings.json"
@@ -173,7 +184,8 @@ info "opencode mcp list shows playwright + playwright-chrome (live connectivity)
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain
 # run_after_ hook/plugin re-assert scripts fire on every apply by design (see
-# CLAUDE.md), so chezmoi status always lists them.
+# .claude/rules/bootstrap/scripts-and-config.md), so chezmoi status always
+# lists them.
 UNEXPECTED_DRIFT="$(chezmoi status 2>/dev/null | awk '{print $NF}' |
 	grep -v '^\.claude/settings\.json$' | grep -v '^\.chezmoiscripts/' || true)"
 if [[ -z "$UNEXPECTED_DRIFT" ]]; then

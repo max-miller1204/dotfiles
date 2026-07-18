@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.80.6",
+  "lastChangelogVersion": "0.80.10",
   "theme": "dark",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-sol",
@@ -30,67 +30,60 @@
   ],
   "hideThinkingBlock": false,
   "subagents": {
-    "defaultModel": "opencode-go/kimi-k2.7-code",
-    "modelScope": {
-      "enforce": true,
-      "allow": [
-        "opencode-go/*"
-      ]
-    },
     "agentOverrides": {
       "scout": {
-        "model": "opencode-go/kimi-k2.7-code",
+        "model": "openai-codex/gpt-5.6-luna",
+        "fallbackModels": [
+          "opencode-go/deepseek-v4-flash"
+        ],
+        "thinking": "low"
+      },
+      "delegate": {
+        "model": "openai-codex/gpt-5.6-luna",
         "fallbackModels": [
           "opencode-go/qwen3.7-plus"
         ],
         "thinking": "medium"
       },
-      "delegate": {
-        "model": "opencode-go/mimo-v2.5",
+      "researcher": {
+        "model": "openai-codex/gpt-5.6-sol",
         "fallbackModels": [
           "opencode-go/glm-5.2"
-        ],
-        "thinking": "medium"
-      },
-      "researcher": {
-        "model": "opencode-go/kimi-k2.6",
-        "fallbackModels": [
-          "opencode-go/qwen3.6-plus"
         ],
         "thinking": "high"
       },
       "context-builder": {
-        "model": "opencode-go/qwen3.7-plus",
+        "model": "opencode-go/glm-5.2",
         "fallbackModels": [
-          "opencode-go/mimo-v2.5-pro"
+          "openai-codex/gpt-5.6-sol"
         ],
         "thinking": "high"
       },
       "planner": {
-        "model": "opencode-go/deepseek-v4-pro",
+        "model": "openai-codex/gpt-5.6-sol",
         "fallbackModels": [
-          "opencode-go/minimax-m2.7"
+          "opencode-go/glm-5.2"
         ],
         "thinking": "max"
       },
       "worker": {
-        "model": "opencode-go/kimi-k2.7-code",
+        "model": "openai-codex/gpt-5.6-sol",
         "fallbackModels": [
-          "opencode-go/qwen3.7-max"
+          "opencode-go/glm-5.2"
         ],
-        "thinking": "high"
+        "thinking": "xhigh"
       },
       "reviewer": {
-        "model": "opencode-go/qwen3.7-max",
+        "model": "openai-codex/gpt-5.6-sol",
         "fallbackModels": [
-          "opencode-go/deepseek-v4-pro"
+          "opencode-go/glm-5.2"
         ],
-        "thinking": "high"
+        "thinking": "max"
       },
       "oracle": {
-        "model": "opencode-go/minimax-m3",
+        "model": "openai-codex/gpt-5.6-sol",
         "fallbackModels": [
-          "opencode-go/kimi-k2.7-code"
+          "opencode-go/glm-5.2"
         ],
         "thinking": "max"
       }

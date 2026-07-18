@@ -36,13 +36,13 @@ Read [`.claude/rules/agents/pi.md`](.claude/rules/agents/pi.md) for changes invo
 
 - any managed file under `dot_pi/`
 - pi installation, packages, extensions, prompts, web search, MCP configuration, or runtime drift
-- pi-related checks in `.github/e2e/verify.sh`
+- pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/check-pi-model-pins.sh` enforcing the pin/`enabledModels` invariant
 
 ## CI and native Ubuntu E2E
 
 Read [`.claude/rules/quality/ci-and-e2e.md`](.claude/rules/quality/ci-and-e2e.md) for changes involving:
 
-- any workflow, action, or E2E file under `.github/`
+- any workflow, action, E2E file, or shared `.github/scripts/` helper under `.github/`
 - CI OS matrices, template rendering, shellcheck, fish syntax, or config syntax
 - the native Ubuntu bootstrap workflow, prompt PTY test, or drift checks
 - expected binary lists or verification coverage

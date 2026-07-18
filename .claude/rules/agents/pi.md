@@ -3,6 +3,7 @@ paths:
   - "dot_pi/**/*"
   - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
   - ".github/e2e/verify.sh"
+  - ".github/scripts/check-pi-model-pins.sh"
 ---
 
 <!-- markdownlint-disable MD013 -->

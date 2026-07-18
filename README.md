@@ -210,7 +210,7 @@ Agents that speak the `AGENTS.md` convention pick that global file up themselves
 The chezmoi-root `AGENTS.md` must stay strictly GLOBAL: it is applied verbatim to `~/AGENTS.md` and read by every agent in every project.
 Repo-specific agent notes are split by scope: [`CLAUDE.md`](CLAUDE.md) keeps only the universal routing and repo-scope warnings, the detailed guidance lives in path-scoped rules under [`.claude/rules/`](.claude/rules) that Claude Code loads automatically when it touches a matching file, and [`context-map.md`](context-map.md) maps those rules for agents that do not read `.claude/rules/` themselves.
 `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are `.chezmoiignore`d so they never leave this repo.
-`.claude/rules/` needs no ignore entry: chezmoi never treats a dot-prefixed source directory as source state, and `.chezmoiignore` patterns match destination paths, so listing it would only un-manage a future `~/.claude/rules`.
+`.claude/rules/` needs no ignore entry: chezmoi skips dot-prefixed source entries apart from its own reserved `.chezmoi*` names (`.chezmoiscripts/`, `.chezmoidata/`, `.chezmoitemplates/`, and friends, which are source state), and `.chezmoiignore` patterns match destination paths - so listing `.claude/rules` would only un-manage a future `~/.claude/rules`.
 
 ### Claude plugins + marketplace (CLI-owned)
 

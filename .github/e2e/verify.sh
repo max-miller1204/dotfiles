@@ -102,6 +102,20 @@ hard "pi subagents package declared" \
 	jq -e '.packages | index("npm:@tintinweb/pi-subagents") != null' "$HOME/.pi/agent/settings.json"
 hard "pi Explore subagent definition materialized" test -f "$HOME/.pi/agent/agents/Explore.md"
 hard "pi Plan subagent definition materialized" test -f "$HOME/.pi/agent/agents/Plan.md"
+# Every model pinned in an agent definition must be in enabledModels, or pi's
+# opt-in scopeModels guardrail warns on each spawn.
+hard "pi subagent model pins are all in enabledModels" \
+	bash -c '
+		settings="$HOME/.pi/agent/settings.json"
+		rc=0
+		for def in "$HOME"/.pi/agent/agents/*.md; do
+			[ -e "$def" ] || continue
+			pin=$(sed -n "s/^model:[[:space:]]*//p" "$def" | head -n1)
+			[ -n "$pin" ] || continue
+			jq -e --arg m "$pin" ".enabledModels | index(\$m) != null" "$settings" >/dev/null \
+				|| { echo "  $(basename "$def") pins $pin, absent from enabledModels"; rc=1; }
+		done
+		exit $rc'
 hard "pi Hunk review skill declared" \
 	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
 	"$HOME/.pi/agent/settings.json"

@@ -147,11 +147,13 @@ if [[ -n "$MISE_BIN" ]]; then
         node@lts python@latest rust@latest go@latest \
         fzf@latest bun@latest neovim@latest uv@latest
 
-    # pi coding agent - npm-distributed (no native curl installer like the
-    # agents below), installed as a mise-managed npm tool so it survives node
-    # upgrades instead of orphaning in the version-pinned runtime dir.
+    # npm-distributed CLIs are installed through mise so they survive node
+    # upgrades instead of being orphaned in a version-pinned npm runtime.
     log "Installing pi coding agent"
     "$MISE_BIN" use -g npm:@earendil-works/pi-coding-agent
+
+    log "Installing Hunk"
+    "$MISE_BIN" use -g npm:hunkdiff
 fi
 
 {{- if eq .chezmoi.os "linux" }}

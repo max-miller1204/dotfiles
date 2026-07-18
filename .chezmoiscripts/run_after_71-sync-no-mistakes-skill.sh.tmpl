@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Keep the generated no-mistakes skill aligned with the installed CLI release.
+# no-mistakes has no skill-only install command: `init` refreshes the skill but
+# also creates a repository gate. Fetching the generated file from the matching
+# release tag reproduces that part of init without mutating an arbitrary repo.
+#
+# This is a plain `run_after_` script (runs on EVERY apply), so every failure that
+# is transient or environmental - CLI not installed yet, an unreleased dev/rc
+# build, no network - degrades to a warn:/skip: and exits 0 rather than breaking
+# the whole apply; the next apply retries. verify.sh's apply-log scan surfaces
+# those lines, so a swallowed failure still gates E2E.
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+prepend_path "$HOME/.local/bin" "/usr/local/bin" "/opt/homebrew/bin"
+if ! command -v no-mistakes >/dev/null 2>&1; then
+    log "skip: no-mistakes not on PATH yet (will sync its agent skill on next apply)"
+    exit 0
+fi
+
+version="$(no-mistakes --version 2>/dev/null | awk '{ print $3 }')" || version=""
+if ! printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+    log "warn: could not resolve the installed no-mistakes release tag (retries next apply)"
+    exit 0
+fi
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi"
+marker="$state_dir/no-mistakes-skill-version"
+claude_skill="$HOME/.claude/skills/no-mistakes/SKILL.md"
+agents_skill="$HOME/.agents/skills/no-mistakes/SKILL.md"
+if [[ -s "$claude_skill" && -s "$agents_skill" && -f "$marker" ]]; then
+    marker_version="$(sed -n '1p' "$marker")"
+    marker_checksum="$(sed -n '2p' "$marker")"
+    claude_checksum="$(cksum < "$claude_skill")"
+    agents_checksum="$(cksum < "$agents_skill")"
+    if [[ "$marker_version" == "$version" ]] &&
+        [[ "$claude_checksum" == "$marker_checksum" ]] &&
+        [[ "$agents_checksum" == "$marker_checksum" ]]; then
+        exit 0
+    fi
+fi
+
+log "Installing the no-mistakes agent skill for $version"
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+skill_url="https://raw.githubusercontent.com/kunchenguid/no-mistakes/"
+skill_url+="$version/skills/no-mistakes/SKILL.md"
+if ! curl -fsSL "$skill_url" -o "$tmp"; then
+    log "warn: could not download the $version no-mistakes skill (retries next apply)"
+    exit 0
+fi
+if [[ ! -s "$tmp" ]]; then
+    log "warn: the $version no-mistakes skill downloaded empty (retries next apply)"
+    exit 0
+fi
+
+for skill in "$claude_skill" "$agents_skill"; do
+    mkdir -p "$(dirname "$skill")"
+    staged="$skill.tmp.$$"
+    cp "$tmp" "$staged"
+    chmod 0644 "$staged"
+    mv "$staged" "$skill"
+done
+
+mkdir -p "$state_dir"
+printf '%s\n%s\n' "$version" "$(cksum < "$tmp")" > "$marker"

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Install the brev agent skill via `brev agent-skill`, which writes the skill into
-# every agent harness (Claude, Codex, OpenCode). This replaces the previously
-# vendored dot_claude/skills/brev-cli/ tree: the skill is now owned by the brev
-# CLI, not chezmoi.
+# every agent harness (Claude, Codex, OpenCode) and the shared ~/.agents/skills
+# tree that pi reads. This replaces the previously vendored
+# dot_claude/skills/brev-cli/ tree: the skill is now owned by the brev CLI, not
+# chezmoi.
 #
 # run_once_after_: brev writes files that are NOT chezmoi-managed targets (they
 # are .chezmoiignore'd), so there is no chezmoi-vs-CLI conflict and no need to run

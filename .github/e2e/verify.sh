@@ -21,7 +21,7 @@ MANIFEST_BINS=(fish git tmux jq curl wget gpg add-apt-repository zenity mise
 	eza gum starship atuin bat fd rg zoxide direnv gh op pfetch brev treehouse no-mistakes herdr)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
-TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv)
+TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv hunk)
 AGENT_BINS=(claude codex opencode pi)
 LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clangd)
 
@@ -98,6 +98,13 @@ hard "pi settings materialized" test -f "$HOME/.pi/agent/settings.json"
 hard "pi git-diff package declared" \
 	jq -e '.packages | index("npm:pi-git-diff") != null' "$HOME/.pi/agent/settings.json"
 hard "pi local git-diff extension absent" test ! -e "$HOME/.pi/agent/extensions/git-diff"
+hard "pi Hunk review skill declared" \
+	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
+	"$HOME/.pi/agent/settings.json"
+hard "Hunk review skill installed" \
+	test -f "$HOME/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+hard "generated no-mistakes skills synchronized" \
+	bash -c 'test -f "$HOME/.agents/skills/no-mistakes/SKILL.md" && cmp -s "$HOME/.agents/skills/no-mistakes/SKILL.md" "$HOME/.claude/skills/no-mistakes/SKILL.md"'
 
 echo "== home ownership (root-elevated installers must not write here) =="
 # Guards the class behind the run-28558929981 failure: a root-run installer

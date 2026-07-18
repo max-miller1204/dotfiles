@@ -226,7 +226,7 @@ The five LSP plugins are not hand-listed here: they derive from the single-sourc
 - `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
 
 **pi config ownership.**
-pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models, subagent routing, and published extension packages including `npm:pi-git-diff`), `agent/extensions/` and `agent/prompts/` (the custom status bar and prompt templates), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models, subagent routing, and published extension packages including `npm:pi-git-diff`), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, and `/handoff` extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
 The Git diff viewer is installed from npm rather than duplicated under `agent/extensions/`.
 pi's runtime state (`agent/auth.json`, `agent/sessions/`, `agent/npm/`, and the pi-mcp-adapter caches `agent/mcp-cache.json` / `agent/mcp-npx-cache.json`) is deliberately not managed.
 One caveat: pi itself rewrites `agent/settings.json` at runtime (model switches, `lastChangelogVersion` bumps), so `chezmoi status` can show it as modified; fold deliberate changes back with `chezmoi add ~/.pi/agent/settings.json`, or `chezmoi apply` to reset to the managed state.
@@ -258,7 +258,10 @@ Cross-platform:
 - `CLAUDE.md` - repo-local agent notes; `.chezmoiignore`d, never applied to `$HOME`
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
 - `dot_claude/settings.json` + `executable_statusline.sh`
-- `dot_claude/skills/` — vendored Claude skills (codex-review). The brev-cli
+- `dot_agents/skills/` - shared cross-agent skill tree applied to `~/.agents/skills` (currently `html-artifacts` plus its reference guides); pi discovers `~/.agents/skills` natively, and Claude reads it through the symlink below
+- `dot_claude/skills/` — vendored Claude skills (codex-review), plus
+  `symlink_html-artifacts`, which materializes `~/.claude/skills/html-artifacts` ->
+  `~/.agents/skills/html-artifacts` so Claude picks up the shared skill. The brev-cli
   skill is not vendored: `brev agent-skill` writes it into every agent harness
   (`run_once_after_70`), so the brev CLI owns it
 

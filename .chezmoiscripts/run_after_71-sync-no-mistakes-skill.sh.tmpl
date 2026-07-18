@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Keep the generated no-mistakes skill aligned with the installed CLI release.
+# no-mistakes has no skill-only install command: `init` refreshes the skill but
+# also creates a repository gate. Fetching the generated file from the matching
+# release tag reproduces that part of init without mutating an arbitrary repo.
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+prepend_path "$HOME/.local/bin" "/usr/local/bin" "/opt/homebrew/bin"
+if ! command -v no-mistakes >/dev/null 2>&1; then
+    echo "no-mistakes not found on PATH; cannot install its agent skill" >&2
+    exit 1
+fi
+
+version="$(no-mistakes --version | awk '{ print $3 }')"
+if ! printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "Could not resolve the installed no-mistakes release tag" >&2
+    exit 1
+fi
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi"
+marker="$state_dir/no-mistakes-skill-version"
+claude_skill="$HOME/.claude/skills/no-mistakes/SKILL.md"
+agents_skill="$HOME/.agents/skills/no-mistakes/SKILL.md"
+if [[ -s "$claude_skill" && -s "$agents_skill" && -f "$marker" ]]; then
+    marker_version="$(sed -n '1p' "$marker")"
+    marker_checksum="$(sed -n '2p' "$marker")"
+    claude_checksum="$(cksum < "$claude_skill")"
+    agents_checksum="$(cksum < "$agents_skill")"
+    if [[ "$marker_version" == "$version" ]] &&
+        [[ "$claude_checksum" == "$marker_checksum" ]] &&
+        [[ "$agents_checksum" == "$marker_checksum" ]]; then
+        exit 0
+    fi
+fi
+
+log "Installing the no-mistakes agent skill for $version"
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+skill_url="https://raw.githubusercontent.com/kunchenguid/no-mistakes/"
+skill_url+="$version/skills/no-mistakes/SKILL.md"
+curl -fsSL "$skill_url" -o "$tmp"
+
+for skill in "$claude_skill" "$agents_skill"; do
+    mkdir -p "$(dirname "$skill")"
+    staged="$skill.tmp.$$"
+    cp "$tmp" "$staged"
+    chmod 0644 "$staged"
+    mv "$staged" "$skill"
+done
+
+mkdir -p "$state_dir"
+printf '%s\n%s\n' "$version" "$(cksum < "$tmp")" > "$marker"

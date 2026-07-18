@@ -75,8 +75,12 @@ alt-shift-tab = 'focus-monitor next'
 
 alt-ctrl-h = 'focus-monitor left'
 alt-ctrl-l = 'focus-monitor right'
-alt-ctrl-shift-h = 'move-node-to-monitor left'
-alt-ctrl-shift-l = 'move-node-to-monitor right'
+alt-ctrl-k = 'focus-monitor up'
+alt-ctrl-j = 'focus-monitor down'
+alt-ctrl-shift-h = 'move-node-to-monitor --focus-follows-window left'
+alt-ctrl-shift-l = 'move-node-to-monitor --focus-follows-window right'
+alt-ctrl-shift-k = 'move-node-to-monitor --focus-follows-window up'
+alt-ctrl-shift-j = 'move-node-to-monitor --focus-follows-window down'
 
 alt-shift-semicolon = 'mode service'
 

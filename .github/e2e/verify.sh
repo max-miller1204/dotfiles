@@ -184,7 +184,8 @@ info "opencode mcp list shows playwright + playwright-chrome (live connectivity)
 echo "== chezmoi drift (only settings.json may differ, by design) =="
 # .chezmoiscripts/ entries are pending SCRIPT runs, not file drift: the plain
 # run_after_ hook/plugin re-assert scripts fire on every apply by design (see
-# CLAUDE.md), so chezmoi status always lists them.
+# .claude/rules/bootstrap/scripts-and-config.md), so chezmoi status always
+# lists them.
 UNEXPECTED_DRIFT="$(chezmoi status 2>/dev/null | awk '{print $NF}' |
 	grep -v '^\.claude/settings\.json$' | grep -v '^\.chezmoiscripts/' || true)"
 if [[ -z "$UNEXPECTED_DRIFT" ]]; then

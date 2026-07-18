@@ -208,14 +208,16 @@ Agents that speak the `AGENTS.md` convention pick that global file up themselves
 - Codex and OpenCode get no per-agent mirror either: the global `~/AGENTS.md` covers them, so the former `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md` symlinks were removed.
 
 The chezmoi-root `AGENTS.md` must stay strictly GLOBAL: it is applied verbatim to `~/AGENTS.md` and read by every agent in every project.
-Repo-specific agent notes live in [`CLAUDE.md`](CLAUDE.md), a real file that stays `.chezmoiignore`d together with `README.md` and `raycast-export`, so it never leaves this repo.
+Repo-specific agent notes are split by scope: [`CLAUDE.md`](CLAUDE.md) keeps only the universal routing and repo-scope warnings, the detailed guidance lives in path-scoped rules under [`.claude/rules/`](.claude/rules) that Claude Code loads automatically when it touches a matching file, and [`context-map.md`](context-map.md) maps those rules for agents that do not read `.claude/rules/` themselves.
+`README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are `.chezmoiignore`d so they never leave this repo.
+`.claude/rules/` needs no ignore entry, because chezmoi never applies it in the first place; see [chezmoiignore path semantics](.claude/rules/bootstrap/scripts-and-config.md#chezmoiignore-path-semantics) for which source paths do and do not need one.
 
 ### Claude plugins + marketplace (CLI-owned)
 
 The Claude Code plugins and their marketplace are owned by the `claude plugin` CLI, not hand-vendored into `dot_claude/settings.json` (`enabledPlugins` / `extraKnownMarketplaces`).
 `run_after_65-setup-claude-plugins.sh.tmpl` registers the `claude-plugins-official` marketplace and installs/enables each plugin on every apply.
 It must be a plain `run_after_` script (runs on every apply), not a `run_onchange_after_`: that state lives only in the settings.json family, which chezmoi fully manages - every `chezmoi apply` rewrites `~/.claude/settings.json` from source and strips anything a CLI appended - and a `run_onchange_` keyed to the script's own hash would not re-fire after that strip (its hash is unchanged), silently leaving the plugins disabled.
-The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin re-assert re-adds its blocks. That drift is by design, not a bug (see [CLAUDE.md](CLAUDE.md)).
+The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin re-assert re-adds its blocks. That drift is by design, not a bug (see [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md)).
 It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
 The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
 
@@ -226,7 +228,8 @@ The five LSP plugins are not hand-listed here: they derive from the single-sourc
 - `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
 
 **pi config ownership.**
-pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models, subagent routing, and published extension packages including `npm:pi-git-diff`), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, and `/handoff` extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models and published extension packages, including `npm:pi-git-diff` and `npm:@tintinweb/pi-subagents`), `agent/agents/` (the read-only `Explore` and `Plan` subagent definitions), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, and `/handoff` extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+Subagent routing lives in the `agent/agents/*.md` frontmatter, not in `settings.json`: `npm:@tintinweb/pi-subagents` discovers those files and they replace the settings-level `subagents.agentOverrides` block the previous `npm:pi-subagents` package used.
 The Git diff viewer is installed from npm rather than duplicated under `agent/extensions/`.
 Hunk is also installed from npm, and Pi loads its bundled review skill from the stable `npm-hunkdiff/latest` mise path declared in `agent/settings.json`.
 pi's runtime state - credentials, sessions, run history, npm package checkouts, the pi-mcp-adapter caches, the generated models store, and scratch dirs - is deliberately not managed; `.chezmoiignore`'s pi block is the authoritative list of those paths.
@@ -253,10 +256,11 @@ Cross-platform:
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
 - `dot_config/opencode/opencode.json.tmpl` - opencode config carrying `lsp: true` + MCP servers (from `.chezmoidata/mcp.yaml`); rendered straight to `~/.config/opencode/opencode.json` (no sync script - OpenCode reads it as-is and merges it with the user's hand-owned `opencode.jsonc`)
 - `dot_pi/agent/mcp.json.tmpl` - pi MCP config (pi servers from `.chezmoidata/mcp.yaml` + adapter settings); rendered straight to `~/.pi/agent/mcp.json` (no sync script - pi reads it as-is)
-- `dot_pi/` - the rest of the pi coding agent config: `agent/settings.json`, `agent/extensions/`, `agent/prompts/`, `web-search.json` (pi's runtime state is not managed - see [Agents (multi-agent)](#agents-multi-agent))
+- `dot_pi/` - the rest of the pi coding agent config: `agent/settings.json`, `agent/agents/` (subagent definitions), `agent/extensions/`, `agent/prompts/`, `web-search.json` (pi's runtime state is not managed - see [Agents (multi-agent)](#agents-multi-agent))
 - `dot_config/codex/config-base.toml.tmpl` - staging TOML; base Codex settings (`model`, reasoning effort) sync'd into `~/.codex/config.toml` by `run_onchange_after_42-sync-codex-base.sh.tmpl`
 - `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
-- `CLAUDE.md` - repo-local agent notes; `.chezmoiignore`d, never applied to `$HOME`
+- `CLAUDE.md` - repo-local agent routing notes; `.chezmoiignore`d, never applied to `$HOME`
+- `context-map.md` + `.claude/rules/**` - the path-scoped repo guidance `CLAUDE.md` routes to; never applied to `$HOME`
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
 - `dot_claude/settings.json` + `executable_statusline.sh`
 - `dot_agents/skills/` - shared cross-agent skill tree applied to `~/.agents/skills` (currently `html-artifacts` plus its reference guides); pi discovers `~/.agents/skills` natively, and Claude reads it through the symlink below
@@ -322,7 +326,7 @@ Most of these scripts pull their shared shell boilerplate from partials in `.che
 `lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (1Password and gh now - eza and gum moved to mise); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method; `lib-codex-sync.sh` holds the shared file-prep preamble (define `CODEX_CONFIG`, verify the staging source is readable, `mkdir`/touch the target) for the two Codex config-sync scripts.
 The Claude MCP sync (`run_onchange_after_40`) keeps its own bare preamble; the two Codex sync scripts (`run_onchange_after_41`/`42`) share only that file-prep preamble via `lib-codex-sync.sh` and keep their differing awk-strip + recombine bodies inline.
 All three deliberately stay on a bare `set -euo pipefail` + `echo` and pull in no `lib-log.sh`.
-See [CLAUDE.md](CLAUDE.md) for the convention.
+See [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md) for the convention.
 
 ## WSL Ubuntu
 

@@ -48,7 +48,8 @@ paths:
 - `.chezmoiignore` patterns match DESTINATION paths, never source paths.
   An entry like `.claude/rules` therefore un-manages `~/.claude/rules` (anything a future `dot_claude/rules/` would apply) and does nothing at all to this repo's own `.claude/rules/` tree.
 - Repo-only files need an entry only when chezmoi would otherwise apply them.
-  chezmoi never treats a dot-prefixed source directory (`.claude/`, `.github/`, `.chezmoiscripts/`) as source state, so those are already invisible to `chezmoi apply`; only the plain root files need listing, which is why `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are there while `.claude/rules` deliberately is not.
+  chezmoi skips dot-prefixed source entries EXCEPT its own reserved `.chezmoi*` names, which are very much source state: `.chezmoiscripts/` renders to applied scripts (they show up as targets under `chezmoi managed`), and `.chezmoidata/`, `.chezmoitemplates/`, `.chezmoiignore`, and `.chezmoi.toml.tmpl` feed rendering without producing targets of their own.
+  Everything else dot-prefixed (`.claude/`, `.github/`) is invisible to `chezmoi apply`, so only the plain root files need listing, which is why `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are there while `.claude/rules` deliberately is not.
   Verify a suspected ignore entry with `chezmoi managed` before adding it - an entry that looks protective can instead silently pre-empt a destination path the repo may want to manage later.
 
 ## Headless and WSL rendering

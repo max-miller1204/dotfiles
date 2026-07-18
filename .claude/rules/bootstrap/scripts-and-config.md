@@ -43,6 +43,14 @@ paths:
   The three MCP sync scripts (`run_onchange_after_4x`) deliberately keep a bare `set -euo pipefail` and use `echo`, not `log()`, so they do not pull in `lib-log.sh`.
   Avoiding `lib-log.sh` is only about the `log()`/`echo` split, not a blanket no-partials rule: the two codex sync scripts (`run_onchange_after_41`/`42`) do share the `.chezmoitemplates/lib-codex-sync.sh` partial (extracted by a prior chunk), while the claude MCP sync (`run_onchange_after_40`) stays self-contained.
 
+## chezmoiignore path semantics
+
+- `.chezmoiignore` patterns match DESTINATION paths, never source paths.
+  An entry like `.claude/rules` therefore un-manages `~/.claude/rules` (anything a future `dot_claude/rules/` would apply) and does nothing at all to this repo's own `.claude/rules/` tree.
+- Repo-only files need an entry only when chezmoi would otherwise apply them.
+  chezmoi never treats a dot-prefixed source directory (`.claude/`, `.github/`, `.chezmoiscripts/`) as source state, so those are already invisible to `chezmoi apply`; only the plain root files need listing, which is why `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are there while `.claude/rules` deliberately is not.
+  Verify a suspected ignore entry with `chezmoi managed` before adding it - an entry that looks protective can instead silently pre-empt a destination path the repo may want to manage later.
+
 ## Headless and WSL rendering
 
 - GUI desktop apps AND their Linux configs are skipped at RENDER-time when `headless` OR `isWSL` is set; non-GUI CLI tools always install (every platform, including headless and WSL), which replaced the old runtime `IS_WSL` gate.

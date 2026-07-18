@@ -98,6 +98,10 @@ hard "pi settings materialized" test -f "$HOME/.pi/agent/settings.json"
 hard "pi git-diff package declared" \
 	jq -e '.packages | index("npm:pi-git-diff") != null' "$HOME/.pi/agent/settings.json"
 hard "pi local git-diff extension absent" test ! -e "$HOME/.pi/agent/extensions/git-diff"
+hard "pi subagents package declared" \
+	jq -e '.packages | index("npm:@tintinweb/pi-subagents") != null' "$HOME/.pi/agent/settings.json"
+hard "pi Explore subagent definition materialized" test -f "$HOME/.pi/agent/agents/Explore.md"
+hard "pi Plan subagent definition materialized" test -f "$HOME/.pi/agent/agents/Plan.md"
 hard "pi Hunk review skill declared" \
 	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
 	"$HOME/.pi/agent/settings.json"

@@ -81,21 +81,12 @@ if status is-interactive
         mise activate fish | source
     end
 
-    # Home Manager owns the active CLI and direnv bundles. Re-prepend its
+    # Home Manager owns the active CLI, direnv, and LSP bundles. Re-prepend its
     # profile after mise and Homebrew mutate PATH so rollback installs cannot win.
     set -l home_manager_bin $HOME/.nix-profile/bin
     if test -d $home_manager_bin
         set -gx PATH $home_manager_bin \
             (string match -v -- $home_manager_bin $PATH)
-    end
-
-    # typescript-language-server lives in its own mise prefix and can't resolve
-    # the separately-installed typescript; point NODE_PATH at it so the TS LSP works.
-    # Prepend rather than overwrite so any pre-existing NODE_PATH survives (when
-    # NODE_PATH is unset, $NODE_PATH expands to nothing and the result is unchanged).
-    set -l ts_node_modules $HOME/{{ .tsNodeModulesRel }}
-    if test -d $ts_node_modules
-        set -gx NODE_PATH $ts_node_modules $NODE_PATH
     end
 
     # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----

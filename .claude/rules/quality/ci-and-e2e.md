@@ -16,7 +16,10 @@ paths:
   It also deliberately mutates the runner before the apply (a conditional `Defaults always_set_home` sudoers drop-in, deleting `XDG_CONFIG_HOME=` from `/etc/environment`, `unset XDG_CONFIG_HOME` in the apply step) to make the runner faithful to stock Ubuntu: runner images preserve the caller's env through sudo and export an expanded `XDG_CONFIG_HOME`, which stock Ubuntu never does, and that leak let the Nix installer's root-run fish self-test create a root-owned `~/.config/fish` that broke chezmoi's later chmod.
   The `sudo HOME=/root XDG_CONFIG_HOME=/root/.config` pins on the Nix installer line in `run_once_before_10` and verify.sh's no-root-owned-files check guard that same class of bug on any host with similar env leaks - keep all three.
   `verify.sh` doubles as the ownership checklist spec: `MANIFEST_BINS`, `HOME_MANAGER_BINS`, `GUI_BINS`, `FLATPAK_APPS`, `TOOLCHAIN_BINS`, `AGENT_BINS`, and `LSP_BINS` mirror the package manifest, active Home Manager ownership, remaining mise tools, coding agents, and `lspLanguages`.
-  Phase 3 verifies that every Home Manager command enters through `~/.nix-profile/bin` and resolves into `/nix/store`, rather than checking presence alone.
+  Phase 4 verifies that every Home Manager command, including all LSP commands, enters through `~/.nix-profile/bin` and resolves into `/nix/store`, rather than checking presence alone.
+  LSP checks include version probes plus initialize handshakes for pyright and TypeScript, with `NODE_PATH` removed for TypeScript.
+  Native Linux and macOS Home Manager CI runs those probes from each built profile, and template CI covers persisted Phase 3 data without the newer probe fields.
+  The Ubuntu E2E proves an LSP health-check failure restores existing profiles and removes profiles after a failed first activation.
   It also tests plain direnv loading, `use flake`, and the nix-direnv GC root.
   The native Ubuntu workflow performs a second apply and requires the Home Manager generation to remain unchanged.
   It also proves invalid selection and build failure preserve profiles, activation-time failure restores generation and package profiles, and failed first activation removes newly created profiles.

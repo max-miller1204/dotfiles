@@ -19,9 +19,9 @@ paths:
   The method vocabulary is `brew` / `cask` / `apt` (optional sibling `ppa`) / `aptrepo` / `flatpak` / `deburl` / `script` / `mise`, and each helper reproduces exactly that method's pre-refactor idempotency guard (`brew`/`cask` lean on brew's own idempotency, `apt`/`flatpak`/`deburl` guard on `command -v` or `flatpak info`, `aptrepo` is guarded at the call site).
   A package carries its method under `darwin:`, `linux:`, or the shared fallback `any:`; the loop takes the current OS's key when the package has one and falls back to `any:` otherwise, so an explicit `darwin:`/`linux:` always overrides `any:` and a package with neither is skipped on that OS.
   `any:` is for tools whose installer command is byte-identical on both OSes - today the three curl `script` installers treehouse, no-mistakes, and herdr - so the command is single-sourced and cannot drift on one OS during a URL or flag change; the `any:` branch is additionally gated on `$supportedOS` (darwin or linux) so an unsupported OS still installs nothing.
-  In Phase 3, no package-manifest entry uses `install_mise`; the helper remains for later migration cleanup.
-  The separate `mise use -g` block installs the remaining runtimes (node/python/rust/go/bun/uv) plus the npm-distributed Pi and Hunk CLIs.
-  Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, and nix-direnv, so none may appear in the package manifest or mise toolchain block.
+  In Phase 4, no package-manifest entry uses `install_mise`; the helper remains for later migration cleanup.
+  The separate `mise use -g` block installs only the remaining runtimes (node/python/rust/go/bun/uv) plus the npm-distributed Pi and Hunk CLIs.
+  Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools, so none may appear in the package manifest or mise toolchain block.
 
 ## Vendor script installers
 
@@ -33,9 +33,9 @@ paths:
   mise, brev and herdr need neither line - each writes to `~/.local/bin` unconditionally and creates it itself, and herdr never invokes sudo at all.
   The `mkdir` used to live inside the linux-only prep branch, so on macOS it never ran at all - keep both lines OS-agnostic and ahead of the loop, and note that `prepend_path` also makes the loop's own `command -v <bin>` guards see what a previous apply installed there.
 
-## Phase 3 package ownership
+## Phase 4 package ownership
 
-- Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, and nix-direnv on every platform.
+- Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools on every platform.
   The package manifest and mise toolchain block must not claim them.
   Existing mise or Homebrew copies remain installed for rollback, but Fish re-prepends `~/.nix-profile/bin` after mise and Homebrew initialization.
 - `jq`, `gh`, and `op` remain native because bootstrap and sanitized-path processes require them before runtime-manager activation.
@@ -43,4 +43,4 @@ paths:
 - The chezmoi-owned direnvrc sources `$HOME/.nix-profile/share/nix-direnv/direnvrc`; it must not download an implementation or move into Home Manager file ownership.
 - The Linux manifest remains order-sensitive: curl and ca-certificates precede mise, gnupg precedes the op and gh repositories, and software-properties-common precedes the ghostty PPA.
 - The chezmoi-owned tmux helper falls back to `~/.nix-profile/bin/fzf` when tmux sanitizes PATH.
-- Do not uninstall old package implementations during the Phase 3 rollback window.
+- Do not uninstall old package or LSP implementations during the Phase 4 rollback window.

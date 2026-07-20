@@ -214,6 +214,7 @@ jobs:
             imports = [
               ../modules/cli.nix
               ../modules/direnv.nix
+              ../modules/lsp.nix
               ../modules/services.nix
               ({ pkgs, ... }:
                 {
@@ -258,6 +259,7 @@ jobs:
             imports = [
               ../modules/cli.nix
               ../modules/direnv.nix
+              ../modules/lsp.nix
               ../modules/services.nix
               ({ lib, ... }:
                 {
@@ -283,6 +285,54 @@ jobs:
           cp "$backup" "$common_profile"
           trap - EXIT
 
+      - name: Failed LSP verification rolls back profiles
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          source_dir="$HOME/.local/share/chezmoi"
+          common_profile="$source_dir/nix/profiles/common.nix"
+          config_file="$HOME/.config/chezmoi/chezmoi.toml"
+          common_backup="$RUNNER_TEMP/common-lsp.nix"
+          config_backup="$RUNNER_TEMP/chezmoi-lsp.toml"
+          cp "$common_profile" "$common_backup"
+          cp "$config_file" "$config_backup"
+          restore_lsp_test() {
+            cp "$common_backup" "$common_profile"
+            cp "$config_backup" "$config_file"
+          }
+          trap restore_lsp_test EXIT
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          package_profile="$state_home/nix/profiles/profile"
+          before=$(readlink -f "$profile")
+          before_package=$(readlink -f "$package_profile")
+          cat >"$common_profile" <<'NIX'
+          {
+            imports = [
+              ../modules/cli.nix
+              ../modules/direnv.nix
+              ../modules/lsp.nix
+              ../modules/services.nix
+              ({ pkgs, ... }: { home.packages = [ pkgs.hello ]; })
+            ];
+          }
+          NIX
+          lsp_pattern='0,/verifyBin = "rust-analyzer"/'
+          lsp_pattern+='s//verifyBin = "missing-phase4-lsp"/'
+          sed -i.bak "$lsp_pattern" "$config_file"
+          if chezmoi apply --force --no-tty >failed-lsp-probe.log 2>&1; then
+            echo 'Broken LSP generation unexpectedly remained active' >&2
+            exit 1
+          fi
+          grep -q 'Missing Home Manager LSP command' failed-lsp-probe.log
+          grep -q 'Restoring Home Manager generation' failed-lsp-probe.log
+          test "$before" = "$(readlink -f "$profile")"
+          test "$before_package" = "$(readlink -f "$package_profile")"
+          cp "$common_backup" "$common_profile"
+          cp "$config_backup" "$config_file"
+          trap - EXIT
+
       - name: Failed first activation removes new profiles
         run: |
           set -euo pipefail
@@ -295,11 +345,17 @@ jobs:
           trap 'cp "$backup" "$common_profile"' EXIT
           first_state="$RUNNER_TEMP/first-home-manager-state"
           rm -rf "$first_state"
+          mkdir -p "$first_state/nix/profiles"
+          normal_state="${XDG_STATE_HOME:-$HOME/.local/state}"
+          normal_profile=$(readlink -f \
+            "$normal_state/nix/profiles/home-manager")
+          normal_package=$(readlink -f "$normal_state/nix/profiles/profile")
           cat >"$common_profile" <<'NIX'
           {
             imports = [
               ../modules/cli.nix
               ../modules/direnv.nix
+              ../modules/lsp.nix
               ../modules/services.nix
               ({ lib, ... }:
                 {
@@ -330,7 +386,53 @@ jobs:
             test -z "$(find "$first_state/nix/profiles" \
               -type l -print -quit)"
           fi
+          test "$normal_profile" = "$(readlink -f \
+            "$normal_state/nix/profiles/home-manager")"
+          test "$normal_package" = "$(readlink -f \
+            "$normal_state/nix/profiles/profile")"
           cp "$backup" "$common_profile"
+          trap - EXIT
+
+      - name: Failed first LSP verification removes new profiles
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          config_file="$HOME/.config/chezmoi/chezmoi.toml"
+          config_backup="$RUNNER_TEMP/chezmoi-first-lsp.toml"
+          cp "$config_file" "$config_backup"
+          trap 'cp "$config_backup" "$config_file"' EXIT
+          first_state="$RUNNER_TEMP/first-lsp-state"
+          rm -rf "$first_state"
+          mkdir -p "$first_state/nix/profiles"
+          normal_state="${XDG_STATE_HOME:-$HOME/.local/state}"
+          normal_profile=$(readlink -f \
+            "$normal_state/nix/profiles/home-manager")
+          normal_package=$(readlink -f "$normal_state/nix/profiles/profile")
+          lsp_pattern='0,/verifyBin = "rust-analyzer"/'
+          lsp_pattern+='s//verifyBin = "missing-phase4-lsp"/'
+          sed -i.bak "$lsp_pattern" "$config_file"
+          if XDG_STATE_HOME="$first_state" \
+            chezmoi apply --force --no-tty \
+            >failed-first-lsp-probe.log 2>&1; then
+            echo 'Broken first LSP generation unexpectedly remained active' >&2
+            exit 1
+          fi
+          grep -q 'Missing Home Manager LSP command' \
+            failed-first-lsp-probe.log
+          grep -q 'Removing the failed first Home Manager generation' \
+            failed-first-lsp-probe.log
+          test ! -e "$first_state/nix/profiles/home-manager"
+          test ! -e "$first_state/nix/profiles/profile"
+          if [[ -d "$first_state/nix/profiles" ]]; then
+            test -z "$(find "$first_state/nix/profiles" \
+              -type l -print -quit)"
+          fi
+          test "$normal_profile" = "$(readlink -f \
+            "$normal_state/nix/profiles/home-manager")"
+          test "$normal_package" = "$(readlink -f \
+            "$normal_state/nix/profiles/profile")"
+          cp "$config_backup" "$config_file"
           trap - EXIT
 
       - name: Verify end state
@@ -366,6 +468,8 @@ jobs:
             failed-build.log
             failed-activation.log
             failed-first-activation.log
+            failed-lsp-probe.log
+            failed-first-lsp-probe.log
             preflight.txt
             verify-report.txt
             ~/fishwatch.log

@@ -32,13 +32,18 @@ paths:
 
 ## Claude plugin state
 
+- `lspLanguages` in `.chezmoi.toml.tmpl` single-sources each LSP plugin, its Home Manager server command, and its runtime probe.
+  `run_before_15` verifies the selected Home Manager generation inside its rollback transaction, `run_after_50-verify-lsp-servers` repeats the checks after target updates, and `run_after_65-setup-claude-plugins` installs and enables the matching plugins.
+  The verifier falls back from `verifyBin` for persisted Phase 3 configs that predate the probe fields, because changing `.chezmoi.toml.tmpl` does not rewrite an existing machine's chezmoi config.
+  Installation methods do not belong in this table because Home Manager package ownership lives in `nix/modules/lsp.nix` and `nix/data/tool-ownership.json`.
 - `~/.claude/settings.json` is intentionally CLI-owned for plugins, and it drifts after every `chezmoi apply` by design.
   chezmoi fully manages that file, so each apply rewrites it from source and strips the `enabledPlugins` and `extraKnownMarketplaces` blocks; the `run_after_65` plugins script then re-asserts them via the `claude plugin` CLI.
   Because those blocks live only in the settings.json family and chezmoi strips them each apply, the re-assert script must be plain `run_after_` (every apply), never `run_onchange_after_` (which would not re-fire after a strip and would silently lose the state).
   A post-apply `chezmoi status` showing `dot_claude/settings.json` as modified is therefore expected, not a bug - do not "fix" it by re-vendoring those blocks.
 - Shared shell boilerplate for the `.chezmoiscripts/*.sh.tmpl` bootstrap scripts lives once in `.chezmoitemplates/` and is pulled in with `{{ template "lib-<x>.sh" . }}`, which inlines the partial's bytes verbatim at that point.
   `lib-log.sh` is `set -euo pipefail` plus the `log()` helper.
-  `lib-resolve.sh` defines `resolve_nix`, `resolve_mise`, `resolve_rustup <bin>`, and `prepend_path <dir>...`.
+  `lib-resolve.sh` defines `resolve_nix`, `resolve_mise`, and `prepend_path <dir>...`.
+  `lib-lsp-verify.sh` defines the shared transactional and post-apply LSP probes, and `lib-lsp-specs` renders their data from `lspLanguages`.
   `lib-apt.sh` defines the shared `install_aptrepo` path for 1Password and gh.
   A consumer that includes a partial gets all of its helpers, so some are defined-but-unused there; that is fine and stays shellcheck-clean at `--severity=warning` (the CI severity), which is why the partials are only shellchecked via the rendered scripts, never standalone.
   `lib-log.sh` intentionally has no trailing newline so it inlines byte-for-byte in place of the old three-line preamble; keep it that way and do not let an editor add one.

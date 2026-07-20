@@ -18,9 +18,9 @@
 # Ordered after run_once_before_10 installs the coding agents.
 #
 # The LSP plugin set derives from the single-source `lspLanguages` in
-# .chezmoi.toml.tmpl (the same table that drives run_onchange_after_50's server
-# install, so plugins and servers can never drift); the non-LSP plugins are
-# `extraClaudePlugins`.
+# .chezmoi.toml.tmpl. The same table drives run_after_50's Home Manager server
+# probes, so plugins and server verification cannot drift. The non-LSP plugins
+# are `extraClaudePlugins`.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
@@ -45,8 +45,8 @@ log "Registering marketplace: $MARKETPLACE_NAME"
 claude plugin marketplace add "$MARKETPLACE_URL" >/dev/null \
     || log "warn: marketplace add failed (retries next apply)"
 
-# Desired plugins: LSP plugins from the single-source lspLanguages, plus the
-# non-LSP extras. All live in the one official marketplace.
+# Desired plugins: LSP plugins from the single-source lspLanguages table, plus
+# the non-LSP extras. All live in the one official marketplace.
 PLUGINS=(
 {{- range .lspLanguages }}
     "{{ .plugin }}"

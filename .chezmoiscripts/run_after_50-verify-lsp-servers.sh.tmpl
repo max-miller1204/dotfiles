@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Verify that every enabled Claude Code LSP server is provided by the active
+# Home Manager profile and can start. This is a plain run_after hook so every
+# apply checks the generation that run_before_15 selected.
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+{{ template "lib-lsp-verify.sh" . }}
+LSP_SPECS=(
+{{ template "lib-lsp-specs" . }}
+)
+{{- $enabled := true }}
+{{- if hasKey . "homeManagerEnabled" }}
+{{-   $enabled = get . "homeManagerEnabled" }}
+{{- end }}
+
+{{ if not $enabled -}}
+log "Home Manager LSP verification disabled by homeManagerEnabled=false"
+exit 0
+{{ end -}}
+
+verify_home_manager_lsp_servers \
+    "$HOME/.nix-profile/bin" "${LSP_SPECS[@]}"

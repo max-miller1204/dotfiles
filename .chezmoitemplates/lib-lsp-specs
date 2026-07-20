@@ -1,0 +1,18 @@
+{{- range .lspLanguages }}
+{{- $verifyBin := .verifyBin }}
+{{- $probeBin := $verifyBin }}
+{{- if hasKey . "probeBin" }}
+{{-   $probeBin = get . "probeBin" }}
+{{- else if eq $verifyBin "pyright-langserver" }}
+{{-   $probeBin = "pyright" }}
+{{- end }}
+{{- $probeArg := "--version" }}
+{{- if hasKey . "probeArgs" }}
+{{-   $probeArg = index (get . "probeArgs") 0 }}
+{{- else if eq $verifyBin "gopls" }}
+{{-   $probeArg = "version" }}
+{{- end }}
+{{- $initializeProbe := or (get . "initializeProbe") (or (eq $verifyBin "pyright-langserver") (eq $verifyBin "typescript-language-server")) }}
+{{- $withoutNodePath := or (get . "initializeWithoutNodePath") (eq $verifyBin "typescript-language-server") }}
+    {{ printf "%s|%s|%s|%t|%t|%s" $verifyBin $probeBin $probeArg $initializeProbe $withoutNodePath .plugin | quote }}
+{{- end }}

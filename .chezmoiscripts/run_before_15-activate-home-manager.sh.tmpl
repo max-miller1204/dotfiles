@@ -5,6 +5,11 @@
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
+
+{{ template "lib-lsp-verify.sh" . }}
+LSP_SPECS=(
+{{ template "lib-lsp-specs" . }}
+)
 {{- $enabled := true }}
 {{- if hasKey . "homeManagerEnabled" }}
 {{-   $enabled = get . "homeManagerEnabled" }}
@@ -161,6 +166,11 @@ set +e
 "$NIX_BIN" run --no-write-lock-file "$FLAKE#home-manager" -- \
     switch --flake "$FLAKE#$HOME_MANAGER_CONFIGURATION"
 switch_status=$?
+if [[ "$switch_status" -eq 0 ]]; then
+    verify_home_manager_lsp_servers \
+        "$package_profile/bin" "${LSP_SPECS[@]}"
+    switch_status=$?
+fi
 set -e
 
 if [[ "$switch_status" -ne 0 ]]; then

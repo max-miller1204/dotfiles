@@ -37,57 +37,49 @@
     # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
     # its own question mark, so a literal one would double up.
     headless = {{ if $headless }}true{{ else }}false{{ end }}
-    # Home Manager is the active owner of the Phase 2 CLI bundle. Set this to
-    # false in chezmoi.toml for the emergency repository-rollback bypass.
+    # Home Manager is the active owner of the Phase 4 CLI, direnv, and LSP
+    # bundles. Set this to false for the emergency repository-rollback bypass.
     homeManagerEnabled = true
     nixSystem = "{{ $nixSystem }}"
     # DOTFILES_HM_CONFIGURATION is a CI/recovery override. The activation script
     # validates its output, username, home directory, and Nix system before use.
     homeManagerConfiguration = "{{ $homeManagerConfiguration }}"
-    # The mise typescript prefix relative to $HOME, shared by the fish config's
-    # NODE_PATH and the install script's resolution check (each prepends its own
-    # shell's home) so the derived path can't drift between the two.
-    tsNodeModulesRel = ".local/share/mise/installs/npm-typescript/latest/lib/node_modules"
     # Non-LSP Claude Code plugins (marketplace-qualified in the install script).
     # Installed/enabled by run_after_65-setup-claude-plugins.
     extraClaudePlugins = ["agent-sdk-dev", "skill-creator"]
 
-# Single source of truth for the Claude Code LSP language set. Each entry couples
-# the marketplace plugin (installed by run_after_65-setup-claude-plugins) to how
-# that language's server is installed (consumed by
-# run_onchange_after_50-install-lsp-servers and the lsp-upgrade fish function), so
-# adding or removing an LSP language is a one-place edit here. The plugin list and
-# the server-install list can no longer drift because both derive from this table.
-#   method = "mise"   -> miseTools installed via `mise use -g`
-#   method = "rustup" -> rustupComponent added to the active rust toolchain
-#   method = "os"     -> OS package (aptPackage on Linux, brewFormula on macOS)
+# Single source of truth for the enabled Claude Code LSP language set and its
+# runtime probes. Home Manager owns every server package in nix/modules/lsp.nix.
+# The plugin setup and run_after_50 verifier both derive from this table so an
+# enabled plugin cannot drift from its server health check.
 [[data.lspLanguages]]
     plugin = "rust-analyzer-lsp"
-    method = "rustup"
-    rustupComponent = "rust-analyzer"
     verifyBin = "rust-analyzer"
+    probeBin = "rust-analyzer"
+    probeArgs = ["--version"]
 [[data.lspLanguages]]
     plugin = "pyright-lsp"
-    method = "mise"
-    miseTools = ["npm:pyright"]
     verifyBin = "pyright-langserver"
+    probeBin = "pyright"
+    probeArgs = ["--version"]
+    initializeProbe = true
 [[data.lspLanguages]]
     plugin = "typescript-lsp"
-    method = "mise"
-    miseTools = ["npm:typescript-language-server", "npm:typescript"]
     verifyBin = "typescript-language-server"
-    verifyTsResolve = true
+    probeBin = "typescript-language-server"
+    probeArgs = ["--version"]
+    initializeProbe = true
+    initializeWithoutNodePath = true
 [[data.lspLanguages]]
     plugin = "gopls-lsp"
-    method = "mise"
-    miseTools = ["go:golang.org/x/tools/gopls"]
     verifyBin = "gopls"
+    probeBin = "gopls"
+    probeArgs = ["version"]
 [[data.lspLanguages]]
     plugin = "clangd-lsp"
-    method = "os"
     verifyBin = "clangd"
-    aptPackage = "clangd"
-    brewFormula = "llvm"
+    probeBin = "clangd"
+    probeArgs = ["--version"]
 
 {{- if $isWSL }}
 

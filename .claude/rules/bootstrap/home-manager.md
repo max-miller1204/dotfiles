@@ -37,10 +37,15 @@ paths:
 - The dedicated `hm-update` command introduced in the activation phase owns lock updates and must leave the updated lock file for review and commit.
 - Do not add automatic Nix garbage collection until a generation retention policy and soak period have been approved.
 
-## Phase 3 active package bundles
+## Phase 4 active package bundles
 
-- Phase 3 activates Home Manager on every apply before chezmoi changes managed target files.
-- Home Manager actively owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, and nix-direnv packages.
+- Phase 4 activates Home Manager on every apply before chezmoi changes managed target files.
+- Home Manager actively owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools.
+- The LSP packages expose pyright-langserver, tsc, tsserver, and clangd alongside their primary commands, and all exposed global commands are recorded in the ownership metadata.
+- `run_before_15` runs the LSP health checks inside the Home Manager switch transaction, so a failure restores both profiles or removes a failed first generation.
+- `run_after_50-verify-lsp-servers` repeats Home Manager profile resolution plus startup or version checks after target updates on every apply.
+- The TypeScript initialize probe runs without `NODE_PATH`, proving the Nix package closure replaces the former mise-prefix workaround.
+- The `clang-tools` input is narrowed to a clangd-only profile output so unrelated clang commands do not become accidental global Home Manager owners.
 - Home Manager still owns no writable configuration or user service.
 - The activation script validates the selected flake output against the current username, home directory, and Nix system.
 - WSL selection wins over the Linux headless profile.

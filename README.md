@@ -45,10 +45,10 @@ That's it - the install scripts run during `apply` and handle the rest:
 
 - installs system-integrated CLI packages and GUI apps from `.chezmoidata/packages.yaml`.
   GUI apps are skipped on WSL and headless Linux machines.
-- installs the remaining Phase 3 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
+- installs the remaining Phase 4 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
 - installs **Nix** through the Determinate installer on Linux.
   macOS requires the Determinate.pkg to be installed manually before `chezmoi init --apply`.
-- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, Neovim, `direnv`, and `nix-direnv`.
+- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, Neovim, `direnv`, `nix-direnv`, and the language-server bundle.
   Their writable configuration remains chezmoi-owned.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
@@ -59,13 +59,10 @@ That's it - the install scripts run during `apply` and handle the rest:
   instead of orphaning in the version-pinned runtime dir - so all four coding
   agents (Claude, Codex, OpenCode, pi) are present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
-- installs the **language servers** Claude Code's LSP plugins need: pyright,
-  typescript-language-server (+ typescript) and gopls as mise-managed tools,
-  rust-analyzer via the rustup component, and clangd from apt (Linux) or
-  Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
-  when that script changes. The language set (plugin + server install method)
-  lives once in the `lspLanguages` table in `.chezmoi.toml.tmpl`, shared by the
-  server install and the plugin install so the two can't drift
+- provides the **language servers** Claude Code's LSP plugins need through Home Manager: pyright, typescript-language-server plus TypeScript, gopls, rust-analyzer, and clangd.
+  A plain `run_after_50` hook verifies Home Manager ownership and startup or version behavior on every apply.
+  Its TypeScript initialize probe removes `NODE_PATH`, proving the Nix package closure is self-contained.
+  The language set lives once in the `lspLanguages` table in `.chezmoi.toml.tmpl`, shared by server verification and plugin setup so the two cannot drift.
 - installs/enables the **Claude Code plugins** from the official marketplace via
   the `claude plugin` CLI (`run_after_65`, every apply) rather than vendoring
   `enabledPlugins` into `settings.json` - see
@@ -87,7 +84,7 @@ chsh -s "$(command -v fish)"
 ## Home Manager migration
 
 The repository contains a standalone flake under `nix/` for a staged migration away from mise.
-Phase 3 gives Home Manager exclusive ownership of the CLI and direnv bundles listed above.
+Phase 4 gives Home Manager exclusive ownership of the CLI, direnv, and LSP bundles listed above.
 Home Manager owns only package binaries at this stage.
 Chezmoi still owns Fish, tmux, Neovim, Atuin, starship, and other writable configuration.
 No Home Manager service is enabled.
@@ -108,7 +105,7 @@ WSL selection takes precedence over the Linux headless profile.
 Every `chezmoi apply` records the active generation in `~/.local/state/dotfiles/home-manager-before-switch` and runs Home Manager before changing managed targets.
 When a switch changes the generation, it preserves the old path in `~/.local/state/dotfiles/home-manager-previous-generation`.
 A failed build leaves the previous generation active and stops the apply.
-If activation fails after profiles change, the wrapper restores both generation and package profiles; a failed first activation removes the new profiles.
+If activation or its transactional LSP health checks fail after profiles change, the wrapper restores both generation and package profiles; a failed first activation removes the new profiles.
 To disable activation during repository recovery, set `homeManagerEnabled = false` in `~/.config/chezmoi/chezmoi.toml`.
 To roll back packages, list generations and run the selected generation's activation script.
 The recorded path is `<none>` on a machine that has never had an earlier generation.
@@ -123,7 +120,7 @@ if [ "$previous" != '<none>' ]; then
 fi
 ```
 
-Repository rollback is separate: revert the Phase 3 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
+Repository rollback is separate: revert the Phase 4 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
 Old mise and Homebrew implementations are intentionally not uninstalled during the rollback window.
 Do not garbage-collect Nix generations during the migration soak.
 
@@ -261,7 +258,9 @@ The Claude Code plugins and their marketplace are owned by the `claude plugin` C
 It must be a plain `run_after_` script (runs on every apply), not a `run_onchange_after_`: that state lives only in the settings.json family, which chezmoi fully manages - every `chezmoi apply` rewrites `~/.claude/settings.json` from source and strips anything a CLI appended - and a `run_onchange_` keyed to the script's own hash would not re-fire after that strip (its hash is unchanged), silently leaving the plugins disabled.
 The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin re-assert re-adds its blocks. That drift is by design, not a bug (see [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md)).
 It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
-The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
+The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl`.
+The same table drives `run_after_50` server verification, while Home Manager package ownership is declared in `nix/modules/lsp.nix` and `nix/data/tool-ownership.json`.
+Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
 
 **Codex config ownership.**
 `~/.codex/config.toml` is assembled (not a single chezmoi target) so the managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
@@ -283,7 +282,7 @@ Cross-platform:
 
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` - custom Fish functions, including `update-all`, `hm-update`, and the migration-stage `lsp-upgrade` command.
+- `dot_config/fish/functions/*.fish` - custom Fish functions, including `update-all` and `hm-update`.
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -360,14 +359,15 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
-- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew), all derived from the single-source `lspLanguages` table, whenever the script changes
+- `.chezmoiscripts/run_after_50-verify-lsp-servers.sh.tmpl` - repeats after target updates the transactional LSP checks run by `run_before_15`; servers must resolve from Home Manager into `/nix/store`, pass version probes, and initialize where needed, with the TypeScript handshake running without `NODE_PATH`.
 - `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (that state lives in the chezmoi-rewritten settings.json, so it must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode) and the shared `~/.agents/skills` tree pi reads; the skill is `.chezmoiignore`d in both locations, so brev owns it with no chezmoi conflict
 - `.chezmoiscripts/run_after_71-sync-no-mistakes-skill.sh.tmpl` - keeps the ignored Claude and shared-agent no-mistakes skills aligned with the installed CLI release, fetching only when its release marker or either skill checksum differs
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
 `lib-log.sh` provides `set -euo pipefail` and `log()`.
-`lib-resolve.sh` provides Nix, mise, rustup, and PATH resolution helpers.
+`lib-resolve.sh` provides Nix, mise, and PATH resolution helpers.
+`lib-lsp-verify.sh` provides transactional Home Manager path and LSP runtime checks, with rendered specifications from `lib-lsp-specs`.
 `lib-apt.sh` provides the shared third-party apt repository installer for 1Password and gh.
 `lib-install.sh` provides package-manifest method helpers.
 `lib-codex-sync.sh` provides the shared file preparation for Codex sync scripts.
@@ -509,8 +509,9 @@ the repo and need manual hand-off.
 
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
-   mise list                 # node, python, rust, go, bun, uv, LSP servers, pi, Hunk
-   which eza fzf nvim         # each path starts under ~/.nix-profile/bin
+   mise list                 # node, python, rust, go, bun, uv, pi, Hunk
+   which eza fzf nvim clangd gopls pyright-langserver rust-analyzer typescript-language-server
+                              # each path starts under ~/.nix-profile/bin
    which brew fish claude codex opencode pi op
    op whoami                 # confirms 1Password sign-in
    ```
@@ -526,4 +527,3 @@ the repo and need manual hand-off.
 - The install script is `run_once` — it only reruns if its content changes
 - `update-all` refreshes OS packages, remaining mise tools, and chezmoi without changing the Home Manager lock file.
 - `hm-update` updates `nix/flake.lock`, checks the flake, and builds the selected configuration for review.
-- `lsp-upgrade` (fish function) does a targeted upgrade of just the Claude Code language servers. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage

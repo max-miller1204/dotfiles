@@ -18,7 +18,9 @@ APPLY_LOG="${APPLY_LOG:-}"
 # ownership boundary instead of presence alone.
 MANIFEST_BINS=(fish git jq curl wget gpg add-apt-repository zenity mise
 	gh op pfetch brev treehouse no-mistakes herdr)
-HOME_MANAGER_BINS=(eza gum starship atuin bat fd rg zoxide tmux fzf nvim direnv)
+HOME_MANAGER_BINS=(atuin bat clangd direnv eza fd fzf gopls gum nvim pyright
+	pyright-langserver rg rust-analyzer starship tmux tsc tsserver
+	typescript-language-server zoxide)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 TOOLCHAIN_BINS=(node python cargo go bun uv hunk)
@@ -38,6 +40,47 @@ home_manager_owns() {
 	[[ "$path" == "$HOME/.nix-profile/bin/"* ]] || return 1
 	resolved="$(readlink -f "$path")"
 	[[ "$resolved" == /nix/store/* ]]
+}
+lsp_initialize_works() {
+	local command_name="$1"
+	local without_node_path="$2"
+	local input output payload pid probe_dir result=1 server
+	server="$(fish_path "$command_name")" || return 1
+	probe_dir="$(mktemp -d)" || return 1
+	input="$probe_dir/input"
+	output="$probe_dir/output"
+	mkfifo "$input" || {
+		rm -rf "$probe_dir"
+		return 1
+	}
+	exec 3<>"$input"
+	if [[ "$without_node_path" == true ]]; then
+		env -u NODE_PATH "$server" --stdio <"$input" >"$output" \
+			2>"$probe_dir/error" &
+	else
+		"$server" --stdio <"$input" >"$output" 2>"$probe_dir/error" &
+	fi
+	pid=$!
+	payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}'
+	printf 'Content-Length: %d\r\n\r\n%s' "${#payload}" "$payload" >&3
+	for _ in {1..50}; do
+		if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"result"' "$output"; then
+			result=0
+			break
+		fi
+		if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"error"' "$output"; then
+			break
+		fi
+		if ! kill -0 "$pid" 2>/dev/null; then
+			break
+		fi
+		sleep 0.1
+	done
+	kill "$pid" >/dev/null 2>&1 || true
+	wait "$pid" 2>/dev/null || true
+	exec 3>&-
+	rm -rf "$probe_dir"
+	return "$result"
 }
 plain_direnv_works() {
 	local direnv_bin project result
@@ -96,7 +139,7 @@ EOF
 
 if [[ "$MODE" == "preflight" ]]; then
 	echo "== preflight inventory (bins present BEFORE apply; install NOT proven for these) =="
-	for b in "${MANIFEST_BINS[@]}" "${HOME_MANAGER_BINS[@]}" "${GUI_BINS[@]}" "${TOOLCHAIN_BINS[@]}" "${AGENT_BINS[@]}" "${LSP_BINS[@]}"; do
+	for b in "${MANIFEST_BINS[@]}" "${HOME_MANAGER_BINS[@]}" "${GUI_BINS[@]}" "${TOOLCHAIN_BINS[@]}" "${AGENT_BINS[@]}"; do
 		if command -v "$b" >/dev/null 2>&1; then
 			echo "PREEXISTING: $b -> $(command -v "$b")"
 		else
@@ -165,8 +208,20 @@ echo "== coding agents + nix =="
 for b in "${AGENT_BINS[@]}"; do hard "agent $b" fish_has "$b"; done
 hard "nix" fish_has nix
 
-echo "== LSP servers =="
-for b in "${LSP_BINS[@]}"; do hard "lsp $b" fish_has "$b"; done
+echo "== Home Manager LSP startup/version probes =="
+for b in "${LSP_BINS[@]}"; do hard "Home Manager owns LSP $b" home_manager_owns "$b"; done
+hard "rust-analyzer version probe" fish -l -i -c 'rust-analyzer --version'
+hard "pyright version probe" fish -l -i -c 'pyright --version'
+hard "pyright language server initialize probe" \
+	lsp_initialize_works pyright-langserver false
+hard "TypeScript language server version probe" \
+	fish -l -i -c 'typescript-language-server --version'
+hard "TypeScript language server initialize probe without NODE_PATH" \
+	lsp_initialize_works typescript-language-server true
+hard "gopls version probe" fish -l -i -c 'gopls version'
+hard "clangd version probe" fish -l -i -c 'clangd --version'
+hard "Fish has no mise-specific NODE_PATH" fish -l -i -c \
+	'if set -q NODE_PATH; not string match -q "*/mise/*" -- $NODE_PATH; end'
 
 echo "== login shell =="
 FISH_PATH="$(command -v fish || true)"

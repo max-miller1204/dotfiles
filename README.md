@@ -15,7 +15,7 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 | `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
 | `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
 | `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
-| `update-all` | Fish function that refreshes OS packages, remaining mise tools, and chezmoi without changing `nix/flake.lock`. |
+| `update-all` | Refreshes OS packages, mutable native runtimes, Pi, Hunk, and chezmoi without changing `nix/flake.lock`. |
 | `hm-update` | Updates `nix/flake.lock`, checks the flake, and builds the selected Home Manager configuration for review. |
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
@@ -45,20 +45,18 @@ That's it - the install scripts run during `apply` and handle the rest:
 
 - installs system-integrated CLI packages and GUI apps from `.chezmoidata/packages.yaml`.
   GUI apps are skipped on WSL and headless Linux machines.
-- installs the remaining Phase 4 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
 - installs **Nix** through the Determinate installer on Linux.
   macOS requires the Determinate.pkg to be installed manually before `chezmoi init --apply`.
-- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, Neovim, `direnv`, `nix-direnv`, and the language-server bundle.
+- activates standalone **Home Manager** for the CLI, direnv, and language-server bundles plus fnm, uv, rustup, Go, and Bun.
   Their writable configuration remains chezmoi-owned.
+- installs the current Node LTS through fnm, exact Python `3.14.6` through uv, and stable Rust through rustup.
+  fnm automatic project switching stays disabled because project flakes own directory-scoped overrides.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
-- installs the **Codex** and **OpenCode** agents via their own official
-  installers too, and the **pi** agent (`@earendil-works/pi-coding-agent`,
-  npm-distributed) as a mise-managed npm tool so it survives a node upgrade
-  instead of orphaning in the version-pinned runtime dir - so all four coding
-  agents (Claude, Codex, OpenCode, pi) are present and interchangeable - see
-  [Agents (multi-agent)](#agents-multi-agent)
+- installs the **Codex** and **OpenCode** agents through their official installers.
+  Pi and Hunk install from npm's `latest` channels under the stable `~/.local/share/npm` prefix, so all four coding agents are present and interchangeable.
+  See [Agents (multi-agent)](#agents-multi-agent).
 - provides the **language servers** Claude Code's LSP plugins need through Home Manager: pyright, typescript-language-server plus TypeScript, gopls, rust-analyzer, and clangd.
   A plain `run_after_50` hook verifies Home Manager ownership and startup or version behavior on every apply.
   Its TypeScript initialize probe removes `NODE_PATH`, proving the Nix package closure is self-contained.
@@ -84,8 +82,8 @@ chsh -s "$(command -v fish)"
 ## Home Manager migration
 
 The repository contains a standalone flake under `nix/` for a staged migration away from mise.
-Phase 4 gives Home Manager exclusive ownership of the CLI, direnv, and LSP bundles listed above.
-Home Manager owns only package binaries at this stage.
+Phase 5 gives Home Manager exclusive ownership of the CLI, direnv, LSP, and runtime-manager executable bundles listed above.
+Home Manager owns package binaries only.
 Chezmoi still owns Fish, tmux, Neovim, Atuin, starship, and other writable configuration.
 No Home Manager service is enabled.
 
@@ -96,7 +94,7 @@ nix flake check --no-write-lock-file "path:$PWD/nix"
 ```
 
 The pinned inputs are nixpkgs `nixos-26.05` and Home Manager `release-26.05`, with `home.stateVersion = "26.05"`.
-`nix/data/tool-ownership.json` records active and target ownership.
+`nix/data/tool-ownership.json` records the exact Home Manager and external runtime ownership boundaries.
 Real configurations cover Linux desktop, Linux headless, WSL, and both macOS architectures for user `max`.
 The matching `ci@` outputs use the CI `runner` user's home paths.
 `DOTFILES_HM_CONFIGURATION` can select one of those outputs for CI or recovery, and activation rejects a username, home directory, or system mismatch.
@@ -120,9 +118,24 @@ if [ "$previous" != '<none>' ]; then
 fi
 ```
 
-Repository rollback is separate: revert the Phase 4 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
+A complete Phase 5 rollback combines the previous Home Manager generation with a repository revert because the package profile, Fish PATH, and runtime proxies change together.
+Before applying the reverted Phase 4 tree, restore any archived Rust proxy that Phase 5 replaced.
+
+```sh
+rollback_dir=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/runtime-rollback/rustup-proxies
+for saved in "$rollback_dir"/*; do
+  [ -e "$saved" ] || continue
+  name=$(basename "$saved")
+  rm -f "$HOME/.cargo/bin/$name"
+  mv "$saved" "$HOME/.cargo/bin/$name"
+done
+# Revert the Phase 5 commit in the source tree, then:
+chezmoi apply
+```
+
+Set `homeManagerEnabled = false` only if activation cannot run during repository recovery.
 Old mise and Homebrew implementations are intentionally not uninstalled during the rollback window.
-Do not garbage-collect Nix generations during the migration soak.
+Do not garbage-collect Nix generations or delete mise data during the migration soak.
 
 ## Secrets (1Password)
 
@@ -234,7 +247,8 @@ Four coding agents are first-class and interchangeable: **Claude Code**, **Codex
 They share one set of global instructions, so you can switch between them with the same rules.
 
 Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
-pi and Hunk are npm-distributed, so they install as mise-managed npm tools (`npm:@earendil-works/pi-coding-agent` and `npm:hunkdiff`) that survive node upgrades.
+Pi and Hunk are npm-distributed and install from their `latest` channels under `~/.local/share/npm`.
+The stable prefix survives fnm Node LTS upgrades.
 A fresh apply has all four agents and the Hunk review CLI present.
 
 ### Shared instructions (single-source AGENTS.md)
@@ -272,7 +286,7 @@ Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small sepa
 pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models and published extension packages, including `npm:pi-git-diff` and `npm:@tintinweb/pi-subagents`), `agent/agents/` (the read-only `Explore` and `Plan` subagent definitions), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, and `/handoff` extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
 Subagent routing lives in the `agent/agents/*.md` frontmatter, not in `settings.json`: `npm:@tintinweb/pi-subagents` discovers those files and they replace the settings-level `subagents.agentOverrides` block the previous `npm:pi-subagents` package used.
 The Git diff viewer is installed from npm rather than duplicated under `agent/extensions/`.
-Hunk is also installed from npm, and Pi loads its bundled review skill from the stable `npm-hunkdiff/latest` mise path declared in `agent/settings.json`.
+Hunk is also installed from npm, and Pi loads its bundled review skill from `~/.local/share/npm/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md`.
 pi's runtime state - credentials, sessions, run history, npm package checkouts, the pi-mcp-adapter caches, the generated models store, and scratch dirs - is deliberately not managed; `.chezmoiignore`'s pi block is the authoritative list of those paths.
 One caveat: pi itself rewrites `agent/settings.json` at runtime (model switches, `lastChangelogVersion` bumps), so `chezmoi status` can show it as modified; fold deliberate changes back with `chezmoi add ~/.pi/agent/settings.json`, or `chezmoi apply` to reset to the managed state.
 
@@ -293,6 +307,7 @@ Cross-platform:
 - `dot_config/direnv/direnvrc` - chezmoi-owned integration that sources Home Manager's pinned nix-direnv package and provides `use flake` for per-directory Nix devshells.
   The `direnv hook fish` in `config.fish` resolves Home Manager's direnv after its profile is re-prepended.
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, and its install method under `darwin:`/`linux:`, or the shared `any:` fallback for tools whose installer is identical on both) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
+- `.chezmoidata/runtimes.yaml` - native runtime selectors, Rust proxy names, npm `latest` package channels, and the stable npm prefix used by the two runtime setup scripts
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
@@ -354,8 +369,10 @@ To update the snapshot after changing settings: re-export from Raycast
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, Hunk, the coding agents (Claude, Codex, OpenCode, pi), fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - native packages, Nix, vendor-installed coding agents, and fish-as-login-shell
 - `.chezmoiscripts/run_before_15-activate-home-manager.sh.tmpl` - activates the selected standalone Home Manager generation on every apply, before chezmoi changes managed targets; runs the transactional LSP health checks inside that switch and rolls profiles back on failure (see [Home Manager migration](#home-manager-migration))
+- `.chezmoiscripts/run_onchange_after_16-ensure-native-runtimes.sh.tmpl` - installs the fnm Node LTS, uv Python pin, and stable rustup toolchain after manager activation
+- `.chezmoiscripts/run_onchange_after_17-install-npm-tools.sh.tmpl` - installs Pi and Hunk from npm `latest` under the stable user prefix
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
@@ -368,7 +385,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
 `lib-log.sh` provides `set -euo pipefail` and `log()`.
-`lib-resolve.sh` provides Nix, mise, and PATH resolution helpers.
+`lib-resolve.sh` provides Nix, portable symlink, and PATH resolution helpers.
 `lib-lsp-verify.sh` provides transactional Home Manager path and LSP runtime checks, with rendered specifications from `lib-lsp-specs`.
 `lib-apt.sh` provides the shared third-party apt repository installer for 1Password and gh.
 `lib-install.sh` provides package-manifest method helpers.
@@ -398,9 +415,8 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-The first apply installs CLIs, the remaining mise toolchains, Nix, the coding
-agents (Claude, Codex, OpenCode, pi), and the 1Password CLI, activates the
-Home Manager bundle (the `max@wsl` output), then sets fish as your login shell.
+The first apply installs native CLIs, Nix, vendor coding agents, and the 1Password CLI.
+It activates the Home Manager `max@wsl` bundle, installs native-managed runtimes plus Pi and Hunk, then sets fish as the login shell.
 
 ### 1Password sign-in from WSL
 
@@ -511,10 +527,12 @@ the repo and need manual hand-off.
 
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
-   mise list                 # node, python, rust, go, bun, uv, pi, Hunk
+   npm config get prefix     # ~/.local/share/npm
    which eza fzf nvim clangd gopls pyright-langserver rust-analyzer typescript-language-server
                               # each path starts under ~/.nix-profile/bin
-   which brew fish claude codex opencode pi op
+   which fnm uv rustup go bun # each path starts under ~/.nix-profile/bin
+   which node npm npx python cargo pi hunk
+   which brew fish claude codex opencode op
    op whoami                 # confirms 1Password sign-in
    ```
 
@@ -526,6 +544,8 @@ the repo and need manual hand-off.
 
 - `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
-- The install script is `run_once` — it only reruns if its content changes
-- `update-all` refreshes OS packages, remaining mise tools, and chezmoi without changing the Home Manager lock file.
+- The native package install script is `run_once`, so it reruns only if its content changes.
+- The native runtime and npm tool scripts are `run_onchange`, so policy changes self-heal without contacting moving channels on every apply.
+- `update-all` refreshes OS packages, Node LTS, the pinned Python installation, stable Rust, Pi, Hunk, and chezmoi without changing the Home Manager lock file.
 - `hm-update` updates `nix/flake.lock`, checks the flake, and builds the selected configuration for review.
+  Home Manager updates Go, Bun, fnm, uv, and rustup only through this reviewed flow.

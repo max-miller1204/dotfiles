@@ -37,8 +37,8 @@
     # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
     # its own question mark, so a literal one would double up.
     headless = {{ if $headless }}true{{ else }}false{{ end }}
-    # Home Manager is the active owner of the Phase 4 CLI, direnv, and LSP
-    # bundles. Set this to false for the emergency repository-rollback bypass.
+    # Home Manager owns the Phase 5 CLI, direnv, LSP, and runtime-manager
+    # executable bundles. Set false for the emergency repository-rollback bypass.
     homeManagerEnabled = true
     nixSystem = "{{ $nixSystem }}"
     # DOTFILES_HM_CONFIGURATION is a CI/recovery override. The activation script

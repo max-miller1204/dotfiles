@@ -1,4 +1,4 @@
-function update-all --description 'Update every package source this dotfiles repo installs'
+function update-all --description 'Update native packages, mutable runtimes, npm tools, and chezmoi'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
 
@@ -8,23 +8,66 @@ function update-all --description 'Update every package source this dotfiles rep
     and brew upgrade
     and brew upgrade --cask
     and brew cleanup
+    or return
     {{- else }}
     echo "$section==> apt$reset"
     sudo apt update
     and sudo apt upgrade -y
     and sudo apt autoremove -y
+    or return
 
     if command -q flatpak
         echo "$section==> flatpak$reset"
         flatpak update -y
+        or return
     end
     {{- end }}
 
-    echo "$section==> mise$reset"
-    mise upgrade
+    set -l fnm_bin $HOME/.nix-profile/bin/fnm
+    set -l uv_bin $HOME/.nix-profile/bin/uv
+    set -l rustup_bin $HOME/.nix-profile/bin/rustup
+    set -l npm_prefix $HOME/{{ .npmTools.prefixRel }}
+
+    echo "$section==> Node LTS (fnm)$reset"
+    set -lx FNM_DIR $HOME/.local/share/fnm
+    env FNM_BIN=$fnm_bin FNM_DIR=$FNM_DIR bash -c '
+        set -euo pipefail
+        eval "$($FNM_BIN env --shell bash)"
+        $FNM_BIN install --lts --use
+        node_version="$($FNM_BIN current)"
+        test -n "$node_version"
+        test "$node_version" != system
+        $FNM_BIN default "$node_version"
+    '
+    or return
+
+    echo "$section==> Python {{ .runtimes.python.version }} (uv pin)$reset"
+    env UV_PREVIEW_FEATURES=python-install-default \
+        UV_PYTHON_INSTALL_DIR=$HOME/.local/share/uv/python \
+        PATH=$HOME/.local/bin:$PATH \
+        $uv_bin python install {{ .runtimes.python.version | quote }} \
+        --default --no-progress
+    or return
+
+    echo "$section==> Rust {{ .runtimes.rust.toolchain }} (rustup)$reset"
+    env -u RUSTUP_TOOLCHAIN RUSTUP_HOME=$HOME/.rustup CARGO_HOME=$HOME/.cargo \
+        $rustup_bin update {{ .runtimes.rust.toolchain | quote }}
+    and env -u RUSTUP_TOOLCHAIN RUSTUP_HOME=$HOME/.rustup \
+        CARGO_HOME=$HOME/.cargo \
+        $rustup_bin default {{ .runtimes.rust.toolchain | quote }}
+    or return
+
+    echo "$section==> Pi and Hunk (npm latest)$reset"
+    set -l node_bin $FNM_DIR/aliases/default/bin
+    set -l npm_packages
+{{- range .npmTools.packages }}
+    set -a npm_packages {{ printf "%s@%s" .name .channel | quote }}
+{{- end }}
+    env NPM_CONFIG_PREFIX=$npm_prefix PATH=$node_bin:$PATH \
+        $node_bin/npm install --global --prefix $npm_prefix $npm_packages
+    or return
 
     echo "$section==> chezmoi$reset"
     chezmoi upgrade
     and chezmoi update
-
 end

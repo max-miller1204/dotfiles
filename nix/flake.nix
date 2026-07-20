@@ -132,9 +132,9 @@
           active = toolOwnership.active.homeManager;
           target = toolOwnership.target.homeManager;
         in
-        assert toolOwnership.migrationPhase == 4;
-        assert lib.subtractLists target.packages active.packages == [ ];
-        assert lib.subtractLists target.commands active.commands == [ ];
+        assert toolOwnership.migrationPhase == 5;
+        assert active.packages == target.packages;
+        assert active.commands == target.commands;
         assert active.writableConfigs == [ ];
         assert active.services == [ ];
         pkgs.runCommand "home-manager-ownership-policy" { } ''

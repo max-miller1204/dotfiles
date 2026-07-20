@@ -107,6 +107,17 @@ jobs:
           mkdir -p "$HOME/.local/share/chezmoi"
           cp -a "$GITHUB_WORKSPACE/." "$HOME/.local/share/chezmoi/"
           git -C "$HOME/.local/share/chezmoi" rev-parse HEAD
+          mkdir -p "$HOME/.local/bin" "$HOME/.config/mise" \
+            "$HOME/.local/share/mise/shims" \
+            "$HOME/.local/share/mise/installs/legacy-runtime"
+          printf '%s\n' retained-mise-executable >"$HOME/.local/bin/mise"
+          printf '%s\n' retained-mise-shim \
+            >"$HOME/.local/share/mise/shims/legacy-node"
+          printf '%s\n' retained-mise-install \
+            >"$HOME/.local/share/mise/installs/legacy-runtime/marker"
+          printf '%s\n' retained-mise-config >"$HOME/.config/mise/config.toml"
+          chmod +x "$HOME/.local/bin/mise" \
+            "$HOME/.local/share/mise/shims/legacy-node"
 
       - name: Install chezmoi (README one-liner)
         run: |
@@ -176,6 +187,12 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
           after=$(readlink -f "$profile")
           test "$before" = "$after"
+          runtime_pattern='Ensuring current Node LTS'
+          runtime_pattern+='|Installing current Pi and Hunk'
+          if grep -qE "$runtime_pattern" second-apply.log; then
+            echo 'Unchanged runtime run_onchange scripts reran' >&2
+            exit 1
+          fi
           sed 's/^/SECOND-APPLY: /' second-apply.log >>apply.log
 
       - name: Reject invalid selection and preserve the generation
@@ -215,6 +232,7 @@ jobs:
               ../modules/cli.nix
               ../modules/direnv.nix
               ../modules/lsp.nix
+              ../modules/runtimes.nix
               ../modules/services.nix
               ({ pkgs, ... }:
                 {
@@ -260,6 +278,7 @@ jobs:
               ../modules/cli.nix
               ../modules/direnv.nix
               ../modules/lsp.nix
+              ../modules/runtimes.nix
               ../modules/services.nix
               ({ lib, ... }:
                 {
@@ -313,6 +332,7 @@ jobs:
               ../modules/cli.nix
               ../modules/direnv.nix
               ../modules/lsp.nix
+              ../modules/runtimes.nix
               ../modules/services.nix
               ({ pkgs, ... }: { home.packages = [ pkgs.hello ]; })
             ];
@@ -356,6 +376,7 @@ jobs:
               ../modules/cli.nix
               ../modules/direnv.nix
               ../modules/lsp.nix
+              ../modules/runtimes.nix
               ../modules/services.nix
               ({ lib, ... }:
                 {

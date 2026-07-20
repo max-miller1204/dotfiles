@@ -32,8 +32,8 @@ in
         message = "Unsupported tool ownership schema version";
       }
       {
-        assertion = toolOwnership.migrationPhase == 4;
-        message = "The active Home Manager modules require migration phase 4 ownership data";
+        assertion = toolOwnership.migrationPhase == 5;
+        message = "The active Home Manager modules require migration phase 5 ownership data";
       }
       {
         assertion = packageClaims == activeOwnership.packages;
@@ -45,15 +45,15 @@ in
       }
       {
         assertion = activeOwnership.writableConfigs == [ ];
-        message = "Phase 4 Home Manager must not claim writable configuration files";
+        message = "Phase 5 Home Manager must not claim writable configuration files";
       }
       {
         assertion = config.home.file == { };
-        message = "Phase 4 Home Manager must not generate files in the home directory";
+        message = "Phase 5 Home Manager must not generate files in the home directory";
       }
       {
         assertion = lib.attrByPath [ "xdg" "configFile" ] { } config == { };
-        message = "Phase 4 Home Manager must not generate XDG configuration files";
+        message = "Phase 5 Home Manager must not generate XDG configuration files";
       }
       {
         assertion = configurationName != "" && profileName != "";

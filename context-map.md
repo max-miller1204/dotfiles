@@ -23,10 +23,10 @@ Also read the package and CI rules below when an ownership change moves a comman
 
 Read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md) for changes involving:
 
-- `.chezmoidata/packages.yaml`
+- `.chezmoidata/packages.yaml` or `.chezmoidata/runtimes.yaml`
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl`
 - `.chezmoitemplates/lib-install.sh`, `lib-apt.sh`, or `lib-resolve.sh`
-- package ordering, install methods, mise-managed tools, vendor install scripts, or native packages
+- package ordering, native runtime managers, npm-prefix tools, vendor install scripts, or native packages
 
 ## Script and tool-owned configuration
 

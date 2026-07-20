@@ -42,7 +42,7 @@ paths:
   A post-apply `chezmoi status` showing `dot_claude/settings.json` as modified is therefore expected, not a bug - do not "fix" it by re-vendoring those blocks.
 - Shared shell boilerplate for the `.chezmoiscripts/*.sh.tmpl` bootstrap scripts lives once in `.chezmoitemplates/` and is pulled in with `{{ template "lib-<x>.sh" . }}`, which inlines the partial's bytes verbatim at that point.
   `lib-log.sh` is `set -euo pipefail` plus the `log()` helper.
-  `lib-resolve.sh` defines `resolve_nix`, `resolve_mise`, and `prepend_path <dir>...`.
+  `lib-resolve.sh` defines `resolve_nix`, the BSD-compatible `resolve_link`, and `prepend_path <dir>...`.
   `lib-lsp-verify.sh` defines the shared transactional and post-apply LSP probes, and `lib-lsp-specs` renders their data from `lspLanguages`.
   `lib-apt.sh` defines the shared `install_aptrepo` path for 1Password and gh.
   A consumer that includes a partial gets all of its helpers, so some are defined-but-unused there; that is fine and stays shellcheck-clean at `--severity=warning` (the CI severity), which is why the partials are only shellchecked via the rendered scripts, never standalone.
@@ -58,6 +58,13 @@ paths:
   chezmoi skips dot-prefixed source entries EXCEPT its own reserved `.chezmoi*` names, which are very much source state: `.chezmoiscripts/` renders to applied scripts (they show up as targets under `chezmoi managed`), and `.chezmoidata/`, `.chezmoitemplates/`, `.chezmoiignore`, and `.chezmoi.toml.tmpl` feed rendering without producing targets of their own.
   Everything else dot-prefixed (`.claude/`, `.github/`) is invisible to `chezmoi apply`, so only the plain root files need listing, which is why `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are there while `.claude/rules` deliberately is not.
   Verify a suspected ignore entry with `chezmoi managed` before adding it - an entry that looks protective can instead silently pre-empt a destination path the repo may want to manage later.
+
+## Native runtime script ordering
+
+- `run_onchange_after_16` and `run_onchange_after_17` run after Home Manager activation because fnm, uv, and rustup do not exist earlier on a fresh machine.
+- Both scripts default to enabled for persisted configs that predate `homeManagerEnabled`, and both skip when the emergency bypass is false.
+- Runtime selectors and npm package channels come only from `.chezmoidata/runtimes.yaml` so a data change updates the rendered script hash.
+- The runtime scripts may write native-manager state but must never read secrets, invoke `op`, delete mise data, or write into the Nix store.
 
 ## Headless and WSL rendering
 

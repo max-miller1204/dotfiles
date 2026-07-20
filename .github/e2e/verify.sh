@@ -16,19 +16,22 @@ APPLY_LOG="${APPLY_LOG:-}"
 
 # Expected command names, split by active owner so this file also verifies the
 # ownership boundary instead of presence alone.
-MANIFEST_BINS=(fish git jq curl wget gpg add-apt-repository zenity mise
+MANIFEST_BINS=(fish git jq curl wget gpg add-apt-repository zenity
 	gh op pfetch brev treehouse no-mistakes herdr)
-HOME_MANAGER_BINS=(atuin bat clangd direnv eza fd fzf gopls gum nvim pyright
-	pyright-langserver rg rust-analyzer starship tmux tsc tsserver
-	typescript-language-server zoxide)
+HOME_MANAGER_BINS=(atuin bat bun clangd direnv eza fd fnm fzf go gofmt gopls
+	gum nvim pyright pyright-langserver rg rust-analyzer rustup starship tmux tsc
+	tsserver typescript-language-server uv zoxide)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
-TOOLCHAIN_BINS=(node python cargo go bun uv hunk)
-AGENT_BINS=(claude codex opencode pi)
+FNM_BINS=(node npm npx)
+UV_BINS=(python python3 python3.14)
+RUSTUP_BINS=(cargo cargo-clippy cargo-fmt clippy-driver rustc rustdoc rustfmt)
+NPM_PREFIX_BINS=(hunk pi)
+AGENT_BINS=(claude codex opencode)
 LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clangd)
 
-# Resolve through a login+interactive fish so PATH reflects the real UX the
-# dotfiles set up (mise and Home Manager precedence is configured there).
+# Resolve through a login+interactive fish so PATH reflects the real UX and
+# the configured native runtime ownership boundaries.
 fish_has() { fish -l -i -c "command -q $1" 2>/dev/null; }
 fish_path() {
 	fish -l -i -c "command -v $1" 2>/dev/null |
@@ -40,6 +43,111 @@ home_manager_owns() {
 	[[ "$path" == "$HOME/.nix-profile/bin/"* ]] || return 1
 	resolved="$(readlink -f "$path")"
 	[[ "$resolved" == /nix/store/* ]]
+}
+fnm_owns() {
+	local path resolved
+	path="$(fish_path "$1")"
+	resolved="$(readlink -f "$path")"
+	[[ "$resolved" == "$HOME/.local/share/fnm/node-versions/"* ]]
+}
+uv_owns() {
+	local path resolved
+	path="$(fish_path "$1")"
+	[[ "$path" == "$HOME/.local/bin/"* ]] || return 1
+	resolved="$(readlink -f "$path")"
+	[[ "$resolved" == "$HOME/.local/share/uv/python/"* ]]
+}
+rustup_owns() {
+	local path resolved
+	path="$(fish_path "$1")"
+	[[ "$path" == "$HOME/.cargo/bin/$1" ]] || return 1
+	resolved="$(readlink -f "$path")"
+	[[ "$resolved" == /nix/store/*rustup* ]]
+}
+npm_prefix_owns() {
+	local path resolved
+	path="$(fish_path "$1")"
+	[[ "$path" == "$HOME/.local/share/npm/bin/$1" ]] || return 1
+	resolved="$(readlink -f "$path")"
+	[[ "$resolved" == "$HOME/.local/share/npm/lib/node_modules/"* ]]
+}
+selected_path_is_not_mise() {
+	[[ "$(fish_path "$1")" != *"/mise/"* ]]
+}
+retained_mise_fixtures_are_unchanged() {
+	[[ -x "$HOME/.local/bin/mise" ]] &&
+		grep -Fxq retained-mise-executable "$HOME/.local/bin/mise" &&
+		[[ -x "$HOME/.local/share/mise/shims/legacy-node" ]] &&
+		grep -Fxq retained-mise-shim \
+			"$HOME/.local/share/mise/shims/legacy-node" &&
+		grep -Fxq retained-mise-install \
+			"$HOME/.local/share/mise/installs/legacy-runtime/marker" &&
+		grep -Fxq retained-mise-config "$HOME/.config/mise/config.toml"
+}
+managed_path_order_works() {
+	fish -l -i -c '
+		set node_dir (path dirname (command -v node))
+		test $PATH[1] = $node_dir
+		and test $PATH[2] = $HOME/.local/share/npm/bin
+		and test $PATH[3] = $HOME/.nix-profile/bin
+		and test $PATH[4] = $HOME/.cargo/bin
+		and test $PATH[5] = $HOME/.local/bin
+		and test $PATH[6] = $HOME/.opencode/bin
+		and not string match -q "*/mise/*" -- $PATH
+		and not contains -- $HOME/.bun/bin $PATH
+	' 2>/dev/null
+}
+fnm_auto_switch_is_disabled() {
+	local project status
+	project="$(mktemp -d)" || return 1
+	printf '%s\n' v0.0.1 >"$project/.node-version"
+	if fish -l -i -c "
+		set before (path resolve (command -v node))
+		cd '$project'
+		set after (path resolve (command -v node))
+		test \"\$before\" = \"\$after\"
+	" >/dev/null 2>&1; then
+		status=0
+	else
+		status=1
+	fi
+	rm -rf "$project"
+	return "$status"
+}
+playwright_mcp_starts() {
+	local input npx_bin output payload pid probe_dir result=1
+	npx_bin="$(fish_path npx)" || return 1
+	probe_dir="$(mktemp -d)" || return 1
+	input="$probe_dir/input"
+	output="$probe_dir/output"
+	mkfifo "$input" || {
+		rm -rf "$probe_dir"
+		return 1
+	}
+	exec 4<>"$input"
+	PATH="$(dirname "$npx_bin"):$PATH" \
+		"$npx_bin" --yes @playwright/mcp@latest \
+		<"$input" >"$output" 2>"$probe_dir/error" &
+	pid=$!
+	payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"dotfiles-e2e","version":"1"}}}'
+	printf '%s\n' "$payload" >&4
+	for _ in {1..360}; do
+		if grep -Eq \
+			'"id"[[:space:]]*:[[:space:]]*1.*"result"|"result".*"id"[[:space:]]*:[[:space:]]*1' \
+			"$output"; then
+			result=0
+			break
+		fi
+		if ! kill -0 "$pid" 2>/dev/null; then
+			break
+		fi
+		sleep 0.5
+	done
+	kill "$pid" >/dev/null 2>&1 || true
+	wait "$pid" 2>/dev/null || true
+	exec 4>&-
+	rm -rf "$probe_dir"
+	return "$result"
 }
 lsp_initialize_response_has() {
 	local member="$1"
@@ -104,10 +212,15 @@ plain_direnv_works() {
 	[[ "$result" == loaded ]]
 }
 nix_direnv_flake_works() {
-	local direnv_bin layout nixpkgs_path project profile source_dir
+	local command_name direnv_bin index layout nixpkgs_path project profile
+	local source_dir
+	local -a global_paths=()
 	direnv_bin="$(fish_path direnv)" || return 1
 	source_dir="$HOME/.local/share/chezmoi"
 	project="$(mktemp -d)" || return 1
+	for command_name in node python cargo go bun; do
+		global_paths+=("$(fish_path "$command_name")")
+	done
 	nixpkgs_path="$(nix eval --raw \
 		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
 		rm -rf "$project"
@@ -116,12 +229,17 @@ nix_direnv_flake_works() {
 	cat >"$project/flake.nix" <<EOF
 {
   inputs.nixpkgs.url = "path:$nixpkgs_path";
-  outputs = { nixpkgs, ... }: {
-    devShells.x86_64-linux.default =
-      nixpkgs.legacyPackages.x86_64-linux.mkShell {
+  outputs = { nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      marker = name: pkgs.writeShellScriptBin name
+        "printf '%s\\n' project-\${name}";
+    in {
+      devShells.x86_64-linux.default = pkgs.mkShell {
         DOTFILES_NIX_DIRENV = "loaded";
+        packages = map marker [ "node" "python" "cargo" "go" "bun" ];
       };
-  };
+    };
 }
 EOF
 	cat >"$project/.envrc" <<'EOF'
@@ -132,21 +250,43 @@ EOF
 		rm -rf "$project"
 		return 1
 	fi
-	layout="$("$direnv_bin" exec "$project" sh -c \
-		'test "$DOTFILES_NIX_DIRENV" = loaded && printf %s "$DOTFILES_NIX_DIRENV_LAYOUT_DIR"' \
-		2>/dev/null)" || {
+	layout="$("$direnv_bin" exec "$project" sh -c '
+		test "$DOTFILES_NIX_DIRENV" = loaded || exit 1
+		for command_name in node python cargo go bun; do
+			test "$("$command_name")" = "project-$command_name" || exit 1
+		done
+		printf %s "$DOTFILES_NIX_DIRENV_LAYOUT_DIR"
+	' 2>/dev/null)" || {
 		rm -rf "$project"
 		return 1
 	}
+	if ! "$direnv_bin" exec "$project" fish -l -c '
+		for command_name in node python cargo go bun
+			test ($command_name) = project-$command_name; or exit 1
+		end
+	' >/dev/null 2>&1; then
+		rm -rf "$project"
+		return 1
+	fi
 	profile="$(find "$layout" -maxdepth 1 -type l -name 'flake-profile*' \
 		-exec test -e {} \; -print -quit)"
+	index=0
+	for command_name in node python cargo go bun; do
+		[[ "$(fish_path "$command_name")" == "${global_paths[$index]}" ]] || {
+			rm -rf "$project"
+			return 1
+		}
+		index=$((index + 1))
+	done
 	rm -rf "$project"
 	[[ -n "$profile" ]]
 }
 
 if [[ "$MODE" == "preflight" ]]; then
 	echo "== preflight inventory (bins present BEFORE apply; install NOT proven for these) =="
-	for b in "${MANIFEST_BINS[@]}" "${HOME_MANAGER_BINS[@]}" "${GUI_BINS[@]}" "${TOOLCHAIN_BINS[@]}" "${AGENT_BINS[@]}"; do
+	for b in "${MANIFEST_BINS[@]}" "${HOME_MANAGER_BINS[@]}" \
+		"${GUI_BINS[@]}" "${FNM_BINS[@]}" "${UV_BINS[@]}" \
+		"${RUSTUP_BINS[@]}" "${NPM_PREFIX_BINS[@]}" "${AGENT_BINS[@]}"; do
 		if command -v "$b" >/dev/null 2>&1; then
 			echo "PREEXISTING: $b -> $(command -v "$b")"
 		else
@@ -195,6 +335,9 @@ hard "rollback generation state exists" test -s \
 hard "tmux starts" fish -l -i -c 'tmux -L dotfiles-e2e start-server'
 hard "fzf version probe" fish -l -i -c 'fzf --version'
 hard "Neovim startup probe" fish -l -i -c "nvim --headless '+quit'"
+hard "source tree passes the single-owner policy" bash \
+	"$HOME/.local/share/chezmoi/.github/scripts/check-tool-ownership.sh" \
+	"$HOME/.local/share/chezmoi"
 hard "Home Manager nix-direnv integration is installed" test -r \
 	"$HOME/.nix-profile/share/nix-direnv/direnvrc"
 hard "chezmoi direnvrc loads Home Manager nix-direnv" grep -Fxq \
@@ -208,11 +351,44 @@ for b in "${GUI_BINS[@]}"; do hard "gui bin $b" fish_has "$b"; done
 hard "voquill-desktop installed (dpkg)" dpkg -s voquill-desktop
 for app in "${FLATPAK_APPS[@]}"; do hard "flatpak $app" flatpak info "$app"; done
 
-echo "== mise toolchains =="
-for b in "${TOOLCHAIN_BINS[@]}"; do hard "toolchain $b" fish_has "$b"; done
+echo "== native runtime ownership =="
+if [[ "$ENVIRONMENT" == runner ]]; then
+	hard "retained mise files are unchanged" retained_mise_fixtures_are_unchanged
+fi
+hard "managed Fish PATH order" managed_path_order_works
+for b in "${FNM_BINS[@]}"; do hard "fnm owns $b" fnm_owns "$b"; done
+if fish_has corepack; then
+	hard "fnm owns optional corepack" fnm_owns corepack
+fi
+hard "fnm selected a Node LTS" fish -l -i -c \
+	'test -n "$(node -p '\''process.release.lts || ""'\'')"'
+hard "fnm automatic project switching is disabled" fnm_auto_switch_is_disabled
+for b in "${UV_BINS[@]}"; do hard "uv owns $b" uv_owns "$b"; done
+hard "uv Python is exactly 3.14.6" fish -l -i -c \
+	'test "$(python --version 2>&1)" = "Python 3.14.6"'
+for b in "${RUSTUP_BINS[@]}"; do hard "rustup owns $b" rustup_owns "$b"; done
+hard "Home Manager owns rustup executable" home_manager_owns rustup
+hard "stable Rust toolchain is active" fish -l -i -c \
+	'env -u RUSTUP_TOOLCHAIN rustup show active-toolchain | string match -qr "^stable-"'
+for b in go gofmt bun; do hard "Home Manager owns $b" home_manager_owns "$b"; done
+for b in "${NPM_PREFIX_BINS[@]}"; do
+	hard "npm prefix owns $b" npm_prefix_owns "$b"
+done
+hard "npm global prefix" fish -l -i -c \
+	'test "$(npm config get prefix)" = "$HOME/.local/share/npm"'
+hard "Pi latest channel package installed" fish -l -i -c \
+	'npm list --global --depth=0 --prefix "$HOME/.local/share/npm" @earendil-works/pi-coding-agent'
+hard "Hunk latest channel package installed" fish -l -i -c \
+	'npm list --global --depth=0 --prefix "$HOME/.local/share/npm" hunkdiff'
+hard "Playwright MCP starts through fnm npx" playwright_mcp_starts
+for b in "${HOME_MANAGER_BINS[@]}" "${FNM_BINS[@]}" "${UV_BINS[@]}" \
+	"${RUSTUP_BINS[@]}" "${NPM_PREFIX_BINS[@]}"; do
+	hard "selected $b path contains no mise" selected_path_is_not_mise "$b"
+done
 
 echo "== coding agents + nix =="
 for b in "${AGENT_BINS[@]}"; do hard "agent $b" fish_has "$b"; done
+hard "agent pi" fish_has pi
 hard "nix" fish_has nix
 
 echo "== Home Manager LSP startup/version probes =="
@@ -258,10 +434,10 @@ PIN_RC=$?
 [[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
 hard "pi subagent model pins are all in enabledModels" test "$PIN_RC" -eq 0
 hard "pi Hunk review skill declared" \
-	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
+	jq -e '.skills | index("~/.local/share/npm/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
 	"$HOME/.pi/agent/settings.json"
 hard "Hunk review skill installed" \
-	test -f "$HOME/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+	test -f "$HOME/.local/share/npm/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
 hard "generated no-mistakes skills synchronized" \
 	bash -c 'test -f "$HOME/.agents/skills/no-mistakes/SKILL.md" && cmp -s "$HOME/.agents/skills/no-mistakes/SKILL.md" "$HOME/.claude/skills/no-mistakes/SKILL.md"'
 
@@ -386,7 +562,7 @@ echo "== versions (for the report) =="
 # pipefail), then invoke the binary directly for its version. pfetch's last
 # escape sequence (ESC[?7h) has no trailing newline and lands on the path's
 # line, so strip ANSI/DEC escapes before picking the line.
-for b in chezmoi mise fish starship atuin eza gh op; do
+for b in chezmoi fish starship atuin eza gh op fnm node python rustup go bun pi hunk; do
 	p="$(fish -l -i -c "command -v $b" 2>/dev/null | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1 || true)"
 	if [[ -n "$p" && -x "$p" ]]; then
 		echo "VERSION: $b = $("$p" --version 2>/dev/null | head -1)"

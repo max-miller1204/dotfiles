@@ -1,0 +1,29 @@
+---
+# Mutable global runtime policy. Home Manager provides only the manager
+# executables and the Go/Bun fallbacks; the native managers own their runtime
+# payloads. Changing this data changes the rendered run_onchange scripts.
+runtimes:
+  node:
+    channel: "lts"
+  python:
+    version: "3.14.6"
+  rust:
+    toolchain: "stable"
+    proxies:
+      - cargo
+      - cargo-clippy
+      - cargo-fmt
+      - clippy-driver
+      - rustc
+      - rustdoc
+      - rustfmt
+
+npmTools:
+  prefixRel: ".local/share/npm"
+  packages:
+    - name: "@earendil-works/pi-coding-agent"
+      channel: "latest"
+      bin: "pi"
+    - name: "hunkdiff"
+      channel: "latest"
+      bin: "hunk"

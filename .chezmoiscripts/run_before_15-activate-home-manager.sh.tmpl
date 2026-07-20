@@ -117,20 +117,6 @@ if [[ "$configured_system" != "$EXPECTED_NIX_SYSTEM" ]]; then
     exit 1
 fi
 
-resolve_link() {
-    local path="$1" link directory
-    while [[ -L "$path" ]]; do
-        link="$(readlink "$path")"
-        if [[ "$link" == /* ]]; then
-            path="$link"
-        else
-            path="$(dirname "$path")/$link"
-        fi
-    done
-    directory="$(cd "$(dirname "$path")" && pwd -P)"
-    printf '%s/%s\n' "$directory" "$(basename "$path")"
-}
-
 remove_new_profile() {
     local active_link="$1" generation_prefix="$2" profiles_dir
     profiles_dir="$(dirname "$active_link")"

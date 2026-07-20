@@ -18,7 +18,8 @@
 # template as `.mcpServers`. Each record uses exactly one command form:
 #   command_rel = path relative to $HOME. The rendering template prepends
 #                 `{{ .chezmoi.homeDir }}` because .chezmoidata is static.
-#   command     = command already resolvable on PATH.
+#   command     = command already resolvable on PATH. Global shells use fnm's
+#                 selected npx; project flakes may intentionally override it.
 # Optional per-server keys:
 #   requestTimeoutMs = pi-mcp-adapter request timeout; rendered ONLY by the pi
 #                 template (the other agents have no per-server equivalent in

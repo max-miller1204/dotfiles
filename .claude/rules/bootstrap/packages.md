@@ -1,7 +1,8 @@
 ---
 paths:
-  - ".chezmoidata/packages.yaml"
+  - ".chezmoidata/{packages,runtimes}.yaml"
   - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_after_{16-ensure-native-runtimes,17-install-npm-tools}.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
   - ".github/e2e/verify.sh"
   - "dot_config/fish/{config.fish.tmpl,functions/update-all.fish.tmpl}"
@@ -11,37 +12,50 @@ paths:
 
 <!-- markdownlint-disable MD013 -->
 
-# Package installation context
+# Package and runtime installation context
 
 ## Package manifest
 
-- The package set the bootstrap installs is data, not code: `.chezmoidata/packages.yaml` describes each package once (`.packages`, plus an `.aptrepos` lookup table), and `run_once_before_10-install-packages.sh.tmpl` walks it in ONE template loop that dispatches each entry to a per-method `install_*` helper in `.chezmoitemplates/lib-install.sh` by OS + method.
-  Adding or removing a tool is a one-line manifest edit (plus its mirror line in `.github/e2e/verify.sh`'s expected-bin arrays - see the [CI and E2E rule](../quality/ci-and-e2e.md)); the only shell that changes is `lib-install.sh` when a genuinely new install *method* appears.
-  The method vocabulary is `brew` / `cask` / `apt` (optional sibling `ppa`) / `aptrepo` / `flatpak` / `deburl` / `script` / `mise`, and each helper reproduces exactly that method's pre-refactor idempotency guard (`brew`/`cask` lean on brew's own idempotency, `apt`/`flatpak`/`deburl` guard on `command -v` or `flatpak info`, `aptrepo` is guarded at the call site).
-  A package carries its method under `darwin:`, `linux:`, or the shared fallback `any:`; the loop takes the current OS's key when the package has one and falls back to `any:` otherwise, so an explicit `darwin:`/`linux:` always overrides `any:` and a package with neither is skipped on that OS.
-  `any:` is for tools whose installer command is byte-identical on both OSes - today the three curl `script` installers treehouse, no-mistakes, and herdr - so the command is single-sourced and cannot drift on one OS during a URL or flag change; the `any:` branch is additionally gated on `$supportedOS` (darwin or linux) so an unsupported OS still installs nothing.
-  In Phase 4, no package-manifest entry uses `install_mise`; the helper remains for later migration cleanup.
-  The separate `mise use -g` block installs only the remaining runtimes (node/python/rust/go/bun/uv) plus the npm-distributed Pi and Hunk CLIs.
-  Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools, so none may appear in the package manifest or mise toolchain block.
+- `.chezmoidata/packages.yaml` describes each native or vendor-installed package once, plus the `aptrepos` lookup table.
+- `run_once_before_10-install-packages.sh.tmpl` walks the package list in one loop and dispatches each entry to a helper in `lib-install.sh` by OS and method.
+- The method vocabulary is `brew`, `cask`, `apt` with an optional `ppa`, `aptrepo`, `flatpak`, `deburl`, and `script`.
+- A package carries its method under `darwin:`, `linux:`, or the shared `any:` fallback.
+- `any:` is only for byte-identical installers on both supported operating systems.
+- Home Manager packages must never appear in this manifest.
+- mise is not an install method or package owner in Phase 5.
+- Existing mise binaries and data are retained for rollback but are never invoked by active bootstrap, shell, or update code.
 
 ## Vendor script installers
 
-- The `script` method (the curl-style vendor installers: mise, pfetch, brev, treehouse, no-mistakes, herdr, voquill) is emitted VERBATIM inline by the loop rather than through a helper, because those commands carry shell quoting (`'=https'`, `"$(curl ...)"`, embedded `jq` with `"..."`) that cannot round-trip through a positional argument.
-  Its guard is `command -v <bin>` (plus an optional `altpath` for mise, or a `dpkg -s <pkg>` guard for voquill whose installed binary name differs) - keep those guards on the manifest entry, not hand-coded.
-  `run_once_before_10` does `mkdir -p "$HOME/.local/bin"` + `prepend_path "$HOME/.local/bin"` on EVERY OS before the loop; the two lines are load-bearing for different installers, so keep both.
-  `prepend_path` serves treehouse (`grep -qx` over `$PATH`) and no-mistakes (`case ":$PATH:"`, for its symlink dir), the only two that choose a target dir by `$PATH` MEMBERSHIP alone - the directory's existence is never part of that choice - and otherwise fall back to `/usr/local/bin`, where treehouse `sudo mv`s its binary and no-mistakes `sudo ln -s`es a symlink (its binary always goes to `$HOME/.no-mistakes/bin`, never through sudo); under the inlined `set -euo pipefail` a failed sudo there aborts the whole bootstrap.
-  `mkdir` serves pfetch, whose Linux command curls straight into `$HOME/.local/bin/pfetch`, and it is also what keeps treehouse off that sudo branch: treehouse guards its plain `mv` on `[ -w "$INSTALL_DIR" ]`, which a nonexistent dir fails, so PATH membership without the dir would leave a root-owned `~/.local/bin` inside `$HOME`.
-  mise, brev and herdr need neither line - each writes to `~/.local/bin` unconditionally and creates it itself, and herdr never invokes sudo at all.
-  The `mkdir` used to live inside the linux-only prep branch, so on macOS it never ran at all - keep both lines OS-agnostic and ahead of the loop, and note that `prepend_path` also makes the loop's own `command -v <bin>` guards see what a previous apply installed there.
+- The `script` method is emitted verbatim because vendor commands contain quoting that cannot safely round-trip through a positional argument.
+- Its guard is `command -v <bin>`, with an optional `dpkg -s <pkg>` guard when the package and binary names differ.
+- `run_once_before_10` must create and prepend `~/.local/bin` on every operating system before the package loop.
+- That setup keeps treehouse and no-mistakes out of their sudo fallback paths and gives pfetch a valid destination.
+- The Determinate Nix installer must retain its explicit root `HOME` and `XDG_CONFIG_HOME` protection.
 
-## Phase 4 package ownership
+## Phase 5 runtime ownership
 
-- Home Manager owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools on every platform.
-  The package manifest and mise toolchain block must not claim them.
-  Existing mise or Homebrew copies remain installed for rollback, but Fish re-prepends `~/.nix-profile/bin` after mise and Homebrew initialization.
-- `jq`, `gh`, and `op` remain native because bootstrap and sanitized-path processes require them before runtime-manager activation.
-  Linux uses apt or official apt repositories, and macOS uses Homebrew.
-- The chezmoi-owned direnvrc sources `$HOME/.nix-profile/share/nix-direnv/direnvrc`; it must not download an implementation or move into Home Manager file ownership.
-- The Linux manifest remains order-sensitive: curl and ca-certificates precede mise, gnupg precedes the op and gh repositories, and software-properties-common precedes the ghostty PPA.
-- The chezmoi-owned tmux helper (`dot_config/tmux/executable_agent-switch.sh`) falls back to `~/.nix-profile/bin/fzf` when tmux sanitizes PATH.
-- Do not uninstall old package or LSP implementations during the Phase 4 rollback window.
+- Home Manager owns only the `fnm`, `uv`, and `rustup` executables plus global Go and Bun fallbacks.
+- `nix/modules/runtimes.nix` narrows Bun, uv, and rustup outputs so undeclared commands such as `bunx`, `uvx`, and Rust toolchain proxies do not leak into `~/.nix-profile/bin`.
+- fnm owns the current Node LTS plus `node`, `npm`, and `npx`.
+- Corepack is an optional fnm-owned command because not every future Node LTS is guaranteed to bundle it.
+- uv owns exact global Python `3.14.6` and its `python`, `python3`, and `python3.14` links.
+- rustup owns the stable Rust toolchain and the selected proxies under `~/.cargo/bin`.
+- npm owns Pi and Hunk under the stable `~/.local/share/npm` prefix at their `latest` channels.
+- `.chezmoidata/runtimes.yaml` is the single source for mutable runtime selectors, Rust proxies, npm package channels, and the npm prefix.
+- `run_onchange_after_16` configures Node, Python, and Rust only after Home Manager activation provides their manager executables.
+- `run_onchange_after_17` installs Pi and Hunk through fnm's selected npm.
+- Neither script removes old runtime data, and both must fail visibly on ownership collisions.
+- Rust toolchains are installed and verified before proxy switching, and any failed proxy switch restores archived paths.
+- Fish must expose global paths in this order: fnm Node, npm prefix, Home Manager, rustup proxies, `~/.local/bin`, OpenCode, then native paths.
+- fnm automatic project switching stays disabled because project flakes own directory-scoped overrides.
+- `update-all` updates mutable runtime channels and npm tools but never updates `nix/flake.lock`.
+- Go, Bun, and manager executable updates move only through the separately reviewed `hm-update` flow.
+
+## Native package boundaries
+
+- `jq`, `gh`, and `op` stay native because bootstrap and sanitized-path processes require them before user runtime initialization.
+- Linux uses apt or official apt repositories, and macOS uses Homebrew.
+- The chezmoi-owned direnvrc sources `$HOME/.nix-profile/share/nix-direnv/direnvrc`.
+- The chezmoi-owned tmux helper falls back to `~/.nix-profile/bin/fzf` when tmux sanitizes PATH.
+- The Linux manifest remains order-sensitive: gnupg precedes the op and gh repositories, and software-properties-common precedes the ghostty PPA.

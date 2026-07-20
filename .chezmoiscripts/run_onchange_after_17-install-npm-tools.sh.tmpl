@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Install npm-distributed global tools into a runtime-independent user prefix.
+# The fnm default alias is stable across Node LTS upgrades.
+{{ template "lib-log.sh" . }}
+
+{{- $enabled := true }}
+{{- if hasKey . "homeManagerEnabled" }}
+{{-   $enabled = get . "homeManagerEnabled" }}
+{{- end }}
+{{ if not $enabled -}}
+log "npm tool setup disabled with Home Manager activation"
+exit 0
+{{ end -}}
+
+FNM_DIR="$HOME/.local/share/fnm"
+NODE_BIN="$FNM_DIR/aliases/default/bin"
+NPM_PREFIX="$HOME/{{ .npmTools.prefixRel }}"
+export FNM_DIR NPM_CONFIG_PREFIX="$NPM_PREFIX"
+
+if [[ ! -x "$NODE_BIN/node" || ! -x "$NODE_BIN/npm" || ! -x "$NODE_BIN/npx" ]]; then
+    echo "fnm default Node must exist before npm tools are installed" >&2
+    exit 1
+fi
+mkdir -p "$NPM_PREFIX"
+export PATH="$NODE_BIN:$NPM_PREFIX/bin:$PATH"
+
+packages=(
+{{- range .npmTools.packages }}
+    {{ printf "%s@%s" .name .channel | quote }}
+{{- end }}
+)
+log "Installing current Pi and Hunk releases into $NPM_PREFIX"
+"$NODE_BIN/npm" install --global --prefix "$NPM_PREFIX" "${packages[@]}"
+
+{{- range .npmTools.packages }}
+if [[ ! -x "$NPM_PREFIX/bin/{{ .bin }}" ]]; then
+    echo "npm did not install {{ .bin }} under $NPM_PREFIX/bin" >&2
+    exit 1
+fi
+{{- end }}
+if [[ ! -f "$NPM_PREFIX/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md" ]]; then
+    echo "Hunk review skill is missing from the npm prefix" >&2
+    exit 1
+fi
+"$NPM_PREFIX/bin/pi" --version
+"$NPM_PREFIX/bin/hunk" --version

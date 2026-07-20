@@ -1,15 +1,83 @@
-# Essential user paths must exist in non-interactive fish too. Build PATH
-# directly so precedence is deterministic even when fish_user_paths was loaded
-# before this file or the inherited PATH already contains one of these paths.
-set -l user_path
-for dir in ~/.nix-profile/bin ~/.cargo/bin ~/.local/bin ~/.opencode/bin ~/.bun/bin
-    if test -d $dir
-        set -a user_path $dir
+# Essential runtime state and PATH setup must apply to non-interactive Fish too.
+# A Fish process launched inside a project flake preserves that devshell first;
+# other shells rebuild the deterministic global owner order.
+set -l project_environment false
+if set -q IN_NIX_SHELL; or set -q DIRENV_DIR
+    set project_environment true
+end
+
+if test $project_environment = false
+    set -gx FNM_DIR $HOME/.local/share/fnm
+    set -gx NPM_CONFIG_PREFIX $HOME/.local/share/npm
+    set -gx CARGO_HOME $HOME/.cargo
+    set -gx RUSTUP_HOME $HOME/.rustup
+    set -e RUSTUP_TOOLCHAIN
+
+    {{- if eq .chezmoi.os "darwin" }}
+    if test -x /opt/homebrew/bin/brew
+        /opt/homebrew/bin/brew shellenv | source
+    else if test -x /usr/local/bin/brew
+        /usr/local/bin/brew shellenv | source
+    end
+    {{- end }}
+else
+    set -q FNM_DIR; or set -gx FNM_DIR $HOME/.local/share/fnm
+    set -q NPM_CONFIG_PREFIX; or set -gx NPM_CONFIG_PREFIX $HOME/.local/share/npm
+    set -q CARGO_HOME; or set -gx CARGO_HOME $HOME/.cargo
+    set -q RUSTUP_HOME; or set -gx RUSTUP_HOME $HOME/.rustup
+end
+
+set -l inherited_path
+for dir in $PATH
+    if string match -q "$HOME/.local/share/mise/*" -- $dir
+        continue
+    end
+    if test $dir = $HOME/.bun/bin
+        continue
+    end
+    if not contains -- $dir $inherited_path
+        set -a inherited_path $dir
     end
 end
-for dir in $PATH
-    if not contains -- $dir $user_path
-        set -a user_path $dir
+set -gx PATH $inherited_path
+
+# Initialize only the selected global Node default. Deliberately omit fnm's
+# --use-on-cd hook so project flakes, not runtime version files, own overrides.
+set -l fnm_bin $HOME/.nix-profile/bin/fnm
+if test $project_environment = false; and test -x $fnm_bin
+    $fnm_bin env --shell fish | source
+    $fnm_bin use --silent-if-unchanged default >/dev/null 2>&1
+end
+
+# Global precedence is fnm Node, the npm prefix, Home Manager, rustup proxies,
+# user-local tools, OpenCode, then native paths. Project shells keep their
+# inherited devshell entries first and append any missing global fallbacks.
+set -l global_path
+if set -q FNM_MULTISHELL_PATH; and test -d $FNM_MULTISHELL_PATH/bin
+    set -a global_path $FNM_MULTISHELL_PATH/bin
+else if test -d $FNM_DIR/aliases/default/bin
+    set -a global_path $FNM_DIR/aliases/default/bin
+end
+for dir in $NPM_CONFIG_PREFIX/bin ~/.nix-profile/bin $CARGO_HOME/bin ~/.local/bin ~/.opencode/bin
+    if test -d $dir; and not contains -- $dir $global_path
+        set -a global_path $dir
+    end
+end
+
+set -l user_path
+if test $project_environment = true
+    set user_path $PATH
+    for dir in $global_path
+        if not contains -- $dir $user_path
+            set -a user_path $dir
+        end
+    end
+else
+    set user_path $global_path
+    for dir in $PATH
+        if not contains -- $dir $user_path
+            set -a user_path $dir
+        end
     end
 end
 set -gx PATH $user_path
@@ -65,30 +133,6 @@ if status is-interactive
         alias sudoa 'sudo -A'
     end
 
-    # -- PATH ------------------------------------------------------------
-
-    {{- if eq .chezmoi.os "darwin" }}
-    if test -x /opt/homebrew/bin/brew
-        /opt/homebrew/bin/brew shellenv | source
-    else if test -x /usr/local/bin/brew
-        /usr/local/bin/brew shellenv | source
-    end
-    {{- end }}
-
-    # mise (cross-platform version manager for node, python, etc.)
-    # Install: `brew install mise` on macOS, `curl https://mise.run | sh` on Ubuntu.
-    if type -q mise
-        mise activate fish | source
-    end
-
-    # Home Manager owns the active CLI, direnv, and LSP bundles. Re-prepend its
-    # profile after mise and Homebrew mutate PATH so rollback installs cannot win.
-    set -l home_manager_bin $HOME/.nix-profile/bin
-    if test -d $home_manager_bin
-        set -gx PATH $home_manager_bin \
-            (string match -v -- $home_manager_bin $PATH)
-    end
-
     # -- Tool integrations (PATH-resolved, no hardcoded store paths) ----
 
     if type -q starship
@@ -116,8 +160,8 @@ if status is-interactive
         direnv hook fish | source
     end
 
-    # eza replaces ls if installed. The Home Manager profile has already been
-    # re-prepended, so it wins over retained mise or Homebrew rollback copies.
+    # eza replaces ls if installed. The global PATH order makes Home Manager
+    # win over retained rollback copies.
     if type -q eza
         alias ls 'eza -lh --group-directories-first --icons=auto'
         alias la 'ls -a'

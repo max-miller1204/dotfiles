@@ -30,7 +30,7 @@
     "npm:pi-git-diff"
   ],
   "skills": [
-    "~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+    "~/.local/share/npm/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
   ],
   "hideThinkingBlock": false
 }

@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Ensure the mutable global language runtimes after Home Manager has activated
+# fnm, uv, and rustup. The old mise installation is deliberately left intact
+# for repository rollback, but this script never invokes it.
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+{{- $enabled := true }}
+{{- if hasKey . "homeManagerEnabled" }}
+{{-   $enabled = get . "homeManagerEnabled" }}
+{{- end }}
+{{ if not $enabled -}}
+log "Native runtime setup disabled with Home Manager activation"
+exit 0
+{{ end -}}
+
+FNM_BIN="$HOME/.nix-profile/bin/fnm"
+UV_BIN="$HOME/.nix-profile/bin/uv"
+RUSTUP_BIN="$HOME/.nix-profile/bin/rustup"
+NODE_CHANNEL={{ .runtimes.node.channel | quote }}
+PYTHON_VERSION={{ .runtimes.python.version | quote }}
+RUST_TOOLCHAIN={{ .runtimes.rust.toolchain | quote }}
+FNM_DIR="$HOME/.local/share/fnm"
+UV_PYTHON_INSTALL_DIR="$HOME/.local/share/uv/python"
+CARGO_HOME="$HOME/.cargo"
+RUSTUP_HOME="$HOME/.rustup"
+export FNM_DIR UV_PYTHON_INSTALL_DIR CARGO_HOME RUSTUP_HOME
+unset RUSTUP_TOOLCHAIN
+
+require_home_manager_command() {
+    local command_name="$1" command_path="$2" resolved
+    if [[ ! -x "$command_path" ]]; then
+        printf 'Missing Home Manager runtime manager: %s\n' "$command_name" >&2
+        exit 1
+    fi
+    resolved="$(resolve_link "$command_path")"
+    if [[ "$resolved" != /nix/store/* ]]; then
+        printf 'Home Manager does not own %s: %s\n' \
+            "$command_name" "$resolved" >&2
+        exit 1
+    fi
+}
+
+require_home_manager_command fnm "$FNM_BIN"
+require_home_manager_command uv "$UV_BIN"
+require_home_manager_command rustup "$RUSTUP_BIN"
+mkdir -p "$FNM_DIR" "$HOME/.local/bin" "$CARGO_HOME/bin" "$RUSTUP_HOME"
+
+log "Ensuring current Node LTS through fnm"
+eval "$("$FNM_BIN" env --shell bash)"
+"$FNM_BIN" install "--$NODE_CHANNEL" --use
+node_version="$("$FNM_BIN" current)"
+if [[ -z "$node_version" || "$node_version" == "system" ]]; then
+    echo "fnm did not select an installed Node LTS" >&2
+    exit 1
+fi
+"$FNM_BIN" default "$node_version"
+export PATH="$HOME/.local/bin:$CARGO_HOME/bin:$PATH"
+if [[ "$(node -p 'process.release.lts || ""')" == "" ]]; then
+    echo "fnm-selected Node is not an LTS release" >&2
+    exit 1
+fi
+node --version
+npm --version
+npx --version
+
+for python_bin in python python3 "python${PYTHON_VERSION%.*}"; do
+    path="$HOME/.local/bin/$python_bin"
+    if [[ -e "$path" || -L "$path" ]]; then
+        resolved="$(resolve_link "$path")"
+        if [[ "$resolved" != "$UV_PYTHON_INSTALL_DIR/"* ]]; then
+            printf 'Refusing to replace non-uv Python executable: %s -> %s\n' \
+                "$path" "$resolved" >&2
+            exit 1
+        fi
+    fi
+done
+log "Ensuring Python $PYTHON_VERSION through uv"
+UV_PREVIEW_FEATURES=python-install-default \
+    "$UV_BIN" python install "$PYTHON_VERSION" --default --no-progress
+for python_bin in python python3; do
+    path="$HOME/.local/bin/$python_bin"
+    resolved="$(resolve_link "$path")"
+    if [[ "$resolved" != "$UV_PYTHON_INSTALL_DIR/"* ]]; then
+        printf 'uv does not own %s: %s\n' "$python_bin" "$resolved" >&2
+        exit 1
+    fi
+    if [[ "$("$path" --version 2>&1)" != "Python $PYTHON_VERSION" ]]; then
+        printf '%s is not Python %s\n' "$python_bin" "$PYTHON_VERSION" >&2
+        exit 1
+    fi
+done
+
+log "Ensuring the $RUST_TOOLCHAIN Rust toolchain through rustup"
+"$RUSTUP_BIN" toolchain install "$RUST_TOOLCHAIN" --profile default
+"$RUSTUP_BIN" default "$RUST_TOOLCHAIN"
+"$RUSTUP_BIN" component add --toolchain "$RUST_TOOLCHAIN" rustfmt clippy
+"$RUSTUP_BIN" run "$RUST_TOOLCHAIN" rustc --version
+"$RUSTUP_BIN" run "$RUST_TOOLCHAIN" cargo --version
+"$RUSTUP_BIN" run "$RUST_TOOLCHAIN" rustfmt --version
+"$RUSTUP_BIN" run "$RUST_TOOLCHAIN" clippy-driver --version
+
+rollback_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/runtime-rollback/rustup-proxies"
+mkdir -p "$rollback_dir"
+changed_proxies=()
+proxy_switch_complete=false
+restore_proxy_switch() {
+    local status=$? proxy path
+    trap - EXIT
+    if [[ "$proxy_switch_complete" != true ]]; then
+        for proxy in "${changed_proxies[@]}"; do
+            path="$CARGO_HOME/bin/$proxy"
+            rm -f "$path"
+            if [[ -e "$rollback_dir/$proxy" || -L "$rollback_dir/$proxy" ]]; then
+                mv "$rollback_dir/$proxy" "$path"
+            fi
+        done
+    fi
+    exit "$status"
+}
+trap restore_proxy_switch EXIT
+
+install_rustup_proxy() {
+    local proxy="$1" path="$CARGO_HOME/bin/$1" target
+    if [[ -e "$path" || -L "$path" ]]; then
+        target="$(readlink "$path" 2>/dev/null || true)"
+        if [[ "$proxy" == rustup && "$(resolve_link "$path")" == \
+            "$(resolve_link "$RUSTUP_BIN")" ]]; then
+            return 0
+        fi
+        if [[ "$proxy" != rustup && "$target" == rustup ]]; then
+            return 0
+        fi
+        if [[ -e "$rollback_dir/$proxy" || -L "$rollback_dir/$proxy" ]]; then
+            printf 'Refusing to replace %s while rollback archive exists: %s\n' \
+                "$path" "$rollback_dir/$proxy" >&2
+            return 1
+        fi
+        mv "$path" "$rollback_dir/$proxy"
+    fi
+    changed_proxies+=("$proxy")
+    if [[ "$proxy" == rustup ]]; then
+        ln -s "$RUSTUP_BIN" "$path"
+    else
+        ln -s rustup "$path"
+    fi
+}
+
+install_rustup_proxy rustup
+{{- range .runtimes.rust.proxies }}
+install_rustup_proxy {{ . | quote }}
+{{- end }}
+{{- range .runtimes.rust.proxies }}
+proxy_path="$CARGO_HOME/bin/{{ . }}"
+if [[ "$(resolve_link "$proxy_path")" != "$(resolve_link "$RUSTUP_BIN")" ]]; then
+    printf 'Rust proxy does not resolve through Home Manager rustup: %s\n' \
+        "$proxy_path" >&2
+    exit 1
+fi
+"$proxy_path" --version
+{{- end }}
+proxy_switch_complete=true
+trap - EXIT

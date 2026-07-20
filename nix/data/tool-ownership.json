@@ -1,16 +1,19 @@
 {
   "schemaVersion": 1,
-  "migrationPhase": 4,
+  "migrationPhase": 5,
   "active": {
     "homeManager": {
       "packages": [
         "atuin",
         "bat",
+        "bun",
         "clang-tools",
         "direnv",
         "eza",
         "fd",
+        "fnm",
         "fzf",
+        "go",
         "gopls",
         "gum",
         "neovim",
@@ -18,20 +21,26 @@
         "pyright",
         "ripgrep",
         "rust-analyzer",
+        "rustup",
         "starship",
         "tmux",
         "typescript",
         "typescript-language-server",
+        "uv",
         "zoxide"
       ],
       "commands": [
         "atuin",
         "bat",
+        "bun",
         "clangd",
         "direnv",
         "eza",
         "fd",
+        "fnm",
         "fzf",
+        "go",
+        "gofmt",
         "gopls",
         "gum",
         "nvim",
@@ -39,11 +48,13 @@
         "pyright-langserver",
         "rg",
         "rust-analyzer",
+        "rustup",
         "starship",
         "tmux",
         "tsc",
         "tsserver",
         "typescript-language-server",
+        "uv",
         "zoxide"
       ],
       "writableConfigs": [],
@@ -119,20 +130,36 @@
       "scope": "Nix daemon and store"
     },
     "fnm": {
+      "channel": "lts",
       "commands": ["node", "npm", "npx"],
+      "optionalCommands": ["corepack"],
       "scope": "Node and npm runtime"
     },
     "npmPrefix": {
       "commands": ["hunk", "pi"],
+      "packages": [
+        "@earendil-works/pi-coding-agent@latest",
+        "hunkdiff@latest"
+      ],
       "prefix": "~/.local/share/npm"
     },
     "rustup": {
-      "commands": ["cargo", "clippy-driver", "rustc", "rustfmt"],
-      "scope": "Rust toolchain components"
+      "commands": [
+        "cargo",
+        "cargo-clippy",
+        "cargo-fmt",
+        "clippy-driver",
+        "rustc",
+        "rustdoc",
+        "rustfmt"
+      ],
+      "scope": "Rust toolchain components",
+      "toolchain": "stable"
     },
     "uv": {
-      "commands": ["python", "python3"],
-      "scope": "Python runtime"
+      "commands": ["python", "python3", "python3.14"],
+      "scope": "Python runtime",
+      "version": "3.14.6"
     }
   }
 }

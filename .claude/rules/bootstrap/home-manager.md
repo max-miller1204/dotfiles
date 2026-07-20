@@ -16,7 +16,7 @@ paths:
 
 - Chezmoi may invoke standalone Home Manager, but Home Manager must never invoke chezmoi.
 - Every global command has exactly one active owner.
-- `nix/data/tool-ownership.json` records active Home Manager ownership separately from the final target ownership so inactive migration phases do not claim commands that mise or an OS package manager still provides.
+- `nix/data/tool-ownership.json` records the exact Phase 5 Home Manager package and command surface plus each external runtime owner.
 - Home Manager must not manage chezmoi-owned writable dotfiles during this migration.
 - Do not use `xdg.configFile`, Fish configuration ownership, or Home Manager tool modules that generate writable configuration files.
 - The only permitted `home.file` assignment is `lib.mkForce { }` in `base.nix`, which suppresses Home Manager 26.05's automatic `.cache/.keep` and `.local/state/.keep` links so the evaluated file set remains empty.
@@ -39,10 +39,11 @@ paths:
 - The dedicated `hm-update` command introduced in the activation phase owns lock updates and must leave the updated lock file for review and commit.
 - Do not add automatic Nix garbage collection until a generation retention policy and soak period have been approved.
 
-## Phase 4 active package bundles
+## Phase 5 active package bundles
 
-- Phase 4 activates Home Manager on every apply before chezmoi changes managed target files.
-- Home Manager actively owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, nix-direnv, pyright, TypeScript, typescript-language-server, gopls, rust-analyzer, and clang-tools.
+- Phase 5 activates Home Manager on every apply before chezmoi changes managed target files.
+- Home Manager actively owns the Phase 4 CLI, direnv, and LSP bundles plus fnm, uv, rustup, Go, and Bun.
+- The runtime module exposes only bun, fnm, go, gofmt, rustup, and uv so Home Manager does not claim native-manager payloads or extra package commands.
 - The LSP packages expose pyright-langserver, tsc, tsserver, and clangd alongside their primary commands, and all exposed global commands are recorded in the ownership metadata.
 - `run_before_15` runs the LSP health checks inside the Home Manager switch transaction, so a failure restores both profiles or removes a failed first generation.
 - `run_after_50-verify-lsp-servers` repeats Home Manager profile resolution plus startup or version checks after target updates on every apply.
@@ -56,4 +57,5 @@ paths:
 - The real host records are `max` at `/home/max` on Linux and `/Users/max` on macOS.
 - CI host records are `runner` at `/home/runner` on Linux and `/Users/runner` on macOS.
 - Class profiles are used until a hostname-specific requirement is demonstrated.
-- Keep old mise or Homebrew installations during the rollback window, but ensure `~/.nix-profile/bin` wins command resolution.
+- Keep old mise or Homebrew installations during the rollback window, but never activate or update mise from Phase 5 code.
+- Full Phase 5 rollback requires the previous Home Manager generation and the reverted Phase 5 repository commit because Fish and native runtime ownership change together.

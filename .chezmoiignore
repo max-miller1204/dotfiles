@@ -2,6 +2,7 @@ README.md
 CLAUDE.md
 context-map.md
 raycast-export
+nix
 
 # Written by `brev agent-skill` (run_once_after_70), not chezmoi. Ignored so
 # chezmoi never treats the CLI-owned skill tree as unmanaged state to remove.

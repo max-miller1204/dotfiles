@@ -160,3 +160,91 @@ jobs:
       - uses: ./.github/actions/setup-chezmoi
       - name: chezmoi apply --dry-run
         run: chezmoi apply --dry-run --verbose --exclude=scripts
+
+  home-manager:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # v22, pinned so the installer executed by CI cannot move independently.
+      - uses: >-
+          DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25
+      - name: Assert inactive ownership and secret isolation
+        run: |
+          set -euo pipefail
+          jq -e '
+            .schemaVersion == 1 and
+            .migrationPhase == 1 and
+            .active.homeManager.packages == [] and
+            .active.homeManager.commands == [] and
+            .active.homeManager.writableConfigs == [] and
+            .active.homeManager.services == [] and
+            .target.homeManager.writableConfigs == [] and
+            .target.homeManager.services == []
+          ' nix/data/tool-ownership.json >/dev/null
+          secret_pattern='builtins\.getEnv|--impure|onepasswordRead|op://'
+          secret_pattern+='|(^|[^[:alnum:]_])op[[:space:]]'
+          if grep -R -n -E "$secret_pattern" --include='*.nix' nix; then
+            printf '%s\n' \
+              'Forbidden secret or impurity mechanism in the Nix subtree' >&2
+            exit 1
+          fi
+          ownership_pattern='home\.file|xdg\.configFile|programs\.fish'
+          ownership_pattern+='|systemd\.user\.services|launchd\.agents'
+          if grep -R -n -E "$ownership_pattern" --include='*.nix' nix; then
+            printf '%s\n' \
+              'Home Manager cannot own writable configs or Phase 1 services' >&2
+            exit 1
+          fi
+      - name: Check Nix formatting
+        run: |
+          set -euo pipefail
+          case "$(uname -s):$(uname -m)" in
+            Linux:x86_64) system=x86_64-linux ;;
+            Darwin:arm64) system=aarch64-darwin ;;
+            Darwin:x86_64) system=x86_64-darwin ;;
+            *) echo "Unsupported native CI system" >&2; exit 1 ;;
+          esac
+          formatter=$(nix build --no-link --print-out-paths \
+            --no-write-lock-file \
+            "path:$GITHUB_WORKSPACE/nix#formatter.$system")
+          "$formatter/bin/treefmt" --ci \
+            --working-dir "$GITHUB_WORKSPACE" nix
+      - name: Evaluate and build native Home Manager checks
+        run: nix flake check --no-write-lock-file "path:$GITHUB_WORKSPACE/nix"
+      - name: Verify the standalone Home Manager runner
+        run: |
+          nix run --no-write-lock-file \
+            "path:$GITHUB_WORKSPACE/nix#home-manager" -- --version
+      - name: Build native activation packages explicitly
+        run: |
+          set -euo pipefail
+          case "$(uname -s):$(uname -m)" in
+            Linux:x86_64)
+              configurations=(
+                max@linux-desktop
+                max@linux-headless
+                max@wsl
+                ci@linux-desktop
+                ci@linux-headless
+                ci@wsl
+              )
+              ;;
+            Darwin:arm64)
+              configurations=(max@macos-aarch64 ci@macos-aarch64)
+              ;;
+            Darwin:x86_64)
+              configurations=(max@macos-x86_64 ci@macos-x86_64)
+              ;;
+            *)
+              echo "Unsupported native CI system: $(uname -s):$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          for configuration in "${configurations[@]}"; do
+            nix build --no-link --no-write-lock-file \
+              "path:$GITHUB_WORKSPACE/nix#homeConfigurations.\"$configuration\".activationPackage"
+          done

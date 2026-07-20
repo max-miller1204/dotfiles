@@ -6,3 +6,6 @@
 .pi/
 .pi-subagents/
 .playwright-mcp/
+
+# Local Nix build result symlinks.
+/nix/result*

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "migrationPhase": 1,
+  "active": {
+    "homeManager": {
+      "packages": [],
+      "commands": [],
+      "writableConfigs": [],
+      "services": []
+    }
+  },
+  "target": {
+    "homeManager": {
+      "packages": [
+        "atuin",
+        "bat",
+        "bun",
+        "clang-tools",
+        "direnv",
+        "eza",
+        "fd",
+        "fnm",
+        "fzf",
+        "go",
+        "gopls",
+        "gum",
+        "neovim",
+        "nix-direnv",
+        "pyright",
+        "ripgrep",
+        "rust-analyzer",
+        "rustup",
+        "starship",
+        "tmux",
+        "typescript",
+        "typescript-language-server",
+        "uv",
+        "zoxide"
+      ],
+      "commands": [
+        "atuin",
+        "bat",
+        "bun",
+        "clangd",
+        "direnv",
+        "eza",
+        "fd",
+        "fnm",
+        "fzf",
+        "go",
+        "gofmt",
+        "gopls",
+        "gum",
+        "nvim",
+        "pyright",
+        "pyright-langserver",
+        "rg",
+        "rust-analyzer",
+        "rustup",
+        "starship",
+        "tmux",
+        "tsc",
+        "tsserver",
+        "typescript-language-server",
+        "uv",
+        "zoxide"
+      ],
+      "writableConfigs": [],
+      "services": []
+    }
+  },
+  "externalOwners": {
+    "chezmoi": {
+      "scope": "writable dotfiles, machine templates, bootstrap orchestration, and secret materialization"
+    },
+    "determinateNix": {
+      "commands": ["nix"],
+      "scope": "Nix daemon and store"
+    },
+    "fnm": {
+      "commands": ["node", "npm", "npx"],
+      "scope": "Node and npm runtime"
+    },
+    "npmPrefix": {
+      "commands": ["hunk", "pi"],
+      "prefix": "~/.local/share/npm"
+    },
+    "rustup": {
+      "commands": ["cargo", "clippy-driver", "rustc", "rustfmt"],
+      "scope": "Rust toolchain components"
+    },
+    "uv": {
+      "commands": ["python", "python3"],
+      "scope": "Python runtime"
+    }
+  }
+}

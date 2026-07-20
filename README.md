@@ -85,6 +85,21 @@ silently fail inside some TTYs), run it manually:
 chsh -s "$(command -v fish)"
 ```
 
+## Home Manager migration
+
+The repository contains a standalone flake under `nix/` as the inactive foundation for a staged migration away from mise.
+Phase 1 does not activate Home Manager, install any migrated command, manage writable configuration, or own a user service, so the existing fresh-machine bootstrap remains unchanged.
+The flake is intentionally nested and must always be addressed with an explicit `path:` URL so only the `nix/` subtree enters the Nix store.
+
+```sh
+nix flake check "path:$PWD/nix"
+```
+
+The pinned inputs are nixpkgs `nixos-26.05` and Home Manager `release-26.05`, with `home.stateVersion = "26.05"`.
+`nix/data/tool-ownership.json` separates active ownership from the planned target ownership, and the Phase 1 checks require every active Home Manager ownership list to remain empty.
+Real configurations cover Linux desktop, Linux headless, WSL, and both macOS architectures for user `max`; matching `runner` configurations provide CI-safe home paths.
+macOS still requires a manual Determinate Nix installation, and no Home Manager activation is attempted yet on any platform.
+
 ## Secrets (1Password)
 
 Secrets live in 1Password, not in this repo — nothing encrypted is committed

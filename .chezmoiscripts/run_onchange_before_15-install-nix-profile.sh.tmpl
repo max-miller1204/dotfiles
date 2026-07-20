@@ -8,7 +8,9 @@
 {{ template "lib-log.sh" . }}
 
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-flake="path:$(chezmoi source-path)/nix"
+# Resolve the source path while chezmoi renders the script. Starting a nested
+# chezmoi process during apply deadlocks on the parent's persistent state lock.
+flake={{ printf "path:%s" (joinPath .chezmoi.sourceDir "nix") | quote }}
 bundle="{{ $nixBundle }}"
 
 if [[ "$bundle" != "workstation" ]]; then

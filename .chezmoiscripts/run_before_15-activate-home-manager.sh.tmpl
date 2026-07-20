@@ -134,7 +134,7 @@ package_profile="$nix_state_dir/profile"
 before_switch_file="$state_dir/home-manager-before-switch"
 previous_generation_file="$state_dir/home-manager-previous-generation"
 umask 077
-mkdir -p "$state_dir"
+mkdir -p "$nix_state_dir" "$state_dir"
 if [[ -e "$profile" || -L "$profile" ]]; then
     before_generation="$(resolve_link "$profile")"
 else

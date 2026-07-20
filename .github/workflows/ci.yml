@@ -68,8 +68,9 @@ jobs:
           touch "$test_root/real/target"
           ln -s real/target "$test_root/first"
           ln -s first "$test_root/second"
+          canonical_real="$(cd "$test_root/real" && pwd -P)"
           test "$(resolve_link "$test_root/second")" = \
-            "$test_root/real/target"
+            "$canonical_real/target"
       - name: Shellcheck LSP templates with persisted Phase 3 data
         run: |
           set -euo pipefail

@@ -41,6 +41,13 @@ home_manager_owns() {
 	resolved="$(readlink -f "$path")"
 	[[ "$resolved" == /nix/store/* ]]
 }
+lsp_initialize_response_has() {
+	local member="$1"
+	local output="$2"
+	grep -Eq \
+		"\"id\"[[:space:]]*:[[:space:]]*1.*\"$member\"|\"$member\".*\"id\"[[:space:]]*:[[:space:]]*1" \
+		"$output"
+}
 lsp_initialize_works() {
 	local command_name="$1"
 	local without_node_path="$2"
@@ -64,11 +71,11 @@ lsp_initialize_works() {
 	payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}'
 	printf 'Content-Length: %d\r\n\r\n%s' "${#payload}" "$payload" >&3
 	for _ in {1..50}; do
-		if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"result"' "$output"; then
+		if lsp_initialize_response_has result "$output"; then
 			result=0
 			break
 		fi
-		if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"error"' "$output"; then
+		if lsp_initialize_response_has error "$output"; then
 			break
 		fi
 		if ! kill -0 "$pid" 2>/dev/null; then

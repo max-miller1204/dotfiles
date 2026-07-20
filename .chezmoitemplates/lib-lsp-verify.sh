@@ -39,6 +39,14 @@ probe_home_manager_lsp_command() {
 	fi
 }
 
+lsp_initialize_response_has() {
+	local member="$1"
+	local output="$2"
+	grep -Eq \
+		"\"id\"[[:space:]]*:[[:space:]]*1.*\"$member\"|\"$member\".*\"id\"[[:space:]]*:[[:space:]]*1" \
+		"$output"
+}
+
 probe_lsp_initialize() {
 	local server="$1"
 	local label="$2"
@@ -78,11 +86,11 @@ probe_lsp_initialize() {
 		printf '%s\n' "Unable to write the LSP initialize request for $label" >&2
 	else
 		for _ in {1..50}; do
-			if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"result"' "$output"; then
+			if lsp_initialize_response_has result "$output"; then
 				result=0
 				break
 			fi
-			if grep -Eq '"id"[[:space:]]*:[[:space:]]*1.*"error"' "$output"; then
+			if lsp_initialize_response_has error "$output"; then
 				break
 			fi
 			if ! kill -0 "$pid" 2>/dev/null; then

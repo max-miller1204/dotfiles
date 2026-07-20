@@ -92,7 +92,9 @@ if [[ ! -f "$CHEZMOI_SOURCE/nix/flake.nix" || ! -f "$CHEZMOI_SOURCE/nix/flake.lo
     exit 1
 fi
 
-prepend_path "/usr/local/bin" "/opt/homebrew/bin"
+# `nix run` launches Home Manager with the inherited PATH, and Home Manager
+# invokes `nix` by name. Make a same-apply Determinate installation visible.
+prepend_path "$(dirname "$NIX_BIN")" "/usr/local/bin" "/opt/homebrew/bin"
 if ! command -v jq >/dev/null 2>&1; then
     printf '%s\n' \
         'jq is required to validate the Home Manager configuration identity.' \

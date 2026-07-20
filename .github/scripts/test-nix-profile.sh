@@ -3,6 +3,16 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+profile_template="$repo_root/.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl"
+if grep -Fq 'chezmoi source-path' "$profile_template"; then
+    echo "Profile installer must not start nested chezmoi during apply" >&2
+    exit 1
+fi
+if ! grep -Fq 'joinPath .chezmoi.sourceDir "nix"' "$profile_template"; then
+    echo "Profile installer must render its source path from .chezmoi.sourceDir" >&2
+    exit 1
+fi
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cp -a "$repo_root/nix" "$tmp/nix"

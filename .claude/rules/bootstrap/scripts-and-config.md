@@ -40,6 +40,8 @@ paths:
   `lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` defines `resolve_mise`, `resolve_rustup <bin>` (resolves rustup or a component from `${CARGO_HOME:-~/.cargo}/bin`), and `prepend_path <dir>...`; `lib-apt.sh` defines `install_aptrepo LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE` for the third-party apt keyring+list+update+install dance used by 1Password and gh.
   A consumer that includes a partial gets all of its helpers, so some are defined-but-unused there; that is fine and stays shellcheck-clean at `--severity=warning` (the CI severity), which is why the partials are only shellchecked via the rendered scripts, never standalone.
   `lib-log.sh` intentionally has no trailing newline so it inlines byte-for-byte in place of the old three-line preamble; keep it that way and do not let an editor add one.
+  Chezmoi executes scripts while the parent apply process holds its persistent state lock, so a script must never start a nested `chezmoi` command such as `chezmoi source-path`.
+  Resolve source files at template-render time with `.chezmoi.sourceDir`, `joinPath`, and `quote`; `test-nix-profile.sh` guards the profile installer against reintroducing the deadlock.
   The three MCP sync scripts (`run_onchange_after_4x`) deliberately keep a bare `set -euo pipefail` and use `echo`, not `log()`, so they do not pull in `lib-log.sh`.
   Avoiding `lib-log.sh` is only about the `log()`/`echo` split, not a blanket no-partials rule: the two codex sync scripts (`run_onchange_after_41`/`42`) do share the `.chezmoitemplates/lib-codex-sync.sh` partial (extracted by a prior chunk), while the claude MCP sync (`run_onchange_after_40`) stays self-contained.
 

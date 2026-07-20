@@ -92,6 +92,14 @@ if [[ ! -f "$CHEZMOI_SOURCE/nix/flake.nix" || ! -f "$CHEZMOI_SOURCE/nix/flake.lo
     exit 1
 fi
 
+prepend_path "/usr/local/bin" "/opt/homebrew/bin"
+if ! command -v jq >/dev/null 2>&1; then
+    printf '%s\n' \
+        'jq is required to validate the Home Manager configuration identity.' \
+        'Install jq and rerun chezmoi apply.' >&2
+    exit 1
+fi
+
 configuration_attr="$FLAKE#homeConfigurations.\"$HOME_MANAGER_CONFIGURATION\".config"
 configured_identity="$($NIX_BIN eval --json --no-write-lock-file \
     "$configuration_attr" --apply 'config: {

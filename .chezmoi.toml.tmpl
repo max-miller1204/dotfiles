@@ -1,4 +1,32 @@
 {{- $isWSL := and (eq .chezmoi.os "linux") (or (contains "microsoft" (lower .chezmoi.kernel.osrelease)) (contains "wsl" (lower .chezmoi.kernel.osrelease))) -}}
+{{- $headless := false -}}
+{{- if eq .chezmoi.os "linux" -}}
+{{-   $headless = promptBoolOnce . "headless" "Is this machine headless/server-only (skip GUI desktop apps)" false -}}
+{{- end -}}
+{{- $nixSystem := "unsupported" -}}
+{{- if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") -}}
+{{-   $nixSystem = "x86_64-linux" -}}
+{{- else if and (eq .chezmoi.os "darwin") (eq .chezmoi.arch "arm64") -}}
+{{-   $nixSystem = "aarch64-darwin" -}}
+{{- else if and (eq .chezmoi.os "darwin") (eq .chezmoi.arch "amd64") -}}
+{{-   $nixSystem = "x86_64-darwin" -}}
+{{- end -}}
+{{- $homeManagerConfiguration := "unsupported" -}}
+{{- if $isWSL -}}
+{{-   $homeManagerConfiguration = "max@wsl" -}}
+{{- else if and (eq .chezmoi.os "linux") $headless -}}
+{{-   $homeManagerConfiguration = "max@linux-headless" -}}
+{{- else if eq .chezmoi.os "linux" -}}
+{{-   $homeManagerConfiguration = "max@linux-desktop" -}}
+{{- else if and (eq .chezmoi.os "darwin") (eq .chezmoi.arch "arm64") -}}
+{{-   $homeManagerConfiguration = "max@macos-aarch64" -}}
+{{- else if and (eq .chezmoi.os "darwin") (eq .chezmoi.arch "amd64") -}}
+{{-   $homeManagerConfiguration = "max@macos-x86_64" -}}
+{{- end -}}
+{{- $homeManagerOverride := env "DOTFILES_HM_CONFIGURATION" -}}
+{{- if ne $homeManagerOverride "" -}}
+{{-   $homeManagerConfiguration = $homeManagerOverride -}}
+{{- end -}}
 [data]
     isWSL = {{ if $isWSL }}true{{ else }}false{{ end }}
     # Headless/server-only profile: skip GUI desktop apps (and their configs).
@@ -8,7 +36,14 @@
     # unchanged. Non-interactive `chezmoi init` must pass --promptDefaults.
     # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
     # its own question mark, so a literal one would double up.
-    headless = {{ if eq .chezmoi.os "linux" }}{{ promptBoolOnce . "headless" "Is this machine headless/server-only (skip GUI desktop apps)" false }}{{ else }}false{{ end }}
+    headless = {{ if $headless }}true{{ else }}false{{ end }}
+    # Home Manager is the active owner of the Phase 2 CLI bundle. Set this to
+    # false in chezmoi.toml for the emergency repository-rollback bypass.
+    homeManagerEnabled = true
+    nixSystem = "{{ $nixSystem }}"
+    # DOTFILES_HM_CONFIGURATION is a CI/recovery override. The activation script
+    # validates its output, username, home directory, and Nix system before use.
+    homeManagerConfiguration = "{{ $homeManagerConfiguration }}"
     # The mise typescript prefix relative to $HOME, shared by the fish config's
     # NODE_PATH and the install script's resolution check (each prepends its own
     # shell's home) so the derived path can't drift between the two.

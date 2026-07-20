@@ -125,17 +125,19 @@
         ];
       };
 
-      mkInactivePolicyCheck =
+      mkOwnershipPolicyCheck =
         system:
         let
           pkgs = import nixpkgs { inherit system; };
           active = toolOwnership.active.homeManager;
+          target = toolOwnership.target.homeManager;
         in
-        assert active.packages == [ ];
-        assert active.commands == [ ];
+        assert toolOwnership.migrationPhase == 2;
+        assert lib.subtractLists target.packages active.packages == [ ];
+        assert lib.subtractLists target.commands active.commands == [ ];
         assert active.writableConfigs == [ ];
         assert active.services == [ ];
-        pkgs.runCommand "inactive-home-manager-ownership-policy" { } ''
+        pkgs.runCommand "home-manager-ownership-policy" { } ''
           touch "$out"
         '';
     in
@@ -153,7 +155,7 @@
         system:
         lib.genAttrs nativeConfigurationNames.${system} (name: homeConfigurations.${name}.activationPackage)
         // {
-          inactive-ownership-policy = mkInactivePolicyCheck system;
+          ownership-policy = mkOwnershipPolicyCheck system;
         }
       );
     };

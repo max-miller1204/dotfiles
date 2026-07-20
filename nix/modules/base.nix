@@ -16,16 +16,20 @@ in
       message = "Unsupported tool ownership schema version";
     }
     {
-      assertion = toolOwnership.migrationPhase == 1;
-      message = "The inactive Home Manager module requires migration phase 1 ownership data";
+      assertion = toolOwnership.migrationPhase == 2;
+      message = "The active Home Manager module requires migration phase 2 ownership data";
     }
     {
       assertion = activeOwnership.writableConfigs == [ ];
-      message = "Phase 1 Home Manager must not claim writable configuration files";
+      message = "Phase 2 Home Manager must not claim writable configuration files";
+    }
+    {
+      assertion = config.home.file == { };
+      message = "Phase 2 Home Manager must not generate files in the home directory";
     }
     {
       assertion = lib.attrByPath [ "xdg" "configFile" ] { } config == { };
-      message = "Phase 1 Home Manager must not generate XDG configuration files";
+      message = "Phase 2 Home Manager must not generate XDG configuration files";
     }
     {
       assertion = configurationName != "" && profileName != "";
@@ -34,7 +38,11 @@ in
   ];
 
   home.stateVersion = "26.05";
-  home.packages = [ ];
+
+  # Home Manager 26.05 otherwise creates .cache/.keep and
+  # .local/state/.keep through its XDG module even when no file module is used.
+  # Force the merged file set empty so chezmoi remains the sole file owner.
+  home.file = lib.mkForce { };
 
   manual.manpages.enable = false;
   news.display = "silent";

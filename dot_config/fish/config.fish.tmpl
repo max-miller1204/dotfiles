@@ -1,3 +1,19 @@
+# Essential user paths must exist in non-interactive fish too. Build PATH
+# directly so precedence is deterministic even when fish_user_paths was loaded
+# before this file or the inherited PATH already contains one of these paths.
+set -l user_path
+for dir in ~/.nix-profile/bin ~/.cargo/bin ~/.local/bin ~/.opencode/bin ~/.bun/bin
+    if test -d $dir
+        set -a user_path $dir
+    end
+end
+for dir in $PATH
+    if not contains -- $dir $user_path
+        set -a user_path $dir
+    end
+end
+set -gx PATH $user_path
+
 if status is-interactive
     # -- Aliases ---------------------------------------------------------
 
@@ -51,8 +67,6 @@ if status is-interactive
 
     # -- PATH ------------------------------------------------------------
 
-    fish_add_path --prepend ~/.local/bin ~/.opencode/bin ~/.atuin/bin ~/.bun/bin
-
     {{- if eq .chezmoi.os "darwin" }}
     if test -x /opt/homebrew/bin/brew
         /opt/homebrew/bin/brew shellenv | source
@@ -65,6 +79,14 @@ if status is-interactive
     # Install: `brew install mise` on macOS, `curl https://mise.run | sh` on Ubuntu.
     if type -q mise
         mise activate fish | source
+    end
+
+    # Home Manager owns the Phase 2 CLI bundle. Re-prepend its profile after
+    # mise and Homebrew mutate PATH so retained rollback installs cannot win.
+    set -l home_manager_bin $HOME/.nix-profile/bin
+    if test -d $home_manager_bin
+        set -gx PATH $home_manager_bin \
+            (string match -v -- $home_manager_bin $PATH)
     end
 
     # typescript-language-server lives in its own mise prefix and can't resolve
@@ -96,15 +118,16 @@ if status is-interactive
         atuin init fish | source
     end
 
-    # direnv per-directory env: loads a project's .envrc on cd (mise-installed, so
-    # probed after mise activation). With the nix-direnv rc in ~/.config/direnv/direnvrc
+    # direnv per-directory env: loads a project's .envrc on cd (still
+    # mise-installed in Phase 2, so probed after mise activation). With the
+    # nix-direnv rc in ~/.config/direnv/direnvrc
     # this gives `use flake`, auto-loading a repo's Nix devshell for its LSP/toolchain.
     if type -q direnv
         direnv hook fish | source
     end
 
-    # eza replaces ls if installed. Probed here, after mise activation, so a
-    # mise-installed eza (Linux) is on PATH; a system eza still resolves too.
+    # eza replaces ls if installed. The Home Manager profile has already been
+    # re-prepended, so it wins over retained mise or Homebrew rollback copies.
     if type -q eza
         alias ls 'eza -lh --group-directories-first --icons=auto'
         alias la 'ls -a'

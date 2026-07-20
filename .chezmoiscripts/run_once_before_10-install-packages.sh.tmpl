@@ -7,8 +7,8 @@
 # `.packages` and dispatches each entry to the matching install_* helper in
 # .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
 # manifest edit. GUI packages are skipped when headless or on WSL (Windows-native
-# versions are used there). Everything after the loop (mise toolchains, Nix,
-# coding agents, login shell) is not part of the manifest and is unchanged.
+# versions are used there). Everything after the loop (remaining mise runtimes,
+# Nix, coding agents, login shell) is not part of the manifest.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
@@ -23,7 +23,14 @@
 
 {{- if eq .chezmoi.os "darwin" }}
 
-# ---- macOS prep: Homebrew -----------------------------------------
+# ---- macOS prep: manual Nix prerequisite + Homebrew --------------
+if [[ -z "$(resolve_nix)" ]]; then
+    printf '%s\n' \
+        'Nix is required before bootstrapping this repository on macOS.' \
+        'Install Determinate Nix with the Determinate.pkg, open a new shell, and rerun chezmoi apply.' >&2
+    exit 1
+fi
+
 if ! command -v brew >/dev/null 2>&1; then
     log "Installing Homebrew"
     NONINTERACTIVE=1 /bin/bash -c \
@@ -139,13 +146,14 @@ install_mise "{{ get $pkg "bin" }}" "{{ $os.mise }}"
 {{-   end }}
 {{- end }}
 
-# ---- mise toolchains (node needed for npx / MCP runners) ---------
+# ---- remaining mise toolchains (node needed for npx / MCP runners) ----
+# Home Manager owns fzf and Neovim from Phase 2 onward. Existing mise installs
+# are retained for rollback, but the Home Manager profile wins on PATH.
 MISE_BIN="$(resolve_mise)"
 if [[ -n "$MISE_BIN" ]]; then
-    log "Installing toolchains via mise (node, python, rust, go, fzf, bun, neovim)"
+    log "Installing remaining toolchains via mise (node, python, rust, go, bun, uv)"
     "$MISE_BIN" use -g \
-        node@lts python@latest rust@latest go@latest \
-        fzf@latest bun@latest neovim@latest uv@latest
+        node@lts python@latest rust@latest go@latest bun@latest uv@latest
 
     # npm-distributed CLIs are installed through mise so they survive node
     # upgrades instead of being orphaned in a version-pinned npm runtime.

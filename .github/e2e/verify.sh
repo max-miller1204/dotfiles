@@ -14,24 +14,35 @@ MODE="${1:-verify}"
 ENVIRONMENT="${2:-sandbox}"
 APPLY_LOG="${APPLY_LOG:-}"
 
-# Expected command names, mirroring .chezmoidata/packages.yaml (linux desktop
-# profile) plus the mise toolchains block, coding agents, and LSP servers.
-# Kept as an explicit list so this file doubles as the checklist spec.
-MANIFEST_BINS=(fish git tmux jq curl wget gpg add-apt-repository zenity mise
-	eza gum starship atuin bat fd rg zoxide direnv gh op pfetch brev treehouse no-mistakes herdr)
+# Expected command names, split by active owner so this file also verifies the
+# ownership boundary instead of presence alone.
+MANIFEST_BINS=(fish git jq curl wget gpg add-apt-repository zenity mise
+	direnv gh op pfetch brev treehouse no-mistakes herdr)
+HOME_MANAGER_BINS=(eza gum starship atuin bat fd rg zoxide tmux fzf nvim)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
-TOOLCHAIN_BINS=(node python cargo go fzf bun nvim uv hunk)
+TOOLCHAIN_BINS=(node python cargo go bun uv hunk)
 AGENT_BINS=(claude codex opencode pi)
 LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clangd)
 
 # Resolve through a login+interactive fish so PATH reflects the real UX the
-# dotfiles set up (mise shims/activation are gated on interactive in config.fish).
+# dotfiles set up (mise and Home Manager precedence is configured there).
 fish_has() { fish -l -i -c "command -q $1" 2>/dev/null; }
+fish_path() {
+	fish -l -i -c "command -v $1" 2>/dev/null |
+		sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1
+}
+home_manager_owns() {
+	local path resolved
+	path="$(fish_path "$1")"
+	[[ "$path" == "$HOME/.nix-profile/bin/"* ]] || return 1
+	resolved="$(readlink -f "$path")"
+	[[ "$resolved" == /nix/store/* ]]
+}
 
 if [[ "$MODE" == "preflight" ]]; then
 	echo "== preflight inventory (bins present BEFORE apply; install NOT proven for these) =="
-	for b in "${MANIFEST_BINS[@]}" "${GUI_BINS[@]}" "${TOOLCHAIN_BINS[@]}" "${AGENT_BINS[@]}" "${LSP_BINS[@]}"; do
+	for b in "${MANIFEST_BINS[@]}" "${HOME_MANAGER_BINS[@]}" "${GUI_BINS[@]}" "${TOOLCHAIN_BINS[@]}" "${AGENT_BINS[@]}" "${LSP_BINS[@]}"; do
 		if command -v "$b" >/dev/null 2>&1; then
 			echo "PREEXISTING: $b -> $(command -v "$b")"
 		else
@@ -66,6 +77,20 @@ info() { # info "<desc>" <cmd...>  (recorded, never gates)
 
 echo "== manifest CLI bins (via login+interactive fish PATH) =="
 for b in "${MANIFEST_BINS[@]}"; do hard "bin $b" fish_has "$b"; done
+
+echo "== Home Manager CLI ownership =="
+for b in "${HOME_MANAGER_BINS[@]}"; do
+	hard "Home Manager owns $b" home_manager_owns "$b"
+done
+hard "Home Manager profile is active" test -L \
+	"${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/home-manager"
+hard "active generation was recorded before activation" test -s \
+	"${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/home-manager-before-switch"
+hard "rollback generation state exists" test -s \
+	"${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/home-manager-previous-generation"
+hard "tmux starts" fish -l -i -c 'tmux -L dotfiles-e2e start-server'
+hard "fzf version probe" fish -l -i -c 'fzf --version'
+hard "Neovim startup probe" fish -l -i -c "nvim --headless '+quit'"
 
 echo "== GUI desktop apps (desktop profile must install these) =="
 for b in "${GUI_BINS[@]}"; do hard "gui bin $b" fish_has "$b"; done

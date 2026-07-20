@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 -->
+
 # dotfiles
 
 Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubuntu** (which uses the Linux path with desktop apps gated off — see [WSL Ubuntu](#wsl-ubuntu)).
@@ -13,23 +15,25 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 | `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
 | `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
 | `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
-| `update-all` | Fish function — refreshes brew / apt / flatpak, mise toolchains, chezmoi, atuin. |
+| `update-all` | Fish function that refreshes OS packages, remaining mise tools, and chezmoi without changing `nix/flake.lock`. |
+| `hm-update` | Updates `nix/flake.lock`, checks the flake, and builds the selected Home Manager configuration for review. |
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
-On first `chezmoi apply`, a `run_once_before` script installs every CLI and GUI
-app these dotfiles expect; the full set is the `.chezmoidata/packages.yaml`
-manifest (see [Bootstrap a new machine](#bootstrap-a-new-machine)), not a list
-kept here.
+On first `chezmoi apply`, a `run_once_before` script installs system-integrated packages and GUI apps from `.chezmoidata/packages.yaml`.
+A plain `run_before` script then activates the pinned Home Manager CLI bundle before chezmoi changes managed target files.
 `run_once_after` scripts clone TPM + install tmux plugins and drop the LazyVim
 starter into `~/.config/nvim` if it's empty.
 
 ## Bootstrap a new machine
 
+On macOS, manually install Determinate Nix from its signed Determinate.pkg and open a new shell before continuing.
+Home Manager activation intentionally fails before bootstrap changes when Nix is absent.
+
 ```sh
-# macOS: install chezmoi (brings curl along for the ride)
+# macOS, after installing Determinate Nix
 brew install chezmoi
-# Ubuntu: one-liner from the chezmoi site
+# Ubuntu
 sh -c "$(curl -fsSL https://get.chezmoi.io)"
 
 chezmoi init --apply max-miller1204/dotfiles
@@ -39,18 +43,13 @@ chezmoi init --apply max-miller1204/dotfiles
 
 That's it - the install scripts run during `apply` and handle the rest:
 
-- installs every **CLI and GUI app** these dotfiles expect from the package
-  manifest, `.chezmoidata/packages.yaml`.
-  That manifest is the single source of truth: it describes each tool once and
-  carries its per-OS install method as data, so it is the one place to look (and
-  the one place to edit), not a hand-kept list here.
-  GUI desktop apps are skipped on WSL (where the Windows-native versions are used
-  instead) and on headless/server machines; the non-GUI CLI tools install
-  everywhere
-- installs **toolchains via mise**: `node@lts`, `python@latest`,
-  `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`,
-  `uv@latest` (so fzf/bun/neovim are mise-managed, not apt/brew)
-- installs **Nix** via the Determinate installer
+- installs system-integrated CLI packages and GUI apps from `.chezmoidata/packages.yaml`.
+  GUI apps are skipped on WSL and headless Linux machines.
+- installs the remaining Phase 2 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
+- installs **Nix** through the Determinate installer on Linux.
+  macOS requires the Determinate.pkg to be installed manually before `chezmoi init --apply`.
+- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, and Neovim.
+  Their writable configuration remains chezmoi-owned.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
@@ -87,18 +86,46 @@ chsh -s "$(command -v fish)"
 
 ## Home Manager migration
 
-The repository contains a standalone flake under `nix/` as the inactive foundation for a staged migration away from mise.
-Phase 1 does not activate Home Manager, install any migrated command, manage writable configuration, or own a user service, so the existing fresh-machine bootstrap remains unchanged.
-The flake is intentionally nested and must always be addressed with an explicit `path:` URL so only the `nix/` subtree enters the Nix store.
+The repository contains a standalone flake under `nix/` for a staged migration away from mise.
+Phase 2 activates Home Manager and gives it exclusive ownership of the CLI bundle listed above.
+Home Manager owns only package binaries at this stage.
+Chezmoi still owns Fish, tmux, Neovim, Atuin, starship, and other writable configuration.
+No Home Manager service is enabled.
+
+The flake is intentionally nested and every command addresses it through an explicit `path:` URL so only `nix/` enters the Nix store.
 
 ```sh
-nix flake check "path:$PWD/nix"
+nix flake check --no-write-lock-file "path:$PWD/nix"
 ```
 
 The pinned inputs are nixpkgs `nixos-26.05` and Home Manager `release-26.05`, with `home.stateVersion = "26.05"`.
-`nix/data/tool-ownership.json` separates active ownership from the planned target ownership, and the Phase 1 checks require every active Home Manager ownership list to remain empty.
-Real configurations cover Linux desktop, Linux headless, WSL, and both macOS architectures for user `max`; matching `runner` configurations provide CI-safe home paths.
-macOS still requires a manual Determinate Nix installation, and no Home Manager activation is attempted yet on any platform.
+`nix/data/tool-ownership.json` records active and target ownership.
+Real configurations cover Linux desktop, Linux headless, WSL, and both macOS architectures for user `max`.
+Matching `runner` configurations provide CI-safe home paths.
+`DOTFILES_HM_CONFIGURATION` can select one of those outputs for CI or recovery, and activation rejects a username, home directory, or system mismatch.
+WSL selection takes precedence over the Linux headless profile.
+
+Every `chezmoi apply` records the active generation in `~/.local/state/dotfiles/home-manager-before-switch` and runs Home Manager before changing managed targets.
+When a switch changes the generation, it preserves the old path in `~/.local/state/dotfiles/home-manager-previous-generation`.
+A failed build leaves the previous generation active and stops the apply.
+If activation fails after profiles change, the wrapper restores both generation and package profiles; a failed first activation removes the new profiles.
+To disable activation during repository recovery, set `homeManagerEnabled = false` in `~/.config/chezmoi/chezmoi.toml`.
+To roll back packages, list generations and run the selected generation's activation script.
+The recorded path is `<none>` on a machine that has never had an earlier generation.
+
+```sh
+nix run --no-write-lock-file "path:$(chezmoi source-path)/nix#home-manager" -- generations
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+previous=$(cat "$state_home/dotfiles/home-manager-previous-generation")
+if [ "$previous" != '<none>' ]; then
+  nix profile rollback --profile "$state_home/nix/profiles/home-manager"
+  "$previous/activate"
+fi
+```
+
+Repository rollback is separate: revert the Phase 2 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
+Old mise and Homebrew implementations are intentionally not uninstalled during the rollback window.
+Do not garbage-collect Nix generations during the migration soak.
 
 ## Secrets (1Password)
 
@@ -108,7 +135,7 @@ to git, and nothing plaintext lands in the source tree. There are currently
 
 - **chezmoi template** (value rendered into a target file at apply time):
 
-  ```
+  ```gotmpl
   {{ onepasswordRead "op://Personal/MyService/credential" }}
   ```
 
@@ -256,7 +283,7 @@ Cross-platform:
 
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go; `lsp-upgrade` does a targeted upgrade of just the Claude Code language servers)
+- `dot_config/fish/functions/*.fish` - custom Fish functions, including `update-all`, `hm-update`, and the Phase 2 `lsp-upgrade` command.
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -338,7 +365,11 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_after_71-sync-no-mistakes-skill.sh.tmpl` - keeps the ignored Claude and shared-agent no-mistakes skills aligned with the installed CLI release, fetching only when its release marker or either skill checksum differs
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
-`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (1Password and gh now - eza and gum moved to mise); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method; `lib-codex-sync.sh` holds the shared file-prep preamble (define `CODEX_CONFIG`, verify the staging source is readable, `mkdir`/touch the target) for the two Codex config-sync scripts.
+`lib-log.sh` provides `set -euo pipefail` and `log()`.
+`lib-resolve.sh` provides Nix, mise, rustup, and PATH resolution helpers.
+`lib-apt.sh` provides the shared third-party apt repository installer for 1Password and gh.
+`lib-install.sh` provides package-manifest method helpers.
+`lib-codex-sync.sh` provides the shared file preparation for Codex sync scripts.
 The Claude MCP sync (`run_onchange_after_40`) keeps its own bare preamble; the two Codex sync scripts (`run_onchange_after_41`/`42`) share only that file-prep preamble via `lib-codex-sync.sh` and keep their differing awk-strip + recombine bodies inline.
 All three deliberately stay on a bare `set -euo pipefail` + `echo` and pull in no `lib-log.sh`.
 See [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md) for the convention.
@@ -447,22 +478,25 @@ the repo and need manual hand-off.
    chmod 600 ~/.ssh/id_*
    ```
 
-3. **Bootstrap** — same command as the top of this README:
+3. **Install Determinate Nix manually** from the signed Determinate.pkg.
+   Open a new terminal and verify `nix --version` before continuing.
+
+4. **Bootstrap** with the same command as the top of this README:
 
    ```sh
    brew install chezmoi
    chezmoi init --apply max-miller1204/dotfiles
    ```
 
-4. **Open a new Ghostty tab** so fish picks up as the login shell. If fish
+5. **Open a new Ghostty tab** so fish picks up as the login shell. If fish
    isn't the default yet, run `chsh -s "$(command -v fish)"` manually — the
    bootstrap's `chsh` can silently fail inside some TTYs.
 
-5. **Import Raycast** — see [Raycast settings](#raycast-settings) for the
+6. **Import Raycast** - see [Raycast settings](#raycast-settings) for the
    two-step dance (import `.rayconfig`, point Raycast at
    `~/.config/raycast-scripts`).
 
-6. **Sign in to everything**: 1Password (desktop app + CLI integration, see
+7. **Sign in to everything**: 1Password (desktop app + CLI integration, see
    [Secrets](#secrets-1password) — `chezmoi apply` doesn't depend on it while
    the repo has no secrets, so this can wait until after bootstrap),
    GitHub (`gh auth login`), Atuin (`atuin login` + `atuin sync` —
@@ -470,16 +504,17 @@ the repo and need manual hand-off.
    Claude Code, Codex, and OpenCode (run `claude`, `codex`, and `opencode`
    and follow each login flow).
 
-7. **Verify**:
+8. **Verify**:
 
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
-   mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & pi)
-   which brew fish claude codex opencode pi op # sanity-check everything's on PATH
+   mise list                 # node, python, rust, go, bun, uv, LSP servers, pi, Hunk
+   which eza fzf nvim         # each path starts under ~/.nix-profile/bin
+   which brew fish claude codex opencode pi op
    op whoami                 # confirms 1Password sign-in
    ```
 
-8. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**
+9. **macOS system defaults** (Dock, Finder, trackpad, etc.) are **not**
    managed by this repo — configure them manually via System Settings, or
    add a `defaults write` script later if that becomes worth automating.
 
@@ -488,5 +523,6 @@ the repo and need manual hand-off.
 - `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The install script is `run_once` — it only reruns if its content changes
-- `update-all` (fish function) refreshes everything the bootstrap installs: brew (formulae + casks) on macOS or apt (+ PPAs) + flatpak on Ubuntu, plus mise toolchains, chezmoi itself, and atuin
+- `update-all` refreshes OS packages, remaining mise tools, and chezmoi without changing the Home Manager lock file.
+- `hm-update` updates `nix/flake.lock`, checks the flake, and builds the selected configuration for review.
 - `lsp-upgrade` (fish function) does a targeted upgrade of just the Claude Code language servers. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage

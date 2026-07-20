@@ -14,7 +14,7 @@ Read [`.claude/rules/bootstrap/home-manager.md`](.claude/rules/bootstrap/home-ma
 - the standalone flake and any file under `nix/`
 - Home Manager ownership, profiles, host records, activation, updates, generations, or rollback
 - Home Manager checks in `.github/workflows/ci.yml`
-- the future Home Manager activation script or `hm-update` command
+- the Home Manager activation script or `hm-update` command
 - Nix purity, secret isolation, or the nested `path:` flake boundary
 
 Also read the package and CI rules below when an ownership change moves a command or changes validation.

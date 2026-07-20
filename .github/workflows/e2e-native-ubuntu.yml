@@ -1,25 +1,30 @@
-# On-demand native-Ubuntu E2E: run the real bootstrap (chezmoi init --apply) on a
-# clean GitHub-hosted Ubuntu VM - a genuine non-WSL kernel where the isWSL data
-# computes false naturally - then verify the installed end state with
-# .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and GUI
-# packages and takes ~an hour, so it must never run on push/PR.
+---
+# On-demand native-Ubuntu E2E: run the real bootstrap
+# (chezmoi init --apply) on a clean GitHub-hosted Ubuntu VM with a genuine
+# non-WSL kernel, then verify the installed end state with
+# .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and
+# GUI packages and takes ~an hour, so it must never run on push/PR.
 #
 # Caveats:
-# - runners are preloaded VMs, so the preflight step inventories preexisting bins;
-#   their install paths are NOT proven by this job (the clean-rootfs sandbox pass
-#   owns that proof).
-# - --promptDefaults is the one deviation from the README one-liner (no TTY here);
+# - runners are preloaded VMs, so preflight inventories preexisting bins;
+#   their install paths are NOT proven by this job (the clean-rootfs sandbox
+#   pass owns that proof).
+# - --promptDefaults deviates from the README one-liner because there is no TTY;
 #   it resolves the linux-only `headless` prompt to its false default, so this
 #   exercises the full desktop profile.
 name: e2e-native-ubuntu
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       expected_head:
-        description: Commit SHA the dispatched ref must resolve to (assert before apply)
+        description: >-
+          Commit SHA the dispatched ref must resolve to before apply
         required: false
         default: ""
+
+permissions:
+  contents: read
 
 jobs:
   e2e:
@@ -28,7 +33,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
 
       - name: Assert environment (Ubuntu 24.04, non-WSL kernel, pinned tree)
         env:
@@ -38,7 +45,9 @@ jobs:
           . /etc/os-release
           echo "os: $PRETTY_NAME  kernel: $(uname -r)"
           [ "$VERSION_ID" = "24.04" ]
-          case "$(uname -r)" in *[Mm]icrosoft*) echo "WSL kernel on runner?!"; exit 1 ;; esac
+          case "$(uname -r)" in
+            *[Mm]icrosoft*) echo "WSL kernel on runner?!"; exit 1 ;;
+          esac
           HEAD="$(git rev-parse HEAD)"
           echo "tree HEAD: $HEAD"
           if [ -n "$EXPECTED_HEAD" ]; then
@@ -52,15 +61,18 @@ jobs:
         run: |
           set -euo pipefail
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
           df -h /
 
       - name: Make sudo env stock-Ubuntu-like (HOME reset, no XDG_CONFIG_HOME)
         run: |
           set -euo pipefail
           echo "sudo HOME before: $(sudo sh -c 'echo $HOME')"
-          echo "sudo XDG_CONFIG_HOME before: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
-          sudo grep -rn 'env_reset\|env_keep\|always_set_home' /etc/sudoers /etc/sudoers.d/ || true
+          sudo_xdg=$(sudo sh -c 'echo $XDG_CONFIG_HOME')
+          echo "sudo XDG_CONFIG_HOME before: [$sudo_xdg]"
+          sudo grep -rn 'env_reset\|env_keep\|always_set_home' \
+            /etc/sudoers /etc/sudoers.d/ || true
           grep -n 'XDG' /etc/environment || true
           if [ "$(sudo sh -c 'echo $HOME')" != /root ]; then
             # Runner sudo preserves the caller's environment (!env_reset style),
@@ -69,10 +81,14 @@ jobs:
             # user's home and break chezmoi's later chmod - an artifact stock
             # Ubuntu (which resets HOME to the target user's) never hits. Force
             # the stock behavior regardless of which mechanism preserves it.
-            echo 'Defaults always_set_home' | sudo tee /etc/sudoers.d/zzz-e2e-always-set-home >/dev/null
+            echo 'Defaults always_set_home' | \
+              sudo tee /etc/sudoers.d/zzz-e2e-always-set-home >/dev/null
             sudo chmod 440 /etc/sudoers.d/zzz-e2e-always-set-home
           fi
-          [ "$(sudo sh -c 'echo $HOME')" = /root ] || { echo "sudo still preserves HOME" >&2; exit 1; }
+          if [ "$(sudo sh -c 'echo $HOME')" != /root ]; then
+            echo "sudo still preserves HOME" >&2
+            exit 1
+          fi
           # The runner image also writes XDG_CONFIG_HOME=$HOME/.config into
           # /etc/environment (actions/runner-images configure-environment.sh);
           # the job env carries it EXPANDED (/home/runner/.config), and it
@@ -82,7 +98,8 @@ jobs:
           # sets no XDG vars in /etc/environment, so remove the artifact and
           # keep it out of the apply step's env below.
           sudo sed -i '/^XDG_CONFIG_HOME=/d' /etc/environment
-          echo "sudo XDG_CONFIG_HOME after: [$(sudo sh -c 'echo $XDG_CONFIG_HOME')]"
+          sudo_xdg=$(sudo sh -c 'echo $XDG_CONFIG_HOME')
+          echo "sudo XDG_CONFIG_HOME after: [$sudo_xdg]"
 
       - name: Stage source where a real init would clone it
         run: |
@@ -102,28 +119,42 @@ jobs:
           set -euo pipefail
           # Plain grep of the template text: rendering needs the chezmoi config,
           # which does not exist until the init --apply step below.
-          grep -n -B2 -A2 'determinate' \
-            "$HOME/.local/share/chezmoi/.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+          scripts_dir="$HOME/.local/share/chezmoi/.chezmoiscripts"
+          install_script=$(printf '%s/%s' "$scripts_dir" \
+            'run_once_before_10-install-packages.sh.tmpl')
+          grep -n -B2 -A2 'determinate' "$install_script"
 
       - name: Arm config watcher (attribute who creates ~/.config/fish)
         run: |
           set -euo pipefail
           sudo apt-get install -y -qq inotify-tools
           mkdir -p "$HOME/.config"
-          nohup bash -c '
-            inotifywait -m -e create -e moved_to --format "%T %w%f %e" --timefmt "%H:%M:%S" "$HOME/.config" 2>/dev/null \
-            | while read -r line; do
-                echo "$line" >> "$HOME/fishwatch.log"
-                case "$line" in
-                  *config/fish*)
-                    { stat -c "owner=%U group=%G mode=%a %n" "$HOME/.config/fish"
-                      echo "--- processes at creation ---"
-                      ps -ef | tail -50; } >> "$HOME/fishwatch.log" 2>&1 ;;
-                esac
-              done' >/dev/null 2>&1 &
+          watcher="$RUNNER_TEMP/watch-config.sh"
+          cat >"$watcher" <<'WATCHER'
+          #!/usr/bin/env bash
+          inotifywait -m -e create -e moved_to \
+            --format "%T %w%f %e" --timefmt "%H:%M:%S" \
+            "$HOME/.config" 2>/dev/null |
+            while read -r line; do
+              echo "$line" >>"$HOME/fishwatch.log"
+              case "$line" in
+                *config/fish*)
+                  {
+                    stat -c "owner=%U group=%G mode=%a %n" \
+                      "$HOME/.config/fish"
+                    echo "--- processes at creation ---"
+                    ps -ef | tail -50
+                  } >>"$HOME/fishwatch.log" 2>&1
+                  ;;
+              esac
+            done
+          WATCHER
+          nohup bash "$watcher" >/dev/null 2>&1 &
           echo "watcher pid $!"
 
       - name: chezmoi init --apply (the real bootstrap)
+        env:
+          DOTFILES_HM_CONFIGURATION: ci@linux-desktop
         run: |
           set -euo pipefail
           # A real login session on stock Ubuntu exports no XDG_CONFIG_HOME;
@@ -133,19 +164,166 @@ jobs:
           chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
           exit "${PIPESTATUS[0]}"
 
+      - name: Reapply and verify Home Manager idempotence
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          before=$(readlink -f "$profile")
+          chezmoi apply --force --no-tty 2>&1 | tee second-apply.log
+          test "${PIPESTATUS[0]}" -eq 0
+          after=$(readlink -f "$profile")
+          test "$before" = "$after"
+          sed 's/^/SECOND-APPLY: /' second-apply.log >>apply.log
+
+      - name: Reject invalid selection and preserve the generation
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          before=$(readlink -f "$profile")
+          if DOTFILES_HM_CONFIGURATION=missing-configuration \
+            chezmoi apply --force --no-tty >invalid-selection.log 2>&1; then
+            echo 'Invalid Home Manager configuration unexpectedly activated' >&2
+            exit 1
+          fi
+          grep -q 'Invalid Home Manager configuration' invalid-selection.log
+          test "$before" = "$(readlink -f "$profile")"
+
+      - name: Failed Home Manager build preserves the generation
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          source_dir="$HOME/.local/share/chezmoi"
+          cli_module="$source_dir/nix/modules/cli.nix"
+          backup="$RUNNER_TEMP/cli.nix"
+          cp "$cli_module" "$backup"
+          trap 'cp "$backup" "$cli_module"' EXIT
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          package_profile="$state_home/nix/profiles/profile"
+          before=$(readlink -f "$profile")
+          before_package=$(readlink -f "$package_profile")
+          cat >"$cli_module" <<'NIX'
+          { pkgs, ... }:
+          {
+            home.packages = [
+              (pkgs.runCommand "intentional-e2e-failure" { } ''
+                echo "intentional E2E build failure" >&2
+                exit 1
+              '')
+            ];
+          }
+          NIX
+          if chezmoi apply --force --no-tty >failed-build.log 2>&1; then
+            echo 'Broken Home Manager module unexpectedly activated' >&2
+            exit 1
+          fi
+          grep -q 'intentional E2E build failure' failed-build.log
+          test "$before" = "$(readlink -f "$profile")"
+          test "$before_package" = "$(readlink -f "$package_profile")"
+          cp "$backup" "$cli_module"
+          trap - EXIT
+
+      - name: Failed Home Manager activation rolls back profiles
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          source_dir="$HOME/.local/share/chezmoi"
+          cli_module="$source_dir/nix/modules/cli.nix"
+          backup="$RUNNER_TEMP/cli-activation.nix"
+          cp "$cli_module" "$backup"
+          trap 'cp "$backup" "$cli_module"' EXIT
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          package_profile="$state_home/nix/profiles/profile"
+          before=$(readlink -f "$profile")
+          before_package=$(readlink -f "$package_profile")
+          cat >"$cli_module" <<'NIX'
+          { lib, ... }:
+          {
+            home.activation.intentionalE2EFailure =
+              lib.hm.dag.entryAfter [ "installPackages" ] ''
+                echo "intentional E2E activation failure" >&2
+                exit 1
+              '';
+          }
+          NIX
+          if chezmoi apply --force --no-tty \
+            >failed-activation.log 2>&1; then
+            echo 'Broken Home Manager activation unexpectedly succeeded' >&2
+            exit 1
+          fi
+          grep -q 'intentional E2E activation failure' failed-activation.log
+          grep -q 'Restoring Home Manager generation' failed-activation.log
+          test "$before" = "$(readlink -f "$profile")"
+          test "$before_package" = "$(readlink -f "$package_profile")"
+          cp "$backup" "$cli_module"
+          trap - EXIT
+
+      - name: Failed first activation removes new profiles
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          source_dir="$HOME/.local/share/chezmoi"
+          cli_module="$source_dir/nix/modules/cli.nix"
+          backup="$RUNNER_TEMP/cli-first-activation.nix"
+          cp "$cli_module" "$backup"
+          trap 'cp "$backup" "$cli_module"' EXIT
+          first_state="$RUNNER_TEMP/first-home-manager-state"
+          rm -rf "$first_state"
+          cat >"$cli_module" <<'NIX'
+          { lib, ... }:
+          {
+            home.activation.intentionalFirstE2EFailure =
+              lib.hm.dag.entryAfter [ "installPackages" ] ''
+                echo "intentional first activation failure" >&2
+                exit 1
+              '';
+          }
+          NIX
+          if XDG_STATE_HOME="$first_state" \
+            chezmoi apply --force --no-tty \
+            >failed-first-activation.log 2>&1; then
+            echo 'Broken first Home Manager activation unexpectedly' \
+              'succeeded' >&2
+            exit 1
+          fi
+          grep -q 'intentional first activation failure' \
+            failed-first-activation.log
+          grep -q 'Removing the failed first Home Manager generation' \
+            failed-first-activation.log
+          test ! -e "$first_state/nix/profiles/home-manager"
+          test ! -e "$first_state/nix/profiles/profile"
+          if [[ -d "$first_state/nix/profiles" ]]; then
+            test -z "$(find "$first_state/nix/profiles" \
+              -type l -print -quit)"
+          fi
+          cp "$backup" "$cli_module"
+          trap - EXIT
+
       - name: Verify end state
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
-          APPLY_LOG="$PWD/apply.log" bash .github/e2e/verify.sh verify runner | tee verify-report.txt
+          APPLY_LOG="$PWD/apply.log" \
+            bash .github/e2e/verify.sh verify runner | tee verify-report.txt
           exit "${PIPESTATUS[0]}"
 
       - name: Ownership forensics on failure
         if: failure()
         run: |
           ls -la "$HOME/.config" 2>/dev/null || true
-          stat -c 'owner=%U group=%G mode=%a %n' "$HOME/.config/fish" 2>/dev/null || true
+          stat -c 'owner=%U group=%G mode=%a %n' \
+            "$HOME/.config/fish" 2>/dev/null || true
           echo "--- root's config ---"
           sudo ls -la /root/.config/ /root/.config/fish 2>/dev/null || true
           echo "--- watcher log ---"
@@ -154,11 +332,16 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e2e-native-ubuntu
           path: |
             apply.log
+            second-apply.log
+            invalid-selection.log
+            failed-build.log
+            failed-activation.log
+            failed-first-activation.log
             preflight.txt
             verify-report.txt
             ~/fishwatch.log

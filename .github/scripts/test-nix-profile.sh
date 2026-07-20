@@ -13,6 +13,26 @@ if ! grep -Fq 'joinPath .chezmoi.sourceDir "nix"' "$profile_template"; then
 	exit 1
 fi
 
+# A fresh installer cannot update its parent shell, and this test also runs in a
+# later GitHub Actions step. Initialize an installed Nix before using it.
+if ! command -v nix >/dev/null 2>&1; then
+	unset __ETC_PROFILE_NIX_SOURCED
+	for nix_init in \
+		/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+		"$HOME/.nix-profile/etc/profile.d/nix.sh"
+	do
+		if [[ -r "$nix_init" ]]; then
+			# shellcheck source=/dev/null
+			source "$nix_init"
+			break
+		fi
+	done
+fi
+if ! command -v nix >/dev/null 2>&1; then
+	echo "Nix is required by the dedicated profile lifecycle test" >&2
+	exit 1
+fi
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cp -a "$repo_root/nix" "$tmp/nix"

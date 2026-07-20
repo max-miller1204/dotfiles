@@ -166,7 +166,9 @@ jobs:
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
-          exit "${PIPESTATUS[0]}"
+          # The installer cannot update future Actions step environments.
+          # Publish Nix explicitly for the profile and verification steps.
+          echo "/nix/var/nix/profiles/default/bin" >> "$GITHUB_PATH"
 
       - name: Second apply does not create a profile generation
         run: |

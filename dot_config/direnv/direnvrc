@@ -1,13 +1,4 @@
-# nix-direnv: adds `use flake` for Nix flake devshells, with build caching and GC
-# roots (so `nix-collect-garbage` won't wipe an active devshell). direnv fetches and
-# caches this rc once, pinned by version + content hash for reproducibility.
-#
-# To update: bump the version in BOTH the URL and the nix_direnv_version check, then
-# replace the sha256 (direnv's SRI integrity check) with the new release's hash from
-# https://github.com/nix-community/nix-direnv#installation (the "Direnv source_url" block).
-#
-# On a machine without Nix this stays inert until a flake `.envrc` actually calls
-# `use flake`; plain direnv features (`use`, `dotenv`, `layout`) work regardless.
-if ! has nix_direnv_version || ! nix_direnv_version 3.1.2; then
-  source_url "https://raw.githubusercontent.com/nix-community/nix-direnv/3.1.2/direnvrc" "sha256-Di03ad3a0ueGi6CGrfhrQzyGdQIg9APXIPCAMNQgWYM="
-fi
+# Home Manager installs the pinned nix-direnv package. Keep this writable
+# integration file chezmoi-owned while loading the implementation from the
+# active Home Manager generation rather than downloading code at shell startup.
+source "$HOME/.nix-profile/share/nix-direnv/direnvrc"

@@ -132,7 +132,7 @@
           active = toolOwnership.active.homeManager;
           target = toolOwnership.target.homeManager;
         in
-        assert toolOwnership.migrationPhase == 2;
+        assert toolOwnership.migrationPhase == 3;
         assert lib.subtractLists target.packages active.packages == [ ];
         assert lib.subtractLists target.commands active.commands == [ ];
         assert active.writableConfigs == [ ];

@@ -1,16 +1,18 @@
 {
   "schemaVersion": 1,
-  "migrationPhase": 2,
+  "migrationPhase": 3,
   "active": {
     "homeManager": {
       "packages": [
         "atuin",
         "bat",
+        "direnv",
         "eza",
         "fd",
         "fzf",
         "gum",
         "neovim",
+        "nix-direnv",
         "ripgrep",
         "starship",
         "tmux",
@@ -19,6 +21,7 @@
       "commands": [
         "atuin",
         "bat",
+        "direnv",
         "eza",
         "fd",
         "fzf",

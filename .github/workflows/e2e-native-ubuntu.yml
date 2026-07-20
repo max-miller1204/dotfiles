@@ -200,23 +200,31 @@ jobs:
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           source_dir="$HOME/.local/share/chezmoi"
-          cli_module="$source_dir/nix/modules/cli.nix"
-          backup="$RUNNER_TEMP/cli.nix"
-          cp "$cli_module" "$backup"
-          trap 'cp "$backup" "$cli_module"' EXIT
+          common_profile="$source_dir/nix/profiles/common.nix"
+          backup="$RUNNER_TEMP/common-build.nix"
+          cp "$common_profile" "$backup"
+          trap 'cp "$backup" "$common_profile"' EXIT
           state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
           profile="$state_home/nix/profiles/home-manager"
           package_profile="$state_home/nix/profiles/profile"
           before=$(readlink -f "$profile")
           before_package=$(readlink -f "$package_profile")
-          cat >"$cli_module" <<'NIX'
-          { pkgs, ... }:
+          cat >"$common_profile" <<'NIX'
           {
-            home.packages = [
-              (pkgs.runCommand "intentional-e2e-failure" { } ''
-                echo "intentional E2E build failure" >&2
-                exit 1
-              '')
+            imports = [
+              ../modules/cli.nix
+              ../modules/direnv.nix
+              ../modules/services.nix
+              ({ pkgs, ... }:
+                {
+                  home.packages = [
+                    (pkgs.runCommand "intentional-e2e-failure" { } ''
+                      echo "intentional E2E build failure" >&2
+                      exit 1
+                    '')
+                  ];
+                }
+              )
             ];
           }
           NIX
@@ -227,7 +235,7 @@ jobs:
           grep -q 'intentional E2E build failure' failed-build.log
           test "$before" = "$(readlink -f "$profile")"
           test "$before_package" = "$(readlink -f "$package_profile")"
-          cp "$backup" "$cli_module"
+          cp "$backup" "$common_profile"
           trap - EXIT
 
       - name: Failed Home Manager activation rolls back profiles
@@ -236,23 +244,31 @@ jobs:
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           source_dir="$HOME/.local/share/chezmoi"
-          cli_module="$source_dir/nix/modules/cli.nix"
-          backup="$RUNNER_TEMP/cli-activation.nix"
-          cp "$cli_module" "$backup"
-          trap 'cp "$backup" "$cli_module"' EXIT
+          common_profile="$source_dir/nix/profiles/common.nix"
+          backup="$RUNNER_TEMP/common-activation.nix"
+          cp "$common_profile" "$backup"
+          trap 'cp "$backup" "$common_profile"' EXIT
           state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
           profile="$state_home/nix/profiles/home-manager"
           package_profile="$state_home/nix/profiles/profile"
           before=$(readlink -f "$profile")
           before_package=$(readlink -f "$package_profile")
-          cat >"$cli_module" <<'NIX'
-          { lib, ... }:
+          cat >"$common_profile" <<'NIX'
           {
-            home.activation.intentionalE2EFailure =
-              lib.hm.dag.entryAfter [ "installPackages" ] ''
-                echo "intentional E2E activation failure" >&2
-                exit 1
-              '';
+            imports = [
+              ../modules/cli.nix
+              ../modules/direnv.nix
+              ../modules/services.nix
+              ({ lib, ... }:
+                {
+                  home.activation.intentionalE2EFailure =
+                    lib.hm.dag.entryAfter [ "installPackages" ] ''
+                      echo "intentional E2E activation failure" >&2
+                      exit 1
+                    '';
+                }
+              )
+            ];
           }
           NIX
           if chezmoi apply --force --no-tty \
@@ -264,7 +280,7 @@ jobs:
           grep -q 'Restoring Home Manager generation' failed-activation.log
           test "$before" = "$(readlink -f "$profile")"
           test "$before_package" = "$(readlink -f "$package_profile")"
-          cp "$backup" "$cli_module"
+          cp "$backup" "$common_profile"
           trap - EXIT
 
       - name: Failed first activation removes new profiles
@@ -273,20 +289,28 @@ jobs:
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           source_dir="$HOME/.local/share/chezmoi"
-          cli_module="$source_dir/nix/modules/cli.nix"
-          backup="$RUNNER_TEMP/cli-first-activation.nix"
-          cp "$cli_module" "$backup"
-          trap 'cp "$backup" "$cli_module"' EXIT
+          common_profile="$source_dir/nix/profiles/common.nix"
+          backup="$RUNNER_TEMP/common-first-activation.nix"
+          cp "$common_profile" "$backup"
+          trap 'cp "$backup" "$common_profile"' EXIT
           first_state="$RUNNER_TEMP/first-home-manager-state"
           rm -rf "$first_state"
-          cat >"$cli_module" <<'NIX'
-          { lib, ... }:
+          cat >"$common_profile" <<'NIX'
           {
-            home.activation.intentionalFirstE2EFailure =
-              lib.hm.dag.entryAfter [ "installPackages" ] ''
-                echo "intentional first activation failure" >&2
-                exit 1
-              '';
+            imports = [
+              ../modules/cli.nix
+              ../modules/direnv.nix
+              ../modules/services.nix
+              ({ lib, ... }:
+                {
+                  home.activation.intentionalFirstE2EFailure =
+                    lib.hm.dag.entryAfter [ "installPackages" ] ''
+                      echo "intentional first activation failure" >&2
+                      exit 1
+                    '';
+                }
+              )
+            ];
           }
           NIX
           if XDG_STATE_HOME="$first_state" \
@@ -306,7 +330,7 @@ jobs:
             test -z "$(find "$first_state/nix/profiles" \
               -type l -print -quit)"
           fi
-          cp "$backup" "$cli_module"
+          cp "$backup" "$common_profile"
           trap - EXIT
 
       - name: Verify end state

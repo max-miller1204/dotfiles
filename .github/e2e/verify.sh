@@ -17,8 +17,8 @@ APPLY_LOG="${APPLY_LOG:-}"
 # Expected command names, split by active owner so this file also verifies the
 # ownership boundary instead of presence alone.
 MANIFEST_BINS=(fish git jq curl wget gpg add-apt-repository zenity mise
-	direnv gh op pfetch brev treehouse no-mistakes herdr)
-HOME_MANAGER_BINS=(eza gum starship atuin bat fd rg zoxide tmux fzf nvim)
+	gh op pfetch brev treehouse no-mistakes herdr)
+HOME_MANAGER_BINS=(eza gum starship atuin bat fd rg zoxide tmux fzf nvim direnv)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 TOOLCHAIN_BINS=(node python cargo go bun uv hunk)
@@ -38,6 +38,60 @@ home_manager_owns() {
 	[[ "$path" == "$HOME/.nix-profile/bin/"* ]] || return 1
 	resolved="$(readlink -f "$path")"
 	[[ "$resolved" == /nix/store/* ]]
+}
+plain_direnv_works() {
+	local direnv_bin project result
+	direnv_bin="$(fish_path direnv)" || return 1
+	project="$(mktemp -d)" || return 1
+	printf '%s\n' "export DOTFILES_PLAIN_DIRENV=loaded" >"$project/.envrc"
+	if ! "$direnv_bin" allow "$project" >/dev/null 2>&1; then
+		rm -rf "$project"
+		return 1
+	fi
+	result="$("$direnv_bin" exec "$project" sh -c \
+		'printf %s "$DOTFILES_PLAIN_DIRENV"' 2>/dev/null)"
+	rm -rf "$project"
+	[[ "$result" == loaded ]]
+}
+nix_direnv_flake_works() {
+	local direnv_bin layout nixpkgs_path project profile source_dir
+	direnv_bin="$(fish_path direnv)" || return 1
+	source_dir="$HOME/.local/share/chezmoi"
+	project="$(mktemp -d)" || return 1
+	nixpkgs_path="$(nix eval --raw \
+		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
+		rm -rf "$project"
+		return 1
+	}
+	cat >"$project/flake.nix" <<EOF
+{
+  inputs.nixpkgs.url = "path:$nixpkgs_path";
+  outputs = { nixpkgs, ... }: {
+    devShells.x86_64-linux.default =
+      nixpkgs.legacyPackages.x86_64-linux.mkShell {
+        DOTFILES_NIX_DIRENV = "loaded";
+      };
+  };
+}
+EOF
+	cat >"$project/.envrc" <<'EOF'
+use flake
+export DOTFILES_NIX_DIRENV_LAYOUT_DIR="$(direnv_layout_dir)"
+EOF
+	if ! "$direnv_bin" allow "$project" >/dev/null 2>&1; then
+		rm -rf "$project"
+		return 1
+	fi
+	layout="$("$direnv_bin" exec "$project" sh -c \
+		'test "$DOTFILES_NIX_DIRENV" = loaded && printf %s "$DOTFILES_NIX_DIRENV_LAYOUT_DIR"' \
+		2>/dev/null)" || {
+		rm -rf "$project"
+		return 1
+	}
+	profile="$(find "$layout" -maxdepth 1 -type l -name 'flake-profile*' \
+		-exec test -e {} \; -print -quit)"
+	rm -rf "$project"
+	[[ -n "$profile" ]]
 }
 
 if [[ "$MODE" == "preflight" ]]; then
@@ -91,6 +145,13 @@ hard "rollback generation state exists" test -s \
 hard "tmux starts" fish -l -i -c 'tmux -L dotfiles-e2e start-server'
 hard "fzf version probe" fish -l -i -c 'fzf --version'
 hard "Neovim startup probe" fish -l -i -c "nvim --headless '+quit'"
+hard "Home Manager nix-direnv integration is installed" test -r \
+	"$HOME/.nix-profile/share/nix-direnv/direnvrc"
+hard "chezmoi direnvrc loads Home Manager nix-direnv" grep -Fxq \
+	'source "$HOME/.nix-profile/share/nix-direnv/direnvrc"' \
+	"$HOME/.config/direnv/direnvrc"
+hard "plain direnv environment loads" plain_direnv_works
+hard "nix-direnv use flake loads and retains a GC root" nix_direnv_flake_works
 
 echo "== GUI desktop apps (desktop profile must install these) =="
 for b in "${GUI_BINS[@]}"; do hard "gui bin $b" fish_has "$b"; done

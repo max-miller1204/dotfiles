@@ -37,15 +37,15 @@ paths:
 - The dedicated `hm-update` command introduced in the activation phase owns lock updates and must leave the updated lock file for review and commit.
 - Do not add automatic Nix garbage collection until a generation retention policy and soak period have been approved.
 
-## Phase 2 active CLI bundle
+## Phase 3 active package bundles
 
-- Phase 2 activates Home Manager on every apply before chezmoi changes managed target files.
-- Home Manager actively owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, and Neovim binaries.
+- Phase 3 activates Home Manager on every apply before chezmoi changes managed target files.
+- Home Manager actively owns eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim, direnv, and nix-direnv packages.
 - Home Manager still owns no writable configuration or user service.
 - The activation script validates the selected flake output against the current username, home directory, and Nix system.
 - WSL selection wins over the Linux headless profile.
 - `DOTFILES_HM_CONFIGURATION` is restricted to declared real or CI outputs.
-- Existing configurations that predate the Phase 2 data keys default to enabled activation and derive the matching real-user class output.
+- Existing configurations that predate the Home Manager data keys default to enabled activation and derive the matching real-user class output.
 - The real host records are `max` at `/home/max` on Linux and `/Users/max` on macOS.
 - CI host records are `runner` at `/home/runner` on Linux and `/Users/runner` on macOS.
 - Class profiles are used until a hostname-specific requirement is demonstrated.

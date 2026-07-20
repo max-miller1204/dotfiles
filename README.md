@@ -45,10 +45,10 @@ That's it - the install scripts run during `apply` and handle the rest:
 
 - installs system-integrated CLI packages and GUI apps from `.chezmoidata/packages.yaml`.
   GUI apps are skipped on WSL and headless Linux machines.
-- installs the remaining Phase 2 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
+- installs the remaining Phase 3 **toolchains via mise**: `node@lts`, `python@latest`, `rust@latest`, `go@latest`, `bun@latest`, and `uv@latest`.
 - installs **Nix** through the Determinate installer on Linux.
   macOS requires the Determinate.pkg to be installed manually before `chezmoi init --apply`.
-- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, and Neovim.
+- activates standalone **Home Manager** for `eza`, `gum`, `starship`, `atuin`, `bat`, `fd`, `ripgrep`, `zoxide`, `tmux`, `fzf`, Neovim, `direnv`, and `nix-direnv`.
   Their writable configuration remains chezmoi-owned.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
@@ -87,7 +87,7 @@ chsh -s "$(command -v fish)"
 ## Home Manager migration
 
 The repository contains a standalone flake under `nix/` for a staged migration away from mise.
-Phase 2 activates Home Manager and gives it exclusive ownership of the CLI bundle listed above.
+Phase 3 gives Home Manager exclusive ownership of the CLI and direnv bundles listed above.
 Home Manager owns only package binaries at this stage.
 Chezmoi still owns Fish, tmux, Neovim, Atuin, starship, and other writable configuration.
 No Home Manager service is enabled.
@@ -123,7 +123,7 @@ if [ "$previous" != '<none>' ]; then
 fi
 ```
 
-Repository rollback is separate: revert the Phase 2 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
+Repository rollback is separate: revert the Phase 3 commit, set `homeManagerEnabled = false` if activation cannot run, and run `chezmoi apply`.
 Old mise and Homebrew implementations are intentionally not uninstalled during the rollback window.
 Do not garbage-collect Nix generations during the migration soak.
 
@@ -283,7 +283,7 @@ Cross-platform:
 
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` - custom Fish functions, including `update-all`, `hm-update`, and the Phase 2 `lsp-upgrade` command.
+- `dot_config/fish/functions/*.fish` - custom Fish functions, including `update-all`, `hm-update`, and the migration-stage `lsp-upgrade` command.
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -291,7 +291,8 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
-- `dot_config/direnv/direnvrc` - nix-direnv pin providing `use flake` for per-directory Nix devshells (cd into a flake repo and its devshell toolchain auto-loads for rust-analyzer and other LSPs); the `direnv hook fish` in `config.fish` runs after mise activation, and it stays inert on machines without Nix
+- `dot_config/direnv/direnvrc` - chezmoi-owned integration that sources Home Manager's pinned nix-direnv package and provides `use flake` for per-directory Nix devshells.
+  The `direnv hook fish` in `config.fish` resolves Home Manager's direnv after its profile is re-prepended.
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, and its install method under `darwin:`/`linux:`, or the shared `any:` fallback for tools whose installer is identical on both) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`

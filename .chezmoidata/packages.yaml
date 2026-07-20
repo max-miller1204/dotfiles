@@ -30,9 +30,10 @@
 #   mise:    <tool>               mise-managed tool
 #   tolerant                       allow an optional brew entry to fail
 #
-# The Phase 2 Home Manager CLI bundle is absent from this manifest:
-# eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, and Neovim.
-# nix/data/tool-ownership.json is the machine-checked ownership source for them.
+# Active Home Manager packages are absent from this manifest:
+# eza, gum, starship, atuin, bat, fd, ripgrep, zoxide, tmux, fzf, Neovim,
+# direnv, and nix-direnv. nix/data/tool-ownership.json is their
+# machine-checked ownership source.
 
 packages:
   # ---- core CLI, native on each OS (Homebrew macOS / apt Linux) ----
@@ -88,7 +89,7 @@ packages:
     linux: {apt: zenity}
 
   # ---- mise: retained temporarily for runtimes, LSPs, and npm tools that move
-  #      in later phases. Home Manager already owns the Phase 2 CLI bundle. ----
+  #      in later phases. Home Manager owns the CLI and direnv bundles. ----
   - name: mise
     gui: false
     bin: mise
@@ -97,12 +98,6 @@ packages:
       script: "curl https://mise.run | sh"
       altpath: "$HOME/.local/bin/mise"
 
-  # ---- direnv remains mise/Homebrew-owned through Phase 2. ----
-  - name: direnv
-    gui: false
-    bin: direnv
-    darwin: {brew: direnv}
-    linux: {mise: "aqua:direnv/direnv"}
   # ---- gh: native for the newest upstream release. ----
   # Homebrew owns it on macOS; GitHub's apt repository owns it on Linux.
   # gh is deliberately not mise-owned because a mise shim is invisible to

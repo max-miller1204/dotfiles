@@ -1,6 +1,5 @@
-{ pkgs, toolOwnership, ... }:
+{ pkgs, ... }:
 let
-  activeOwnership = toolOwnership.active.homeManager;
   expectedPackages = [
     "atuin"
     "bat"
@@ -44,16 +43,8 @@ let
   };
 in
 {
-  assertions = [
-    {
-      assertion = activeOwnership.packages == expectedPackages;
-      message = "Phase 2 Home Manager package ownership must match the CLI bundle";
-    }
-    {
-      assertion = activeOwnership.commands == expectedCommands;
-      message = "Phase 2 Home Manager command ownership must match the CLI bundle";
-    }
-  ];
+  dotfiles.homeManager.packageClaims = expectedPackages;
+  dotfiles.homeManager.commandClaims = expectedCommands;
 
-  home.packages = map (name: packageByName.${name}) activeOwnership.packages;
+  home.packages = map (name: packageByName.${name}) expectedPackages;
 }

@@ -21,7 +21,8 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
 On first `chezmoi apply`, a `run_once_before` script installs system-integrated packages and GUI apps from `.chezmoidata/packages.yaml`.
-A plain `run_before` script then activates the pinned Home Manager CLI bundle before chezmoi changes managed target files.
+A plain `run_before` script then activates the pinned Home Manager bundles before chezmoi changes managed target files.
+`run_onchange_after` scripts ensure the fnm, uv, and rustup runtimes and install Pi and Hunk from npm.
 `run_once_after` scripts clone TPM + install tmux plugins and drop the LazyVim
 starter into `~/.config/nvim` if it's empty.
 
@@ -305,9 +306,9 @@ Cross-platform:
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
 - `dot_config/direnv/direnvrc` - chezmoi-owned integration that sources Home Manager's pinned nix-direnv package and provides `use flake` for per-directory Nix devshells.
-  The `direnv hook fish` in `config.fish` resolves Home Manager's direnv after its profile is re-prepended.
+  The `direnv hook fish` in `config.fish` resolves Home Manager's direnv through the deterministic global PATH order.
 - `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, and its install method under `darwin:`/`linux:`, or the shared `any:` fallback for tools whose installer is identical on both) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
-- `.chezmoidata/runtimes.yaml` - native runtime selectors, Rust proxy names, npm `latest` package channels, and the stable npm prefix used by the two runtime setup scripts
+- `.chezmoidata/runtimes.yaml` - native runtime selectors, Rust proxy names, npm `latest` package channels, and the stable npm prefix used by the two runtime setup scripts and `update-all`
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`

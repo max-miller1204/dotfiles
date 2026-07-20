@@ -25,6 +25,7 @@ Read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md
 
 - `.chezmoidata/packages.yaml` or `.chezmoidata/runtimes.yaml`
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl`
+- `.chezmoiscripts/run_onchange_after_16-ensure-native-runtimes.sh.tmpl` or `run_onchange_after_17-install-npm-tools.sh.tmpl`
 - `.chezmoitemplates/lib-install.sh`, `lib-apt.sh`, or `lib-resolve.sh`
 - package ordering, native runtime managers, npm-prefix tools, vendor install scripts, or native packages
 
@@ -47,7 +48,7 @@ Also read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packag
 Read [`.claude/rules/agents/pi.md`](.claude/rules/agents/pi.md) for changes involving:
 
 - any managed file under `dot_pi/`
-- pi installation, packages, extensions, prompts, web search, MCP configuration, or runtime drift
+- pi installation (`.chezmoiscripts/run_onchange_after_17-install-npm-tools.sh.tmpl`), packages, extensions, prompts, web search, MCP configuration, or runtime drift
 - pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/check-pi-model-pins.sh` enforcing the pin/`enabledModels` invariant
 
 ## CI and native Ubuntu E2E

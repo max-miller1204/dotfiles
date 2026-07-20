@@ -49,6 +49,7 @@ paths:
 - `run_after_50-verify-lsp-servers` repeats Home Manager profile resolution plus startup or version checks after target updates on every apply.
 - The TypeScript initialize probe runs without `NODE_PATH`, proving the Nix package closure replaces the former mise-prefix workaround.
 - The `clang-tools` input is narrowed to a clangd-only profile output so unrelated clang commands do not become accidental global Home Manager owners.
+- Package narrowing goes through the shared `nix/lib/command-only.nix` helper, and the CLI module narrows every package it owns, so the built profile's bin listing must equal the recorded command claims.
 - Home Manager still owns no writable configuration or user service.
 - The activation script validates the selected flake output against the current username, home directory, and Nix system.
 - WSL selection wins over the Linux headless profile.

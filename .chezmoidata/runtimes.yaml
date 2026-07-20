@@ -1,7 +1,8 @@
 ---
 # Mutable global runtime policy. Home Manager provides only the manager
 # executables and the Go/Bun fallbacks; the native managers own their runtime
-# payloads. Changing this data changes the rendered run_onchange scripts.
+# payloads. Changing this data changes the rendered run_onchange scripts and
+# the rendered update-all function.
 runtimes:
   node:
     channel: "lts"

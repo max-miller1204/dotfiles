@@ -1,7 +1,7 @@
 ---
 paths:
   - "dot_pi/**/*"
-  - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_after_17-install-npm-tools.sh.tmpl"
   - ".github/e2e/verify.sh"
   - ".github/scripts/check-pi-model-pins.sh"
 ---

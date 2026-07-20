@@ -1,5 +1,6 @@
-# Single source of truth for every package the bootstrap installs, described once
-# with its per-platform install method carried as data. chezmoi auto-loads
+# Single source of truth for native and mise bootstrap packages, described once
+# with each per-platform install method carried as data. The checked-in nix/
+# flake separately owns pinned command-line bundles. chezmoi auto-loads
 # .chezmoidata/*, so `packages` is available as `.packages` (and `aptrepos` as
 # `.aptrepos`) in every template; run_once_before_10-install-packages.sh.tmpl
 # walks `.packages` in one loop and dispatches each entry to the matching helper
@@ -7,11 +8,11 @@
 # (one-stanza) edit here - no shell edits.
 #
 # Order matters on Linux: the list is walked top-to-bottom, so a prerequisite must
-# precede its consumers. `curl` + `ca-certificates` come before `mise` (its
-# installer curls over https); `mise` comes before every `mise:` tool (install_mise
-# silently no-ops if mise is not resolvable yet); `gnupg` (gpg) comes before the
-# `op` and `gh` apt-repos; `software-properties-common` (add-apt-repository) comes before the
-# `ghostty` PPA. On macOS every method is brew/cask or a self-contained curl
+# precede its consumers. `curl` + `ca-certificates` come before `mise` and the
+# native runtime installers that curl over HTTPS; `gnupg` (gpg) comes before the
+# `op` and `gh` apt-repos; `unzip` precedes the native Bun installer;
+# `software-properties-common` (add-apt-repository) comes before the `ghostty`
+# PPA. On macOS every method is brew/cask or a self-contained curl
 # installer, all order-independent and idempotent, so the emission order is
 # immaterial there.
 #
@@ -39,11 +40,12 @@
 #     flatpak: <app-id>             flatpak from flathub
 #     deburl:  <url>                download a .deb from <url> and apt-install it
 #     script:  <cmd> [altpath/dpkg] curl-style vendor installer run verbatim
-#     mise:    <tool>              mise-managed tool (aqua backend); Linux CLI tools
+#     mise:    <tool>              transitional mise-managed tool
 #   tolerant - on a brew entry, append `|| true` (optional/extra formula, e.g. brev)
 #
-# fzf is intentionally absent: the README designates mise (fzf@latest, installed in
-# the mise toolchains block) as its owner, so it must not also come from brew/apt.
+# The core and headless commands owned by the checked-in nix/ flake are
+# intentionally absent on every supported platform, so this native/mise manifest
+# must not install a second copy. Existing stale installs are audited, not removed.
 
 packages:
   # ---- core CLI, cross-platform, native on each OS (brew macOS / apt Linux) ----
@@ -68,9 +70,9 @@ packages:
     linux: { apt: jq }
 
   # ---- Ubuntu base apt packages (no macOS counterpart). curl + ca-certificates
-  #      come first because the mise bootstrap below curls its installer over
-  #      https; gnupg backs the op and gh apt-repos and software-properties-common
-  #      backs the ghostty PPA further down. ----
+  #      come first because later installers use HTTPS; unzip is required by the
+  #      native Bun installer; gnupg backs the op and gh apt-repos; and
+  #      software-properties-common backs the ghostty PPA further down. ----
   - name: curl
     gui: false
     bin: curl
@@ -89,6 +91,10 @@ packages:
   - name: build-essential
     gui: false
     linux: { apt: build-essential }
+  - name: unzip
+    gui: false
+    bin: unzip
+    linux: { apt: unzip }
   - name: software-properties-common
     gui: false
     bin: add-apt-repository
@@ -98,8 +104,8 @@ packages:
     bin: zenity
     linux: { apt: zenity }
 
-  # ---- mise: the Linux install backend for the cross-platform CLI tools below,
-  #      so it must be installed before any of them (brew on macOS). ----
+  # ---- mise: retained temporarily for npm-distributed tools that move in later
+  #      phases. Language runtimes are no longer declared through mise. ----
   - name: mise
     gui: false
     bin: mise
@@ -108,63 +114,8 @@ packages:
       script: "curl https://mise.run | sh"
       altpath: "$HOME/.local/bin/mise"
 
-  # ---- cross-platform CLI tools: mise (aqua backend) on Linux, brew on macOS.
-  #      Consolidated onto mise on Linux - these were previously apt (bat/fd/
-  #      ripgrep/zoxide/tmux), third-party apt-repo+keyring (eza/gum), or curl
-  #      vendor installers (starship/atuin). tmux specifically moved off apt so
-  #      Linux gets tmux 3.5+ (Ubuntu 24.04 apt ships 3.4, which lacks the
-  #      extended-keys-format option the tmux config sets). Every entry here must
-  #      follow the mise entry above. ----
-  - name: eza
-    gui: false
-    bin: eza
-    darwin: { brew: eza }
-    linux: { mise: "aqua:eza-community/eza" }
-  - name: gum
-    gui: false
-    bin: gum
-    darwin: { brew: gum }
-    linux: { mise: "aqua:charmbracelet/gum" }
-  - name: starship
-    gui: false
-    bin: starship
-    darwin: { brew: starship }
-    linux: { mise: "aqua:starship/starship" }
-  - name: atuin
-    gui: false
-    bin: atuin
-    darwin: { brew: atuin }
-    linux: { mise: "aqua:atuinsh/atuin" }
-  - name: bat
-    gui: false
-    bin: bat
-    darwin: { brew: bat }
-    linux: { mise: "aqua:sharkdp/bat" }
-  - name: fd
-    gui: false
-    bin: fd
-    darwin: { brew: fd }
-    linux: { mise: "aqua:sharkdp/fd" }
-  - name: ripgrep
-    gui: false
-    bin: rg
-    darwin: { brew: ripgrep }
-    linux: { mise: "aqua:BurntSushi/ripgrep" }
-  - name: zoxide
-    gui: false
-    bin: zoxide
-    darwin: { brew: zoxide }
-    linux: { mise: "aqua:ajeetdsouza/zoxide" }
-  - name: direnv
-    gui: false
-    bin: direnv
-    darwin: { brew: direnv }
-    linux: { mise: "aqua:direnv/direnv" }
-  - name: tmux
-    gui: false
-    bin: tmux
-    darwin: { brew: tmux }
-    linux: { mise: "aqua:tmux/tmux-builds" }
+  # gum, starship, atuin, zoxide, direnv, tmux, and Neovim moved to the
+  # checked-in Nix headless bundle and are absent here on both platforms.
   # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
   #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
   #      from the base apt block above; params in `aptrepos.gh`). Deliberately NOT
@@ -337,8 +288,7 @@ packages:
     darwin: { cask: font-jetbrains-mono-nerd-font }
 
 # ---- third-party apt-repo definitions, keyed by the `aptrepo:` value above ----
-# GitHub CLI (gh) and 1Password (op) are the native apt-repo installs; eza and gum
-# used to live here too but moved to mise (their apt-repos were removed). Each entry
+# GitHub CLI (gh) and 1Password (op) are the native apt-repo installs. Each entry
 # carries the six positional args the install_aptrepo helper needs (LABEL KEYRING
 # KEY_URL REPO_LINE LIST_PATH PACKAGE). gh's published keyring is already binary, but
 # install_aptrepo's `gpg --dearmor` is a byte-for-byte pass-through on binary OpenPGP

@@ -21,6 +21,9 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     # Pinned OS version, not ubuntu-latest: -latest is a moving label and this
@@ -28,7 +31,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Assert environment (Ubuntu 24.04, non-WSL kernel, pinned tree)
         env:
@@ -97,13 +102,17 @@ jobs:
           sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
           "$HOME/.local/bin/chezmoi" --version
 
-      - name: Source check (confirm the nix invocation in the staged tree)
+      - name: Source check (confirm Nix bootstrap and profile inputs)
         run: |
           set -euo pipefail
-          # Plain grep of the template text: rendering needs the chezmoi config,
+          # Plain grep of template text: rendering needs the chezmoi config,
           # which does not exist until the init --apply step below.
           grep -n -B2 -A2 'determinate' \
             "$HOME/.local/share/chezmoi/.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+          grep -n 'flake hashes' \
+            "$HOME/.local/share/chezmoi/.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl"
+          grep -n 'Runtime policies' \
+            "$HOME/.local/share/chezmoi/.chezmoiscripts/run_onchange_before_16-install-language-runtimes.sh.tmpl"
 
       - name: Arm config watcher (attribute who creates ~/.config/fish)
         run: |
@@ -133,6 +142,20 @@ jobs:
           chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
           exit "${PIPESTATUS[0]}"
 
+      - name: Second apply does not create a profile generation
+        run: |
+          set -euo pipefail
+          unset XDG_CONFIG_HOME
+          export PATH="$HOME/.local/bin:$PATH"
+          profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+          before=$(readlink "$profile")
+          chezmoi apply 2>&1 | sed 's/^/SECOND-APPLY: /' | tee -a apply.log
+          after=$(readlink "$profile")
+          test "$after" = "$before"
+
+      - name: Test profile upgrade and rollback in isolation
+        run: bash .github/scripts/test-nix-profile.sh
+
       - name: Verify end state
         run: |
           set -euo pipefail
@@ -154,7 +177,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-native-ubuntu
           path: |

@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+{{- $nixBundle := (get . "nixBundle" | default "workstation") }}
+# Build and activate the single cumulative dotfiles package bundle.
+# A source hash for every flake file makes chezmoi rerun this script when the
+# package graph or lock changes, without letting routine updates mutate the lock.
+# flake hashes: {{ include "nix/flake.nix" | sha256sum }} {{ include "nix/flake.lock" | sha256sum }} {{ include "nix/packages.nix" | sha256sum }} {{ include "nix/bundles.nix" | sha256sum }}
+# selected bundle: {{ $nixBundle }}
+{{ template "lib-log.sh" . }}
+
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+flake="path:$(chezmoi source-path)/nix"
+bundle="{{ $nixBundle }}"
+
+if [[ "$bundle" != "workstation" ]]; then
+    echo "Unsupported dotfiles Nix bundle: $bundle (expected workstation)" >&2
+    exit 1
+fi
+
+# A fresh Determinate install cannot update the parent bootstrap shell, and
+# non-interactive chezmoi scripts do not read Fish startup files. Source the
+# daemon environment explicitly before using Nix in this process.
+for nix_init in \
+    /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+    "$HOME/.nix-profile/etc/profile.d/nix.sh"
+do
+    if [[ -r "$nix_init" ]]; then
+        # shellcheck source=/dev/null
+        source "$nix_init"
+        break
+    fi
+done
+if ! command -v nix >/dev/null 2>&1; then
+    echo "Nix is required before installing the dotfiles profile." >&2
+    echo "On macOS, install Nix manually, then run chezmoi apply again." >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$profile")"
+
+# Build and smoke-test without touching the active profile. Under set -e, any
+# evaluation, build, or smoke failure leaves the previous generation active.
+log "Building the dotfiles $bundle Nix bundle"
+out="$(
+    nix build "$flake#$bundle" \
+        --no-link \
+        --print-out-paths
+)"
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls fnm uv; do
+    if [[ ! -x "$out/bin/$bin" ]]; then
+        echo "Built bundle is missing executable: $bin" >&2
+        exit 1
+    fi
+    case "$bin" in
+        direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
+        tmux) "$out/bin/$bin" -V >/dev/null ;;
+        *) "$out/bin/$bin" --version >/dev/null ;;
+    esac
+done
+if [[ ! -r "$out/share/nix-direnv/direnvrc" ]]; then
+    echo "Built bundle is missing the nix-direnv integration." >&2
+    exit 1
+fi
+
+if [[ -L "$profile" ]]; then
+    profile_json="$(nix profile list --profile "$profile" --json)"
+    element_count="$(jq '.elements | length' <<<"$profile_json")"
+    if [[ "$element_count" -ne 1 ]]; then
+        if [[ "$element_count" -eq 0 ]] \
+            && nix profile list --profile "$profile" 2>/dev/null | grep -q 'home-manager-path'
+        then
+            echo "The dedicated path still contains the retired Home Manager prototype profile." >&2
+            echo "Move it aside explicitly before applying this bundle migration:" >&2
+            echo "  mv '$profile' '${profile}.home-manager-backup'" >&2
+        else
+            echo "The dedicated profile must contain exactly one element; found $element_count." >&2
+            echo "Refusing to modify a manually changed profile: $profile" >&2
+        fi
+        exit 1
+    fi
+    if ! jq -e --arg flake "$flake" \
+        '(.elements | to_entries[0].value) as $element
+         | $element.originalUrl == $flake
+           and ($element.attrPath | endswith(".workstation"))' \
+        <<<"$profile_json" >/dev/null
+    then
+        echo "Dedicated profile element is not the managed workstation bundle." >&2
+        echo "Refusing to modify a manually changed profile: $profile" >&2
+        exit 1
+    fi
+    log "Upgrading the dedicated dotfiles Nix profile"
+    nix profile upgrade --profile "$profile" --all
+else
+    if [[ -e "$profile" ]]; then
+        echo "Dedicated profile path exists but is not a symlink: $profile" >&2
+        exit 1
+    fi
+    log "Creating the dedicated dotfiles Nix profile"
+    nix profile add --profile "$profile" "$flake#$bundle"
+fi
+
+profile_json="$(nix profile list --profile "$profile" --json)"
+if ! jq -e --arg out "$out" \
+    '.elements | length == 1 and ([.[] | .storePaths[]?] | index($out) != null)' \
+    <<<"$profile_json" >/dev/null
+then
+    echo "Dedicated profile does not contain exactly the built workstation bundle." >&2
+    exit 1
+fi
+
+# Make the newly activated tools available to any remaining work in this script.
+export PATH="$profile/bin:$PATH"
+log "Activated dotfiles-workstation in $profile"

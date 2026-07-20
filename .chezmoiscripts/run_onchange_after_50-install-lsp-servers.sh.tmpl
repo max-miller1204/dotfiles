@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
+{{ $rustToolchain := (get . "rustToolchain" | default "stable") }}
 # Install the language servers the enabled Claude Code LSP plugins expect.
 # The single source of truth for the LSP language set is `lspLanguages` in
-# .chezmoi.toml.tmpl: each entry pairs the marketplace plugin with how its server
-# is installed (mise / rustup / OS package). This script installs the servers and
-# run_after_65-setup-claude-plugins installs/enables the matching plugins, both
-# derived from that one table, so the two lists can never drift.
-#
-# The npm/go servers are installed as mise-managed tools so they do not orphan on
-# a node/go upgrade (a raw `npm install -g` lands in the version-pinned runtime
-# dir and vanishes when mise repoints the version). clangd comes from the OS
-# package manager and rust-analyzer from rustup. Re-runs when this script changes.
+# .chezmoi.toml.tmpl. Servers may come from mise, Nix, rustup, or the OS package
+# manager; run_after_65 installs and enables the matching plugins from the same
+# table so the two lists cannot drift.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
 
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+prepend_path "$profile/bin" "$HOME/.local/bin" "${CARGO_HOME:-$HOME/.cargo}/bin"
+unset RUSTUP_TOOLCHAIN
+
 MISE_BIN="$(resolve_mise)"
 if [[ -z "$MISE_BIN" ]]; then
-    echo "mise not found; cannot install LSP servers" >&2
+    echo "mise not found; cannot install the remaining mise-backed LSP servers" >&2
     exit 1
 fi
 
-# ---- mise-managed servers (npm + go backends) --------------------
+# Initialize the fnm-managed default Node in this non-interactive shell. The
+# TypeScript verification below must not depend on a stale mise Node declaration.
+if [[ ! -x "$profile/bin/fnm" ]]; then
+    echo "fnm is missing from the dedicated Nix profile" >&2
+    exit 1
+fi
+eval "$("$profile/bin/fnm" env --shell bash)"
+
+# ---- transitional mise-managed npm servers -----------------------
 {{- $miseTools := list -}}
 {{- range .lspLanguages -}}
 {{-   if eq .method "mise" -}}
@@ -38,10 +45,12 @@ log "Installing mise-backed LSP servers ({{ $miseTools | join " " }})"
 {{- range .lspLanguages }}
 {{-   if eq .method "rustup" }}
 RUSTUP_BIN="$(resolve_rustup rustup)"
-if [[ -n "$RUSTUP_BIN" ]]; then
-    log "Ensuring {{ .rustupComponent }} (rustup component for {{ .plugin }})"
-    "$RUSTUP_BIN" component add {{ .rustupComponent }} || true
+if [[ -z "$RUSTUP_BIN" ]]; then
+    echo "rustup not found; cannot install {{ .rustupComponent }}" >&2
+    exit 1
 fi
+log "Ensuring {{ .rustupComponent }} (rustup component for {{ .plugin }})"
+"$RUSTUP_BIN" component add --toolchain "{{ $rustToolchain }}" {{ .rustupComponent }}
 {{-   end }}
 {{- end }}
 
@@ -52,7 +61,7 @@ fi
 if ! command -v {{ .verifyBin }} >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/{{ .verifyBin }}" ]]; then
     log "Installing {{ .verifyBin }} via Homebrew {{ .brewFormula }} (for {{ .plugin }})"
     brew install {{ .brewFormula }}
-    # {{ .brewFormula }} is keg-only, so brew does not put {{ .verifyBin }} on PATH; expose it via ~/.local/bin.
+    # {{ .brewFormula }} is keg-only, so expose its server through ~/.local/bin.
     # TODO(macos): confirm on a Mac - this branch is untested from Linux.
     mkdir -p "$HOME/.local/bin"
     ln -sf "$(brew --prefix {{ .brewFormula }})/bin/{{ .verifyBin }}" "$HOME/.local/bin/{{ .verifyBin }}"
@@ -82,25 +91,27 @@ for bin in {{ $miseVerify | join " " }}; do
 done
 {{- range .lspLanguages }}
 {{-   if get . "verifyTsResolve" }}
-# {{ .plugin }} resolves `typescript` (tsserver) at runtime, which fails across
-# mise's isolated npm prefixes unless NODE_PATH points at it (set in the fish
-# config). Verify the resolution itself, not just that the launcher runs.
+# {{ .plugin }} resolves TypeScript at runtime across mise's isolated npm
+# prefixes. NODE_PATH remains transitional until the TypeScript tools move.
 TS_MODULES="$HOME/{{ $.tsNodeModulesRel }}"
-NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
+NODE_BIN="$(command -v node 2>/dev/null || true)"
 if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
     echo "MISSING: typescript not resolvable by {{ .verifyBin }}" >&2; fail=1
 fi
 {{-   end }}
 {{- end }}
 {{- range .lspLanguages }}
+{{-   if eq .method "nix" }}
+if [[ ! -x "$profile/bin/{{ .verifyBin }}" ]] || ! "$profile/bin/{{ .verifyBin }}" version >/dev/null 2>&1; then
+    echo "MISSING (Nix profile): {{ .verifyBin }}" >&2; fail=1
+fi
+{{-   end }}
 {{-   if eq .method "rustup" }}
 RA_BIN="$(resolve_rustup {{ .verifyBin }})"
 if [[ -z "$RA_BIN" ]] || ! "$RA_BIN" --version >/dev/null 2>&1; then
     echo "MISSING: {{ .verifyBin }}" >&2; fail=1
 fi
 {{-   end }}
-{{- end }}
-{{- range .lspLanguages }}
 {{-   if eq .method "os" }}
 if ! { command -v {{ .verifyBin }} >/dev/null 2>&1 || [[ -x /usr/bin/{{ .verifyBin }} ]] || [[ -x "$HOME/.local/bin/{{ .verifyBin }}" ]]; }; then
     echo "MISSING: {{ .verifyBin }}" >&2; fail=1

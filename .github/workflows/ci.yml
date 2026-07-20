@@ -4,7 +4,68 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+  nix-evaluation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # v3
+      - uses: >-
+          DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88
+      - name: Evaluate every supported system
+        run: nix flake check --all-systems --no-build "path:$PWD/nix"
+      - name: Check Nix formatting
+        run: |
+          set -euo pipefail
+          flake="path:$PWD/nix"
+          system=$(nix eval --impure --raw --expr builtins.currentSystem)
+          formatter=$(
+            nix build "$flake#formatter.$system" \
+              --no-link \
+              --print-out-paths
+          )
+          "$formatter/bin/nixfmt" --check nix/*.nix
+
+  nix-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # v3
+      - uses: >-
+          DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88
+      - name: Build every bundle and run checks
+        run: |
+          set -euo pipefail
+          flake="path:$PWD/nix"
+          nix build \
+            "$flake#core" \
+            "$flake#headless" \
+            "$flake#lsp" \
+            "$flake#workstation" \
+            "$flake#default" \
+            --no-link
+          nix flake check "$flake"
+      - name: Report workstation closure size
+        run: |
+          set -euo pipefail
+          flake="path:$PWD/nix"
+          out=$(nix build "$flake#workstation" --no-link --print-out-paths)
+          nix path-info --closure-size --human-readable "$out"
+          nix path-info --recursive --size --human-readable "$out"
+      - name: Test profile idempotency and rollback
+        run: bash .github/scripts/test-nix-profile.sh
+
   # The static-analysis jobs that render templates (shellcheck + fish-syntax)
   # run on macOS as well as Linux. `chezmoi execute-template` renders with the
   # runner's OS, so only the macos-latest leg exercises the darwin half of every
@@ -18,7 +79,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
       - name: Install shellcheck (Linux)
         if: runner.os == 'Linux'
@@ -33,7 +96,11 @@ jobs:
           set -euo pipefail
           shellcheck --severity=warning -s bash \
             dot_claude/executable_statusline.sh \
-            .github/scripts/check-pi-model-pins.sh
+            .github/scripts/check-pi-model-pins.sh \
+            .github/scripts/create-direnv-flake-fixture.sh \
+            .github/scripts/test-nix-profile.sh \
+            .github/scripts/test-runtime-path-order.sh \
+            .github/e2e/verify.sh
           shellcheck --severity=warning -s sh \
             private_dot_local/bin/executable_zenity-askpass
           # Glob covers future tmux helpers and is a no-op if there are none.
@@ -56,7 +123,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
       - name: Install fish (Linux)
         if: runner.os == 'Linux'
@@ -88,11 +157,16 @@ jobs:
             rm -f "$tmp"
             echo "::endgroup::"
           done < <(find dot_config/fish -name '*.fish.tmpl' -print0)
+      - name: Test runtime PATH ownership (Linux)
+        if: runner.os == 'Linux'
+        run: bash .github/scripts/test-runtime-path-order.sh
 
   config-syntax:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
       - name: Install jq
         run: sudo apt-get install -y -qq jq
@@ -119,6 +193,8 @@ jobs:
           set -euo pipefail
           bash .github/scripts/check-pi-model-pins.sh \
             dot_pi/agent/agents dot_pi/agent/settings.json
+      - name: Test Pi Treehouse worktree guard policy
+        run: node .github/scripts/test-worktree-guard.mjs
       - name: Validate rendered TOML/JSON templates
         run: |
           set -euo pipefail
@@ -156,7 +232,9 @@ jobs:
   chezmoi-dry-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
       - name: chezmoi apply --dry-run
         run: chezmoi apply --dry-run --verbose --exclude=scripts

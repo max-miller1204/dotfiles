@@ -51,7 +51,7 @@ if status is-interactive
 
     # -- PATH ------------------------------------------------------------
 
-    fish_add_path --prepend ~/.local/bin ~/.opencode/bin ~/.atuin/bin ~/.bun/bin
+    fish_add_path --prepend ~/.local/bin ~/.opencode/bin ~/.atuin/bin
 
     {{- if eq .chezmoi.os "darwin" }}
     if test -x /opt/homebrew/bin/brew
@@ -61,10 +61,59 @@ if status is-interactive
     end
     {{- end }}
 
-    # mise (cross-platform version manager for node, python, etc.)
-    # Install: `brew install mise` on macOS, `curl https://mise.run | sh` on Ubuntu.
+    # mise remains only for tools that migrate in later phases. Shims mode avoids
+    # dynamic directory hooks re-prepending stale runtime declarations after fnm,
+    # uv, rustup, or Nix have established ownership.
     if type -q mise
-        mise activate fish | source
+        mise activate --shims fish | source
+    end
+
+    # The checked-in flake owns pinned global CLIs plus fnm, uv, Go, and gopls.
+    set -l dotfiles_nix_state "$HOME/.local/state"
+    if set -q XDG_STATE_HOME; and test -n "$XDG_STATE_HOME"
+        set dotfiles_nix_state "$XDG_STATE_HOME"
+    end
+    fish_add_path --prepend --move "$dotfiles_nix_state/nix/profiles/dotfiles/bin"
+
+    # fish_add_path always keeps fish_user_paths above inherited system paths,
+    # even with --append. Manipulate PATH directly so mise is genuinely last.
+    set -l mise_shims "$HOME/.local/share/mise/shims"
+    if set -q fish_user_paths
+        set -g fish_user_paths (string match -v -- "$mise_shims" $fish_user_paths)
+    end
+    while contains -- "$mise_shims" $PATH
+        set -l mise_index (contains -i -- "$mise_shims" $PATH)
+        set -e PATH[$mise_index]
+    end
+    if test -d "$mise_shims"
+        set -a PATH "$mise_shims"
+    end
+
+    # Mutable runtime paths intentionally sit above the Nix profile. uv-managed
+    # project virtual environments and direnv dev shells can still override them.
+    set -l uv_data_home "$HOME/.local/share"
+    if set -q XDG_DATA_HOME; and test -n "$XDG_DATA_HOME"
+        set uv_data_home "$XDG_DATA_HOME"
+    end
+    set -gx UV_PYTHON_BIN_DIR "$uv_data_home/uv/python-bin"
+    fish_add_path --prepend --move "$UV_PYTHON_BIN_DIR"
+
+    set -l cargo_home "$HOME/.cargo"
+    if set -q CARGO_HOME; and test -n "$CARGO_HOME"
+        set cargo_home "$CARGO_HOME"
+    end
+    # Drop any exact toolchain override inherited from the old mise activation.
+    # Project rust-toolchain files and later direnv hooks still select locally.
+    set -e RUSTUP_TOOLCHAIN
+    fish_add_path --prepend --move "$cargo_home/bin"
+
+    if not set -q BUN_INSTALL; or test -z "$BUN_INSTALL"
+        set -gx BUN_INSTALL "$HOME/.bun"
+    end
+    fish_add_path --prepend --move "$BUN_INSTALL/bin"
+
+    if type -q fnm
+        fnm env --use-on-cd --shell fish | source
     end
 
     # typescript-language-server lives in its own mise prefix and can't resolve
@@ -96,15 +145,15 @@ if status is-interactive
         atuin init fish | source
     end
 
-    # direnv per-directory env: loads a project's .envrc on cd (mise-installed, so
-    # probed after mise activation). With the nix-direnv rc in ~/.config/direnv/direnvrc
-    # this gives `use flake`, auto-loading a repo's Nix devshell for its LSP/toolchain.
+    # direnv per-directory env loads a project's .envrc on cd. The executable
+    # and nix-direnv integration come from the dedicated profile, and `use flake`
+    # auto-loads a repo's Nix devshell for its LSP/toolchain.
     if type -q direnv
         direnv hook fish | source
     end
 
-    # eza replaces ls if installed. Probed here, after mise activation, so a
-    # mise-installed eza (Linux) is on PATH; a system eza still resolves too.
+    # eza replaces ls if installed. Probe after adding the dedicated Nix profile
+    # so the flake-owned executable wins over any stale native or mise copy.
     if type -q eza
         alias ls 'eza -lh --group-directories-first --icons=auto'
         alias la 'ls -a'

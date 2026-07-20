@@ -1,3 +1,10 @@
+{{- $nodeVersion := (get . "nodeVersion" | default "lts") -}}
+{{- $pythonVersion := (get . "pythonVersion" | default "3") -}}
+{{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
+{{- $miseTools := list "npm:@earendil-works/pi-coding-agent" "npm:hunkdiff" -}}
+{{- range .lspLanguages -}}
+{{-   if eq .method "mise" -}}{{- range .miseTools -}}{{- $miseTools = append $miseTools . -}}{{- end -}}{{- end -}}
+{{- end -}}
 function update-all --description 'Update every package source this dotfiles repo installs'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
@@ -16,19 +23,43 @@ function update-all --description 'Update every package source this dotfiles rep
 
     if command -q flatpak
         echo "$section==> flatpak$reset"
-        flatpak update -y
+        flatpak update -y; or return
     end
     {{- end }}
 
-    echo "$section==> mise$reset"
-    mise upgrade
+    if command -q fnm
+        echo "$section==> fnm Node {{ $nodeVersion }}$reset"
+        set -l node_target "{{ $nodeVersion }}"
+        if test "$node_target" = lts
+            set node_target (fnm list-remote --lts --latest | string replace -r ' .*' '')
+        end
+        test -n "$node_target"; or return 1
+        fnm install "$node_target"; or return
+        fnm default "$node_target"; or return
+    end
+
+    if command -q uv
+        echo "$section==> uv Python {{ $pythonVersion }}$reset"
+        uv --preview-features python-install-default python install "{{ $pythonVersion }}" --default --upgrade; or return
+    end
+
+    if command -q rustup
+        echo "$section==> rustup {{ $rustToolchain }}$reset"
+        rustup update "{{ $rustToolchain }}"; or return
+        rustup component add --toolchain "{{ $rustToolchain }}" rust-analyzer; or return
+    end
+
+    if command -q bun
+        echo "$section==> bun$reset"
+        bun upgrade; or return
+    end
+
+    if command -q mise
+        echo "$section==> remaining mise tools$reset"
+        mise upgrade {{ $miseTools | join " " }}; or return
+    end
 
     echo "$section==> chezmoi$reset"
     chezmoi upgrade
     and chezmoi update
-
-    if test -x "$HOME/.atuin/bin/atuin-update"
-        echo "$section==> atuin$reset"
-        "$HOME/.atuin/bin/atuin-update"
-    end
 end

@@ -37,7 +37,7 @@ paths:
   Because those blocks live only in the settings.json family and chezmoi strips them each apply, the re-assert script must be plain `run_after_` (every apply), never `run_onchange_after_` (which would not re-fire after a strip and would silently lose the state).
   A post-apply `chezmoi status` showing `dot_claude/settings.json` as modified is therefore expected, not a bug - do not "fix" it by re-vendoring those blocks.
 - Shared shell boilerplate for the `.chezmoiscripts/*.sh.tmpl` bootstrap scripts lives once in `.chezmoitemplates/` and is pulled in with `{{ template "lib-<x>.sh" . }}`, which inlines the partial's bytes verbatim at that point.
-  `lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` defines `resolve_mise`, `resolve_rustup <bin>` (resolves rustup or a component like rust-analyzer from `~/.cargo/bin`), and `prepend_path <dir>...`; `lib-apt.sh` defines `install_aptrepo LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE` for the third-party apt keyring+list+update+install dance (1Password and gh now - eza and gum moved to mise).
+  `lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` defines `resolve_mise`, `resolve_rustup <bin>` (resolves rustup or a component from `${CARGO_HOME:-~/.cargo}/bin`), and `prepend_path <dir>...`; `lib-apt.sh` defines `install_aptrepo LABEL KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE` for the third-party apt keyring+list+update+install dance used by 1Password and gh.
   A consumer that includes a partial gets all of its helpers, so some are defined-but-unused there; that is fine and stays shellcheck-clean at `--severity=warning` (the CI severity), which is why the partials are only shellchecked via the rendered scripts, never standalone.
   `lib-log.sh` intentionally has no trailing newline so it inlines byte-for-byte in place of the old three-line preamble; keep it that way and do not let an editor add one.
   The three MCP sync scripts (`run_onchange_after_4x`) deliberately keep a bare `set -euo pipefail` and use `echo`, not `log()`, so they do not pull in `lib-log.sh`.
@@ -49,7 +49,9 @@ paths:
   An entry like `.claude/rules` therefore un-manages `~/.claude/rules` (anything a future `dot_claude/rules/` would apply) and does nothing at all to this repo's own `.claude/rules/` tree.
 - Repo-only files need an entry only when chezmoi would otherwise apply them.
   chezmoi skips dot-prefixed source entries EXCEPT its own reserved `.chezmoi*` names, which are very much source state: `.chezmoiscripts/` renders to applied scripts (they show up as targets under `chezmoi managed`), and `.chezmoidata/`, `.chezmoitemplates/`, `.chezmoiignore`, and `.chezmoi.toml.tmpl` feed rendering without producing targets of their own.
-  Everything else dot-prefixed (`.claude/`, `.github/`) is invisible to `chezmoi apply`, so only the plain root files need listing, which is why `README.md`, `CLAUDE.md`, `context-map.md`, and `raycast-export` are there while `.claude/rules` deliberately is not.
+  Everything else dot-prefixed (`.claude/`, `.github/`) is invisible to `chezmoi apply`.
+  Plain root files such as `README.md`, `CLAUDE.md`, `context-map.md`, and `renovate.json` need listing, as do plain source-only directories such as `nix/` and `raycast-export`.
+  `.claude/rules` deliberately needs no ignore entry.
   Verify a suspected ignore entry with `chezmoi managed` before adding it - an entry that looks protective can instead silently pre-empt a destination path the repo may want to manage later.
 
 ## Headless and WSL rendering
@@ -60,3 +62,4 @@ paths:
   `promptBoolOnce` is a chezmoi INIT function, so it exists only under `chezmoi init` or `execute-template --init`: a real interactive `chezmoi init` on Linux prompts once and persists, but non-interactive `chezmoi init` MUST pass `--promptDefaults` (the `setup-chezmoi` action and the E2E workflow's `init --apply` both do) or it hangs on the missing TTY.
   `execute-template` REJECTS `--promptDefaults` ("unknown flag"), so the `config-syntax` job renders `.chezmoi.toml.tmpl` alone with `execute-template --init` (which resolves the prompt to its false default) and every other config template with plain `execute-template` (which still sees the user `[data]`).
   Read `headless` defensively everywhere (`get . "headless"` / `$headlessVal`): an existing machine's persisted `chezmoi.toml` predates the key, so a missing `headless` is falsy and the gate collapses to today's isWSL-only behavior - keep `isWSL` in the OR, never replace it.
+  Runtime policy keys (`nodeVersion`, `pythonVersion`, and `rustToolchain`) also require defensive defaults because existing machine configs may predate them.

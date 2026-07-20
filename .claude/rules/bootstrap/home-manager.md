@@ -34,6 +34,7 @@ paths:
 
 - Home Manager activation must remain atomic, and a failed build must leave the previous generation active.
 - If failure occurs after a profile changes, rollback must restore both the Home Manager generation profile and the package profile; a failed first activation must remove newly created profiles.
+- The activation script creates the XDG Nix profiles directory before recording state and switching, because a fresh machine has no `~/.local/state/nix/profiles` and the first standalone switch fails without it.
 - Do not add ad hoc `nix profile install` commands.
 - `update-all` must never update `nix/flake.lock`.
 - The dedicated `hm-update` command introduced in the activation phase owns lock updates and must leave the updated lock file for review and commit.
@@ -52,6 +53,7 @@ paths:
 - Package narrowing goes through the shared `nix/lib/command-only.nix` helper, and the CLI module narrows every package it owns, so the built profile's bin listing must equal the recorded command claims.
 - Home Manager still owns no writable configuration or user service.
 - The activation script validates the selected flake output against the current username, home directory, and Nix system.
+- That identity check evaluates one `nix eval --json` attribute set and parses it with the native `jq`, which the script resolves through `prepend_path` and requires before evaluation.
 - WSL selection wins over the Linux headless profile.
 - `DOTFILES_HM_CONFIGURATION` is restricted to declared real or CI outputs.
 - Existing configurations that predate the Home Manager data keys default to enabled activation and derive the matching real-user class output.

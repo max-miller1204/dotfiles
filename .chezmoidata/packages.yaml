@@ -37,9 +37,9 @@
 packages:
   # ---- core CLI, native on each OS (Homebrew macOS / apt Linux) ----
   # fish and git stay apt on Linux; jq deliberately stays native too.
-  # jq is an apply-time dependency of the MCP and plugin scripts and is used
-  # bare in obsidian's installer, so it must not depend on user runtime paths
-  # that are unavailable during a fresh apply.
+  # jq is an apply-time dependency of the Home Manager identity check and the
+  # MCP and plugin scripts and is used bare in obsidian's installer, so it must
+  # not depend on user runtime paths that are unavailable during a fresh apply.
   - name: fish
     gui: false
     bin: fish

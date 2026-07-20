@@ -86,10 +86,11 @@ install_debsig() {
     curl -fsSL "$key_url" | sudo gpg --dearmor --output "/usr/share/debsig/keyrings/$policy_id/debsig.gpg"
 }
 
-# mise-managed tool. Backs the Linux CLI tools (eza, gum, starship, atuin, bat, fd,
-# ripgrep, zoxide, direnv) via mise's aqua backend; the separate `mise use -g` toolchains
-# block owns the language runtimes and is NOT part of the manifest. Guarded on the
-# command name, then installed through the resolved mise (not on PATH in a non-interactive apply).
+# mise-managed tool. No Phase 4 manifest entry uses this helper (Home Manager
+# owns the former mise CLI tools); it remains for later migration cleanup. The
+# separate `mise use -g` toolchains block owns the remaining language runtimes
+# and is NOT part of the manifest. Guarded on the command name, then installed
+# through the resolved mise (not on PATH in a non-interactive apply).
 install_mise() {
     local bin="$1" tool="$2"
     command -v "$bin" >/dev/null 2>&1 && return 0

@@ -3,7 +3,9 @@ paths:
   - "nix/**/*"
   - ".chezmoiscripts/*home-manager*"
   - "dot_config/fish/functions/hm-update.fish"
+  - "dot_config/fish/functions/update-all.fish.tmpl"
   - ".github/workflows/ci.yml"
+  - ".github/workflows/e2e-native-ubuntu.yml"
 ---
 
 <!-- markdownlint-disable MD013 -->

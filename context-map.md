@@ -13,7 +13,7 @@ Read [`.claude/rules/bootstrap/home-manager.md`](.claude/rules/bootstrap/home-ma
 
 - the standalone flake and any file under `nix/`
 - Home Manager ownership, profiles, host records, activation, updates, generations, or rollback
-- Home Manager checks in `.github/workflows/ci.yml`
+- Home Manager checks in `.github/workflows/ci.yml` or the native Ubuntu E2E workflow
 - the Home Manager activation script or `hm-update` command
 - Nix purity, secret isolation, or the nested `path:` flake boundary
 

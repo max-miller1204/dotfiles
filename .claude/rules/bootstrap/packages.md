@@ -4,8 +4,9 @@ paths:
   - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
   - ".github/e2e/verify.sh"
-  - "dot_config/fish/{config.fish.tmpl,functions/update-all.fish}"
+  - "dot_config/fish/{config.fish.tmpl,functions/update-all.fish.tmpl}"
   - "dot_config/tmux/tmux.conf"
+  - "dot_config/tmux/executable_agent-switch.sh"
 ---
 
 <!-- markdownlint-disable MD013 -->
@@ -42,5 +43,5 @@ paths:
   Linux uses apt or official apt repositories, and macOS uses Homebrew.
 - The chezmoi-owned direnvrc sources `$HOME/.nix-profile/share/nix-direnv/direnvrc`; it must not download an implementation or move into Home Manager file ownership.
 - The Linux manifest remains order-sensitive: curl and ca-certificates precede mise, gnupg precedes the op and gh repositories, and software-properties-common precedes the ghostty PPA.
-- The chezmoi-owned tmux helper falls back to `~/.nix-profile/bin/fzf` when tmux sanitizes PATH.
+- The chezmoi-owned tmux helper (`dot_config/tmux/executable_agent-switch.sh`) falls back to `~/.nix-profile/bin/fzf` when tmux sanitizes PATH.
 - Do not uninstall old package or LSP implementations during the Phase 4 rollback window.

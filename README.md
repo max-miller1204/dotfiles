@@ -98,7 +98,7 @@ nix flake check --no-write-lock-file "path:$PWD/nix"
 The pinned inputs are nixpkgs `nixos-26.05` and Home Manager `release-26.05`, with `home.stateVersion = "26.05"`.
 `nix/data/tool-ownership.json` records active and target ownership.
 Real configurations cover Linux desktop, Linux headless, WSL, and both macOS architectures for user `max`.
-Matching `runner` configurations provide CI-safe home paths.
+The matching `ci@` outputs use the CI `runner` user's home paths.
 `DOTFILES_HM_CONFIGURATION` can select one of those outputs for CI or recovery, and activation rejects a username, home directory, or system mismatch.
 WSL selection takes precedence over the Linux headless profile.
 
@@ -303,6 +303,7 @@ Cross-platform:
 - `AGENTS.md` - the single real copy of the global agent instructions; applied to `~/AGENTS.md` (see [Agents (multi-agent)](#agents-multi-agent))
 - `CLAUDE.md` - repo-local agent routing notes; `.chezmoiignore`d, never applied to `$HOME`
 - `context-map.md` + `.claude/rules/**` - the path-scoped repo guidance `CLAUDE.md` routes to; never applied to `$HOME`
+- `nix/` - the standalone Home Manager flake (modules, profiles, host records, and `data/tool-ownership.json`); `.chezmoiignore`d, never applied to `$HOME` - see [Home Manager migration](#home-manager-migration)
 - `dot_claude/symlink_CLAUDE.md` - materializes `~/.claude/CLAUDE.md` -> `~/AGENTS.md`
 - `dot_claude/settings.json` + `executable_statusline.sh`
 - `dot_agents/skills/` - shared cross-agent skill tree applied to `~/.agents/skills` (currently `html-artifacts` plus its reference guides); pi discovers `~/.agents/skills` natively, and Claude reads it through the symlink below
@@ -354,6 +355,7 @@ To update the snapshot after changing settings: re-export from Raycast
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, Hunk, the coding agents (Claude, Codex, OpenCode, pi), fish-as-login-shell
+- `.chezmoiscripts/run_before_15-activate-home-manager.sh.tmpl` - activates the selected standalone Home Manager generation on every apply, before chezmoi changes managed targets; runs the transactional LSP health checks inside that switch and rolls profiles back on failure (see [Home Manager migration](#home-manager-migration))
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
@@ -396,9 +398,9 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-The first apply installs CLIs, mise toolchains, Nix, the coding agents
-(Claude, Codex, OpenCode, pi), and the 1Password CLI, then sets fish as your
-login shell.
+The first apply installs CLIs, the remaining mise toolchains, Nix, the coding
+agents (Claude, Codex, OpenCode, pi), and the 1Password CLI, activates the
+Home Manager bundle (the `max@wsl` output), then sets fish as your login shell.
 
 ### 1Password sign-in from WSL
 

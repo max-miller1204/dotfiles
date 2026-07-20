@@ -29,7 +29,8 @@ jq -e --argjson runtime "$runtime_policy" '
   .externalOwners.fnm.commands == ["node", "npm", "npx"] and
   .externalOwners.fnm.optionalCommands == ["corepack"] and
   .externalOwners.uv.version == $runtime.pythonVersion and
-  .externalOwners.uv.commands == ["python", "python3", "python3.14"] and
+  .externalOwners.uv.commands == ["python", "python3",
+    "python" + ($runtime.pythonVersion | split(".")[0:2] | join("."))] and
   .externalOwners.rustup.toolchain == $runtime.rustToolchain and
   .externalOwners.rustup.commands == $runtime.rustProxies and
   .externalOwners.npmPrefix.prefix == ("~/" + $runtime.npmPrefixRel) and

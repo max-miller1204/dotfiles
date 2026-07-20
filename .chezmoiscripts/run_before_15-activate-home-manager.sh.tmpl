@@ -93,12 +93,15 @@ if [[ ! -f "$CHEZMOI_SOURCE/nix/flake.nix" || ! -f "$CHEZMOI_SOURCE/nix/flake.lo
 fi
 
 configuration_attr="$FLAKE#homeConfigurations.\"$HOME_MANAGER_CONFIGURATION\".config"
-configured_user="$($NIX_BIN eval --raw --no-write-lock-file \
-    "$configuration_attr.home.username")"
-configured_home="$($NIX_BIN eval --raw --no-write-lock-file \
-    "$configuration_attr.home.homeDirectory")"
-configured_system="$($NIX_BIN eval --raw --no-write-lock-file \
-    "$configuration_attr.nixpkgs.system")"
+configured_identity="$($NIX_BIN eval --json --no-write-lock-file \
+    "$configuration_attr" --apply 'config: {
+        user = config.home.username;
+        home = config.home.homeDirectory;
+        system = config.nixpkgs.system;
+    }')"
+configured_user="$(jq -r '.user' <<<"$configured_identity")"
+configured_home="$(jq -r '.home' <<<"$configured_identity")"
+configured_system="$(jq -r '.system' <<<"$configured_identity")"
 actual_user="$(id -un)"
 
 if [[ "$configured_user" != "$actual_user" ]]; then
@@ -192,8 +195,16 @@ if [[ "$switch_status" -ne 0 ]]; then
     fi
     if [[ "$rollback_ok" != true ]]; then
         printf '%s\n' \
-            'Home Manager activation failed and automatic rollback also failed.' \
-            "Restore $before_generation manually before retrying." >&2
+            'Home Manager activation failed and automatic rollback also failed.' >&2
+        if [[ "$before_generation" == '<none>' ]]; then
+            printf '%s\n' \
+                "Remove $profile and its home-manager-*-link generations," \
+                "then restore $package_profile to $before_package_generation" \
+                'manually before retrying.' >&2
+        else
+            printf '%s\n' \
+                "Restore $before_generation manually before retrying." >&2
+        fi
     fi
     exit "$switch_status"
 fi

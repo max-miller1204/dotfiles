@@ -10,7 +10,8 @@ resolve_nix() {
 }
 
 # Resolve symlink chains without GNU readlink -f, which is unavailable on macOS.
-# Prints the canonical target path. The input must exist or be a symlink.
+# Prints the canonical target path. Fails without output when the chain ends in
+# a directory that no longer exists, so callers can diagnose dangling links.
 resolve_link() {
 	local path="$1" link directory
 	while [[ -L "$path" ]]; do
@@ -21,7 +22,7 @@ resolve_link() {
 			path="$(dirname "$path")/$link"
 		fi
 	done
-	directory="$(cd "$(dirname "$path")" && pwd -P)"
+	directory="$(cd "$(dirname "$path")" 2>/dev/null && pwd -P)" || return 1
 	printf '%s/%s\n' "$directory" "$(basename "$path")"
 }
 

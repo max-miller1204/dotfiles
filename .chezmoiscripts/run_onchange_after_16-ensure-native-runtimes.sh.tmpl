@@ -68,7 +68,11 @@ npx --version
 for python_bin in python python3 "python${PYTHON_VERSION%.*}"; do
     path="$HOME/.local/bin/$python_bin"
     if [[ -e "$path" || -L "$path" ]]; then
-        resolved="$(resolve_link "$path")"
+        if ! resolved="$(resolve_link "$path")"; then
+            printf 'Refusing to replace unresolvable Python symlink: %s -> %s\n' \
+                "$path" "$(readlink "$path")" >&2
+            exit 1
+        fi
         if [[ "$resolved" != "$UV_PYTHON_INSTALL_DIR/"* ]]; then
             printf 'Refusing to replace non-uv Python executable: %s -> %s\n' \
                 "$path" "$resolved" >&2
@@ -81,9 +85,9 @@ UV_PREVIEW_FEATURES=python-install-default \
     "$UV_BIN" python install "$PYTHON_VERSION" --default --no-progress
 for python_bin in python python3; do
     path="$HOME/.local/bin/$python_bin"
-    resolved="$(resolve_link "$path")"
-    if [[ "$resolved" != "$UV_PYTHON_INSTALL_DIR/"* ]]; then
-        printf 'uv does not own %s: %s\n' "$python_bin" "$resolved" >&2
+    if ! resolved="$(resolve_link "$path")" \
+        || [[ "$resolved" != "$UV_PYTHON_INSTALL_DIR/"* ]]; then
+        printf 'uv does not own %s: %s\n' "$python_bin" "${resolved:-$path}" >&2
         exit 1
     fi
     if [[ "$("$path" --version 2>&1)" != "Python $PYTHON_VERSION" ]]; then

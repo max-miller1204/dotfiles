@@ -109,7 +109,7 @@ restore_proxy_switch() {
     local status=$? proxy path
     trap - EXIT
     if [[ "$proxy_switch_complete" != true ]]; then
-        for proxy in "${changed_proxies[@]}"; do
+        for proxy in ${changed_proxies[@]+"${changed_proxies[@]}"}; do
             path="$CARGO_HOME/bin/$proxy"
             rm -f "$path"
             if [[ -e "$rollback_dir/$proxy" || -L "$rollback_dir/$proxy" ]]; then

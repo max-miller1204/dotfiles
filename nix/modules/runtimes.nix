@@ -15,15 +15,7 @@ let
     "rustup"
     "uv"
   ];
-  commandOnly =
-    name: package: commands:
-    pkgs.runCommand "${name}-${package.version}-commands" { } ''
-      mkdir -p "$out/bin"
-      ${lib.concatMapStringsSep "\n" (command: ''
-        test -x "${package}/bin/${command}"
-        ln -s "${package}/bin/${command}" "$out/bin/${command}"
-      '') commands}
-    '';
+  commandOnly = import ../lib/command-only.nix { inherit lib pkgs; };
   packageByName = {
     bun = commandOnly "bun" pkgs.bun [ "bun" ];
     inherit (pkgs) fnm go;

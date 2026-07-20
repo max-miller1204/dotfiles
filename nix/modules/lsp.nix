@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 let
   ownedPackages = [
     "clang-tools"
@@ -18,13 +18,11 @@ let
     "tsserver"
     "typescript-language-server"
   ];
+  commandOnly = import ../lib/command-only.nix { inherit lib pkgs; };
   # clang-tools contains many unrelated global commands. Expose only clangd so
   # Home Manager does not silently take ownership of clang-format, clang-tidy,
   # and the rest of the LLVM tooling bundle.
-  clangdOnly = pkgs.runCommand "clangd-${pkgs.clang-tools.version}" { } ''
-    mkdir -p "$out/bin"
-    ln -s "${pkgs.clang-tools}/bin/clangd" "$out/bin/clangd"
-  '';
+  clangdOnly = commandOnly "clangd" pkgs.clang-tools [ "clangd" ];
   packageByName = {
     "clang-tools" = clangdOnly;
     inherit (pkgs)

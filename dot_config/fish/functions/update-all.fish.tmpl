@@ -33,7 +33,7 @@ function update-all --description 'Update native packages, mutable runtimes, npm
     env FNM_BIN=$fnm_bin FNM_DIR=$FNM_DIR bash -c '
         set -euo pipefail
         eval "$($FNM_BIN env --shell bash)"
-        $FNM_BIN install --lts --use
+        $FNM_BIN install --{{ .runtimes.node.channel }} --use
         node_version="$($FNM_BIN current)"
         test -n "$node_version"
         test "$node_version" != system
@@ -44,7 +44,7 @@ function update-all --description 'Update native packages, mutable runtimes, npm
     echo "$section==> Python {{ .runtimes.python.version }} (uv pin)$reset"
     env UV_PREVIEW_FEATURES=python-install-default \
         UV_PYTHON_INSTALL_DIR=$HOME/.local/share/uv/python \
-        PATH=$HOME/.local/bin:$PATH \
+        PATH=(string join : $HOME/.local/bin $PATH) \
         $uv_bin python install {{ .runtimes.python.version | quote }} \
         --default --no-progress
     or return
@@ -63,7 +63,7 @@ function update-all --description 'Update native packages, mutable runtimes, npm
 {{- range .npmTools.packages }}
     set -a npm_packages {{ printf "%s@%s" .name .channel | quote }}
 {{- end }}
-    env NPM_CONFIG_PREFIX=$npm_prefix PATH=$node_bin:$PATH \
+    env NPM_CONFIG_PREFIX=$npm_prefix PATH=(string join : $node_bin $PATH) \
         $node_bin/npm install --global --prefix $npm_prefix $npm_packages
     or return
 

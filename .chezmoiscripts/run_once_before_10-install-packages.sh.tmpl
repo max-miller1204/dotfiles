@@ -129,11 +129,6 @@ if ! dpkg -s {{ $os.dpkg }} >/dev/null 2>&1; then
     log "Installing {{ $pkg.name }}"
     {{ $os.script }}
 fi
-{{-       else if hasKey $os "altpath" }}
-if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1 && [[ ! -x "{{ $os.altpath }}" ]]; then
-    log "Installing {{ $pkg.name }}"
-    {{ $os.script }}
-fi
 {{-       else }}
 if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1; then
     log "Installing {{ $pkg.name }}"

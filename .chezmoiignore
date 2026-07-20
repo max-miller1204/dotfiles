@@ -1,7 +1,12 @@
 README.md
 CLAUDE.md
 context-map.md
+renovate.json
 raycast-export
+
+# Source-only flake. Only this subtree is passed to Nix, and chezmoi must not
+# materialize it as ~/nix.
+nix
 
 # Written by `brev agent-skill` (run_once_after_70), not chezmoi. Ignored so
 # chezmoi never treats the CLI-owned skill tree as unmanaged state to remove.

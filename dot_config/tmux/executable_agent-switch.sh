@@ -3,15 +3,16 @@
 # with a live preview of each pane. Bound to `prefix f` (see tmux.conf).
 set -euo pipefail
 
-# Resolve fzf: PATH first (mise shims when a shell is active), then the mise
-# install location (display-popup can run with a sanitized PATH), else a
-# visible error rather than a silent no-op.
-fzf_bin="$(command -v fzf || true)"
-if [ -z "$fzf_bin" ] && [ -x "$HOME/.local/share/mise/installs/fzf/latest/fzf" ]; then
-  fzf_bin="$HOME/.local/share/mise/installs/fzf/latest/fzf"
+# Prefer the dedicated Nix profile because a tmux display-popup can inherit a
+# sanitized PATH where a stale system or native-manager fzf still resolves.
+nix_profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+if [ -x "$nix_profile/bin/fzf" ]; then
+  fzf_bin="$nix_profile/bin/fzf"
+else
+  fzf_bin="$(command -v fzf || true)"
 fi
 if [ -z "$fzf_bin" ]; then
-  printf 'agent-switch: fzf not found (PATH or mise). Press any key.'; read -r -n 1 -s _; exit 1
+  printf 'agent-switch: fzf not found (PATH or dotfiles Nix profile). Press any key.'; read -r -n 1 -s _; exit 1
 fi
 
 # Field 1 = stable pane_id (%N, hidden from the list); fields 2+ = display.

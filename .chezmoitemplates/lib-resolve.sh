@@ -10,20 +10,20 @@ resolve_mise() {
 }
 
 # Resolve a rustup-managed binary (rustup itself, or a component shim such as
-# rust-analyzer) without relying on PATH activation: the mise rust bootstrap
-# installs them under ~/.cargo/bin, which is not on PATH in a non-interactive
-# apply. Prints the resolved path on stdout, or nothing if it is not installed.
+# rust-analyzer) without relying on PATH activation. The native rustup bootstrap
+# installs shims under ${CARGO_HOME:-~/.cargo}/bin, which is not on PATH in a
+# non-interactive apply. Prints the resolved path, or nothing if absent.
 resolve_rustup() {
     local bin="$1"
     if command -v "$bin" >/dev/null 2>&1; then
         command -v "$bin"
-    elif [[ -x "$HOME/.cargo/bin/$bin" ]]; then
-        printf '%s\n' "$HOME/.cargo/bin/$bin"
+    elif [[ -x "${CARGO_HOME:-$HOME/.cargo}/bin/$bin" ]]; then
+        printf '%s\n' "${CARGO_HOME:-$HOME/.cargo}/bin/$bin"
     fi
 }
 
-# Prepend directories to PATH so mise shims and ~/.local/bin resolve in a
-# non-interactive `chezmoi apply` (neither is on PATH there). Arguments are kept
+# Prepend directories to PATH so user-managed and profile commands resolve in a
+# non-interactive `chezmoi apply`. Arguments are kept
 # in order, so the first argument has the highest priority on PATH.
 prepend_path() {
     local prefix="" dir

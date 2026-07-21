@@ -33,6 +33,9 @@ if ! command -v nix >/dev/null 2>&1; then
 fi
 
 tmp="$(mktemp -d)"
+# macOS exposes /var as a symlink to /private/var. Canonicalize before direnv
+# records its allow key so the later process cwd resolves to the same path.
+tmp="$(cd "$tmp" && pwd -P)"
 trap 'rm -rf "$tmp"' EXIT
 cp -a "$repo_root/nix" "$tmp/nix"
 
@@ -86,6 +89,8 @@ direnv_env=(
 	"XDG_STATE_HOME=$tmp/state"
 )
 env "${direnv_env[@]}" "$out/bin/direnv" allow "$fixture"
+# Expand the fixture variable inside direnv's child shell, not this test process.
+# shellcheck disable=SC2016
 env "${direnv_env[@]}" "$out/bin/direnv" exec "$fixture" \
 	bash -c 'test "$DOTFILES_DIRENV_FIXTURE" = 1'
 

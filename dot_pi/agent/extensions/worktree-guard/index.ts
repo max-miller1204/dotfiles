@@ -34,6 +34,33 @@ type ToolCallEvent = {
 type BlockResult = { block: true; reason: string };
 type Judgment = NonNullable<ReturnType<typeof parseJudgeResponse>>;
 
+type GuardRuntime = {
+	treehouse?: TreehouseContext;
+	mode: GuardMode;
+	model: string;
+	confidenceThreshold: number;
+	timeout: number;
+	cache: Map<string, Judgment | undefined>;
+};
+
+type AutoJudgeRequest = {
+	pi: ExtensionAPI;
+	command: string;
+	reason: string;
+	treehouse: TreehouseContext;
+	model: string;
+	timeout: number;
+	ctx: ExtensionContext;
+};
+
+type BashGuardRequest = {
+	event: ToolCallEvent;
+	ctx: ExtensionContext;
+	treehouse: TreehouseContext;
+	pi: ExtensionAPI;
+	runtime: GuardRuntime;
+};
+
 function shortToolName(toolName: string): string {
 	return toolName.split(".").at(-1) ?? toolName;
 }
@@ -89,15 +116,15 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	return { command: "pi", args };
 }
 
-async function runAutoJudge(
-	pi: ExtensionAPI,
-	command: string,
-	reason: string,
-	treehouse: TreehouseContext,
-	model: string,
-	timeout: number,
-	ctx: ExtensionContext,
-): Promise<Judgment | undefined> {
+async function runAutoJudge({
+	pi,
+	command,
+	reason,
+	treehouse,
+	model,
+	timeout,
+	ctx,
+}: AutoJudgeRequest): Promise<Judgment | undefined> {
 	const args = [
 		"--mode",
 		"text",
@@ -118,12 +145,16 @@ async function runAutoJudge(
 		buildJudgePrompt(command, reason, treehouse),
 	];
 	const invocation = getPiInvocation(args);
-	const result = await pi.exec(invocation.command, invocation.args, {
-		signal: ctx.signal,
-		timeout,
-	});
-	if (result.code !== 0 || result.killed) return undefined;
-	return parseJudgeResponse(result.stdout);
+	try {
+		const result = await pi.exec(invocation.command, invocation.args, {
+			signal: ctx.signal,
+			timeout,
+		});
+		if (result.code !== 0 || result.killed) return undefined;
+		return parseJudgeResponse(result.stdout);
+	} catch {
+		return undefined;
+	}
 }
 
 async function confirmCommand(
@@ -143,18 +174,13 @@ async function confirmCommand(
 		: block(`Command rejected by Treehouse worktree guard: ${reason}`);
 }
 
-async function guardBashTool(
-	event: ToolCallEvent,
-	ctx: ExtensionContext,
-	treehouse: TreehouseContext,
-	pi: ExtensionAPI,
-	mode: GuardMode,
-	model: string,
-	confidenceThreshold: number,
-	timeout: number,
-	cache: Map<string, Judgment | undefined>,
-	refreshStatus: () => void,
-): Promise<BlockResult | undefined> {
+async function guardBashTool({
+	event,
+	ctx,
+	treehouse,
+	pi,
+	runtime,
+}: BashGuardRequest): Promise<BlockResult | undefined> {
 	const command = event.input.command;
 	if (typeof command !== "string") {
 		return block(
@@ -169,30 +195,30 @@ async function guardBashTool(
 		return block(`Treehouse worktree guard blocked command: ${assessment.reason}`);
 	}
 	const reviewReason = assessment.reason ?? "command requires safety review";
-	if (mode === "prompt") {
+	if (runtime.mode === "prompt") {
 		return confirmCommand(command, reviewReason, ctx);
 	}
 
-	let judgment = cache.get(command);
-	if (!cache.has(command)) {
+	let judgment = runtime.cache.get(command);
+	if (!runtime.cache.has(command)) {
 		ctx.ui.setStatus("worktree-guard", "Guard judging...");
 		try {
-			judgment = await runAutoJudge(
+			judgment = await runAutoJudge({
 				pi,
 				command,
-				reviewReason,
+				reason: reviewReason,
 				treehouse,
-				model,
-				timeout,
+				model: runtime.model,
+				timeout: runtime.timeout,
 				ctx,
-			);
-			cache.set(command, judgment);
+			});
+			runtime.cache.set(command, judgment);
 		} finally {
-			refreshStatus();
+			refreshGuardStatus(runtime, ctx);
 		}
 	}
 
-	const decision = autoDecision(judgment, confidenceThreshold);
+	const decision = autoDecision(judgment, runtime.confidenceThreshold);
 	if (decision === "allow") return undefined;
 	if (decision === "deny") {
 		const reason = judgment?.reason ?? assessment.reason;
@@ -206,114 +232,140 @@ async function guardBashTool(
 	return confirmCommand(command, reason, ctx);
 }
 
-export default function worktreeGuard(pi: ExtensionAPI): void {
-	let treehouse: TreehouseContext | undefined;
-	let mode: GuardMode =
-		process.env.PI_WORKTREE_GUARD_MODE?.toLowerCase() === "prompt"
-			? "prompt"
-			: "auto";
-	const model = process.env.PI_WORKTREE_GUARD_MODEL || DEFAULT_GUARD_MODEL;
-	const confidenceThreshold = numericEnvironment(
-		"PI_WORKTREE_GUARD_CONFIDENCE",
-		DEFAULT_CONFIDENCE_THRESHOLD,
-		0.5,
-		1,
-	);
-	const timeout = numericEnvironment(
-		"PI_WORKTREE_GUARD_TIMEOUT_MS",
-		DEFAULT_JUDGE_TIMEOUT_MS,
-		1000,
-		60_000,
-	);
-	const cache = new Map<string, Judgment | undefined>();
-
-	const refreshStatus = (ctx?: ExtensionContext) => {
-		if (!ctx || !treehouse) return;
-		ctx.ui.setStatus(
-			"worktree-guard",
-			ctx.ui.theme.fg(
-				"accent",
-				`Guarded:${mode} ${treehouse.workspace}`,
-			),
-		);
+function createGuardRuntime(): GuardRuntime {
+	return {
+		mode:
+			process.env.PI_WORKTREE_GUARD_MODE?.toLowerCase() === "prompt"
+				? "prompt"
+				: "auto",
+		model: process.env.PI_WORKTREE_GUARD_MODEL || DEFAULT_GUARD_MODEL,
+		confidenceThreshold: numericEnvironment(
+			"PI_WORKTREE_GUARD_CONFIDENCE",
+			DEFAULT_CONFIDENCE_THRESHOLD,
+			0.5,
+			1,
+		),
+		timeout: numericEnvironment(
+			"PI_WORKTREE_GUARD_TIMEOUT_MS",
+			DEFAULT_JUDGE_TIMEOUT_MS,
+			1000,
+			60_000,
+		),
+		cache: new Map<string, Judgment | undefined>(),
 	};
+}
+
+function refreshGuardStatus(
+	runtime: GuardRuntime,
+	ctx: ExtensionContext,
+): void {
+	if (!runtime.treehouse) return;
+	ctx.ui.setStatus(
+		"worktree-guard",
+		ctx.ui.theme.fg(
+			"accent",
+			`Guarded:${runtime.mode} ${runtime.treehouse.workspace}`,
+		),
+	);
+}
+
+function startGuardSession(runtime: GuardRuntime, ctx: ExtensionContext): void {
+	runtime.treehouse = detectTreehouseContext(ctx.cwd);
+	runtime.cache.clear();
+	if (!runtime.treehouse) {
+		ctx.ui.setStatus("worktree-guard", undefined);
+		return;
+	}
+	refreshGuardStatus(runtime, ctx);
+}
+
+function stopGuardSession(runtime: GuardRuntime, ctx: ExtensionContext): void {
+	ctx.ui.setStatus("worktree-guard", undefined);
+	runtime.treehouse = undefined;
+	runtime.cache.clear();
+}
+
+function guardToolCall(
+	pi: ExtensionAPI,
+	runtime: GuardRuntime,
+	event: ToolCallEvent,
+	ctx: ExtensionContext,
+): BlockResult | Promise<BlockResult | undefined> | undefined {
+	if (!runtime.treehouse) return undefined;
+
+	const toolName = shortToolName(event.toolName);
+	if (toolName === "write" || toolName === "edit") {
+		return guardPathTool(event, ctx, runtime.treehouse);
+	}
+	if (toolName !== "bash") return undefined;
+	return guardBashTool({
+		event,
+		ctx,
+		treehouse: runtime.treehouse,
+		pi,
+		runtime,
+	});
+}
+
+function guardArgumentCompletions(prefix: string) {
+	return ["auto", "prompt", "status"].flatMap((value) =>
+		value.startsWith(prefix) ? [{ value, label: value }] : [],
+	);
+}
+
+function handleGuardCommand(
+	runtime: GuardRuntime,
+	args: string,
+	ctx: ExtensionCommandContext,
+): void {
+	const requested = args.trim().toLowerCase();
+	if (requested === "auto" || requested === "prompt") {
+		runtime.mode = requested;
+		runtime.cache.clear();
+		refreshGuardStatus(runtime, ctx);
+		ctx.ui.notify(`Treehouse worktree guard mode: ${runtime.mode}`, "info");
+		return;
+	}
+	if (requested && requested !== "status") {
+		ctx.ui.notify("Usage: /worktree-guard [auto|prompt|status]", "warning");
+		return;
+	}
+	if (!runtime.treehouse) {
+		ctx.ui.notify("Worktree guard is inactive outside Treehouse", "info");
+		return;
+	}
+
+	ctx.ui.notify(
+		[
+			`Worktree guard active (${runtime.treehouse.detectedBy})`,
+			`Mode: ${runtime.mode}`,
+			`Auto model: ${runtime.model}`,
+			`Auto confidence: ${runtime.confidenceThreshold}`,
+			`Writable workspace: ${runtime.treehouse.workspace}`,
+			`Writable temporary directory: ${runtime.treehouse.temporaryDirectory}`,
+			`Protected paths: ${runtime.treehouse.protectedPaths.join(", ") || "(none discovered)"}`,
+		].join("\n"),
+		"info",
+	);
+}
+
+export default function worktreeGuard(pi: ExtensionAPI): void {
+	const runtime = createGuardRuntime();
 
 	pi.on("session_start", (_event: unknown, ctx: ExtensionContext) => {
-		treehouse = detectTreehouseContext(ctx.cwd);
-		cache.clear();
-		if (!treehouse) {
-			ctx.ui.setStatus("worktree-guard", undefined);
-			return;
-		}
-		refreshStatus(ctx);
+		startGuardSession(runtime, ctx);
 	});
-
 	pi.on("session_shutdown", (_event: unknown, ctx: ExtensionContext) => {
-		ctx.ui.setStatus("worktree-guard", undefined);
-		treehouse = undefined;
-		cache.clear();
+		stopGuardSession(runtime, ctx);
 	});
-
-	pi.on("tool_call", (event: ToolCallEvent, ctx: ExtensionContext) => {
-		if (!treehouse) return undefined;
-
-		const toolName = shortToolName(event.toolName);
-		if (toolName === "write" || toolName === "edit") {
-			return guardPathTool(event, ctx, treehouse);
-		}
-		if (toolName === "bash") {
-			return guardBashTool(
-				event,
-				ctx,
-				treehouse,
-				pi,
-				mode,
-				model,
-				confidenceThreshold,
-				timeout,
-				cache,
-				() => refreshStatus(ctx),
-			);
-		}
-		return undefined;
-	});
-
+	pi.on("tool_call", (event: ToolCallEvent, ctx: ExtensionContext) =>
+		guardToolCall(pi, runtime, event, ctx),
+	);
 	pi.registerCommand("worktree-guard", {
 		description: "Show status or switch Treehouse guard mode: auto | prompt",
-		getArgumentCompletions: (prefix: string) =>
-			["auto", "prompt", "status"]
-				.filter((value) => value.startsWith(prefix))
-				.map((value) => ({ value, label: value })),
+		getArgumentCompletions: guardArgumentCompletions,
 		handler: (args: string, ctx: ExtensionCommandContext) => {
-			const requested = args.trim().toLowerCase();
-			if (requested === "auto" || requested === "prompt") {
-				mode = requested;
-				cache.clear();
-				refreshStatus(ctx);
-				ctx.ui.notify(`Treehouse worktree guard mode: ${mode}`, "info");
-				return;
-			}
-			if (requested && requested !== "status") {
-				ctx.ui.notify("Usage: /worktree-guard [auto|prompt|status]", "warning");
-				return;
-			}
-			if (!treehouse) {
-				ctx.ui.notify("Worktree guard is inactive outside Treehouse", "info");
-				return;
-			}
-
-			ctx.ui.notify(
-				[
-					`Worktree guard active (${treehouse.detectedBy})`,
-					`Mode: ${mode}`,
-					`Auto model: ${model}`,
-					`Auto confidence: ${confidenceThreshold}`,
-					`Writable workspace: ${treehouse.workspace}`,
-					`Writable temporary directory: ${treehouse.temporaryDirectory}`,
-					`Protected paths: ${treehouse.protectedPaths.join(", ") || "(none discovered)"}`,
-				].join("\n"),
-				"info",
-			);
+			handleGuardCommand(runtime, args, ctx);
 		},
 	});
 }

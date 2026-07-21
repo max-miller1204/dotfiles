@@ -5,15 +5,11 @@ set -euo pipefail
 output="${1:?usage: create-direnv-flake-fixture.sh OUTPUT DOTFILES_SOURCE SYSTEM}"
 dotfiles_source="${2:?missing dotfiles source path}"
 system="${3:?missing Nix system}"
-nixpkgs_input="nixpkgs"
-if [[ "$system" == "x86_64-darwin" ]]; then
-	nixpkgs_input="nixpkgs-darwin-intel"
-fi
 
 cat >"$output" <<EOF
 {
   inputs.dotfiles.url = "path:$dotfiles_source";
-  inputs.nixpkgs.follows = "dotfiles/$nixpkgs_input";
+  inputs.nixpkgs.follows = "dotfiles/nixpkgs";
   outputs = { nixpkgs, ... }:
     let
       system = "$system";

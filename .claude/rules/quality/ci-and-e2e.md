@@ -13,7 +13,7 @@ paths:
   All OS-conditional template logic lives in `.chezmoiscripts/*.sh.tmpl` and `dot_config/fish/*.fish.tmpl`; the TOML/JSON templates have no darwin branch, which is why `config-syntax` and `chezmoi-dry-run` stay ubuntu-only.
 - The `nix-evaluation` CI job evaluates all four supported systems without building.
   The `nix-build` matrix renders and executes `run_once_before_12-install-nix.sh.tmpl` twice before building, so native x86_64 Linux, aarch64 Darwin, and x86_64 Darwin runners prove the production bootstrap and its idempotency instead of relying on unrelated setup actions.
-  Linux uses the Determinate shell installer, Apple Silicon uses Determinate's signed macOS package, and Intel macOS uses the upstream multi-user installer because Determinate dropped x86_64 Darwin support.
+  Linux uses the Determinate shell installer and Apple Silicon uses Determinate's signed macOS package; Intel macOS is unsupported and the bootstrap refuses it.
   The matrix then builds every bundle, runs smoke checks, reports closure size, and tests temporary-profile idempotency and rollback.
   Temporary profile tests canonicalize macOS's `/var` symlink before direnv records allow state, so allow and exec use the same physical fixture path.
   Standard CI has no native aarch64 Linux runner, so that system remains evaluation-only until a runner is added.
@@ -26,7 +26,6 @@ paths:
   That TTY-less second apply must use `--force` because the first apply's Claude plugin setup intentionally mutates the managed settings file; this explicitly selects the source version before the always-run plugin script re-asserts its tool-owned state.
   It also runs the temporary profile upgrade and rollback fixture without mutating the user's dedicated profile.
   `.github/scripts/create-direnv-flake-fixture.sh` owns the shared nix-direnv smoke flake used by that focused profile test and by `verify.sh`; keep both callers on the helper so their project-environment assertions cannot drift.
-  The helper follows `nixpkgs-darwin-intel` for x86_64 Darwin and the normal `nixpkgs` input elsewhere, matching the package bundle's supported-system routing.
   The E2E verifier copies the applied `~/.config/direnv/direnvrc` into isolated XDG config and data directories before running that fixture, invokes direnv explicitly from `$DOTFILES_NIX_PROFILE/bin`, and prints captured output before gating on its exit code so runner-global binaries and allow state cannot affect the result or hide the cause of a failure.
   `verify.sh` doubles as the package checklist spec: `MANIFEST_BINS` mirrors `.chezmoidata/packages.yaml`, `NIX_BINS` mirrors the checked-in cumulative bundle, `RUNTIME_BINS` mirrors native mutable runtimes and remaining native tools, and the remaining arrays mirror GUI packages, coding agents, and LSP languages.
   Runtime, agent-tool, and LSP ownership checks must assert exact Fish resolution through fnm, uv, rustup, native Bun, the stable native Hunk launcher, or the dedicated Nix profile rather than merely checking command presence.

@@ -54,7 +54,6 @@ That's it - the install scripts run during `apply` and handle the rest:
 - installs **Nix** before profile activation.
   Linux uses the Determinate installer with a sanitized root environment.
   Apple Silicon macOS uses Determinate's signed package after verifying its Apple Developer team.
-  Intel macOS uses the upstream multi-user installer because Determinate no longer supports that architecture.
   Existing or incomplete `/nix` state is never deleted automatically.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
@@ -69,8 +68,8 @@ That's it - the install scripts run during `apply` and handle the rest:
   [Agents (multi-agent)](#agents-multi-agent)
 - installs **Hunk** through fnm-managed npm into the stable
   `~/.local/share/npm-hunkdiff` prefix and links its CLI into `~/.local/bin`.
-  Hunk remains outside Nix because the pinned Intel Darwin package set does not
-  provide it.
+  Hunk remains outside Nix with Pi: nixpkgs does not package hunkdiff, and npm
+  releases land immediately.
 - installs the **language servers** Claude Code's LSP plugins need: Pyright,
   TypeScript, typescript-language-server, Go, and gopls through the cumulative
   Nix profile, rust-analyzer through rustup, and clangd from apt (Linux) or
@@ -98,9 +97,8 @@ chsh -s "$(command -v fish)"
 
 ## Global Nix package profile
 
-The source-only flake lives under `nix/` and supports `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, and `x86_64-darwin`.
-Linux and Apple Silicon macOS follow `nixpkgs-unstable`.
-Intel macOS follows the separate `nixpkgs-darwin-intel` input, pinned to the `nixpkgs-26.05-darwin` branch, its final maintained line, so versions may diverge and support is expected to end after 2026.
+The source-only flake lives under `nix/` and supports `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`, all following `nixpkgs-unstable`.
+Intel macOS is not supported: nixpkgs-unstable dropped the platform and no machine here uses it, so the bootstrap refuses `x86_64` Darwin.
 
 The flake exposes cumulative `core`, `headless`, `lsp`, and `workstation` package outputs, plus `default` as an alias of `workstation`.
 The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.
@@ -155,8 +153,7 @@ nix build "$flake#core"
 git diff -- flake.lock
 ```
 
-Update `nixpkgs-darwin-intel` in a separate change so the final Intel Darwin line gets independent review.
-Renovate is configured to open separate input updates, which CI evaluates on all systems and builds on native Linux, Apple Silicon macOS, and Intel macOS runners.
+Renovate is configured to open nixpkgs input updates, which CI evaluates on all systems and builds on native Linux and Apple Silicon macOS runners.
 Only `cache.nixos.org` is used.
 
 Measure and maintain the store manually:
@@ -353,7 +350,7 @@ Cross-platform:
   It intentionally excludes executables owned by the Nix bundle
 - `nix/flake.nix`, `flake.lock`, `packages.nix`, `bundles.nix`, and `lsp-smoke.py` - the source-only pinned package graph and Claude-like LSP protocol smoke.
   `.chezmoiignore` prevents this directory from materializing as `~/nix`
-- `renovate.json` - separate automated update rules for unstable nixpkgs and the final Intel Darwin nixpkgs line
+- `renovate.json` - automated update rule for the unstable nixpkgs input
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`

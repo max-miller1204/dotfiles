@@ -77,8 +77,8 @@ rustc --version
 cargo --version
 rust-analyzer --version
 
-# Bun remains native because universal Nix support and cache coverage are weaker,
-# especially on Intel macOS. Prepending the destination before invoking the
+# Bun remains native because universal Nix support and cache coverage are
+# weaker. Prepending the destination before invoking the
 # official installer makes its post-install command check succeed, preventing it
 # from appending unmanaged lines to the chezmoi-owned Fish config.
 bun_install="${BUN_INSTALL:-$HOME/.bun}"

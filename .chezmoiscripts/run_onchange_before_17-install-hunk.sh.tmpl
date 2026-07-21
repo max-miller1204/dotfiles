@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 {{ $nodeVersion := (get . "nodeVersion" | default "lts") }}
-# Hunk stays outside Nix because the pinned Intel Darwin package set does not
-# provide it. Install into a stable npm prefix after fnm has prepared Node so a
-# Node upgrade cannot orphan either the CLI or Pi's bundled review skill.
+# Hunk stays outside Nix with Pi: nixpkgs does not package hunkdiff, and npm
+# releases land immediately. Install into a stable npm prefix after fnm has
+# prepared Node so a Node upgrade cannot orphan either the CLI or Pi's bundled
+# review skill.
 # Node policy: {{ $nodeVersion }}
 {{ template "lib-log.sh" . }}
 

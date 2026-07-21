@@ -79,31 +79,9 @@ case "$(uname -m)" in
             exit 1
         fi
         ;;
-    x86_64)
-        # Determinate no longer ships an Intel macOS installer. The upstream
-        # multi-user installer remains the supported x86_64 Darwin path.
-        log "Installing upstream Nix for Intel macOS"
-        if ! curl --proto '=https' --tlsv1.2 -fsSL \
-            https://nixos.org/nix/install \
-            | sh -s -- \
-                --daemon \
-                --yes \
-                --no-channel-add \
-                --no-modify-profile
-        then
-            echo "The upstream Nix installation failed." >&2
-            exit 1
-        fi
-        # Determinate enables flakes by default, but upstream Nix keeps
-        # nix-command and flakes experimental. Profile activation builds the
-        # bundle from a flake, so enable them system-wide to match the
-        # Determinate platforms.
-        if ! grep -qs 'nix-command' /etc/nix/nix.conf; then
-            printf 'extra-experimental-features = nix-command flakes\n' \
-                | sudo tee -a /etc/nix/nix.conf >/dev/null
-        fi
-        ;;
     *)
+        # Intel macOS is unsupported: no machines use it, and nixpkgs-unstable
+        # dropped the platform, so the flake no longer evaluates for it.
         echo "Unsupported macOS architecture for Nix bootstrap: $(uname -m)" >&2
         exit 1
         ;;

@@ -14,7 +14,7 @@ paths:
 - The pi coding agent installs through fnm-managed npm into the stable `~/.local/share/npm-pi` prefix (`run_onchange_before_18-install-pi.sh.tmpl`, `latest` channel), with its CLI linked into `~/.local/bin`.
   Pi stays outside the Nix bundle so npm releases land immediately instead of trailing the nixpkgs `pi-coding-agent` package bump and a `flake.lock` advance; `update-all` refreshes it alongside Hunk.
   Pi's own npm package extensions continue to install under its unmanaged package directory by invoking fnm-managed npm from the interactive PATH; do not add a second Node runtime owner or a settings-level `npmCommand`.
-  Hunk stays outside Nix because the pinned Intel Darwin package set does not provide it.
+  Hunk stays outside Nix with Pi: nixpkgs does not package hunkdiff, and npm releases land immediately.
   `run_onchange_before_17-install-hunk.sh.tmpl` installs `hunkdiff@latest` through fnm-managed npm into `~/.local/share/npm-hunkdiff`, links its CLI into `~/.local/bin`, and gives Pi a stable bundled review skill path that survives fnm Node upgrades.
   mise is no longer installed or activated, but stale mise state is never deleted automatically.
   Pi's config lives under `dot_pi/` (settings, extensions, prompts, web-search provider, plus the rendered `agent/mcp.json`); pi's runtime state - credentials, sessions, run history, npm package checkouts, the mcp adapter caches, the generated models store, and scratch dirs - is deliberately unmanaged, and `.chezmoiignore`'s pi block is the authoritative list of those paths.

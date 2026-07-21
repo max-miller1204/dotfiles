@@ -32,7 +32,6 @@ paths:
 - `run_once_before_12-install-nix.sh.tmpl` is the only active Nix installer and runs after native prerequisites but before profile activation.
   Linux uses the Determinate installer with root's `HOME` and `XDG_CONFIG_HOME` pinned to prevent sudo environment leaks from creating root-owned files in the user's home.
   Apple Silicon macOS downloads Determinate's recommended package, verifies Apple Developer team `X3JQ4VPJZ6`, and invokes the system installer.
-  Intel macOS uses the upstream noninteractive multi-user installer because Determinate no longer supports x86_64 Darwin, then appends `extra-experimental-features = nix-command flakes` to `/etc/nix/nix.conf`.
   Determinate enables those features by default, but upstream Nix does not, and every later bootstrap stage builds the bundle from a flake.
   The script first activates an existing daemon or single-user environment, exits idempotently when Nix is usable, and refuses to overwrite or delete existing `/nix` state when it is not.
   Recovery from stale macOS APFS state is always manual and links to Determinate's recovery guide.
@@ -47,7 +46,7 @@ paths:
   An implicit Git flake can select the repository root and copy unrelated tracked files into the store.
   Never point a Nix command at the chezmoi repository root because future encrypted data or secret templates elsewhere in the source must not enter the store.
 - `nix/flake.nix` exposes `core`, cumulative `headless`, cumulative `lsp`, cumulative `workstation`, and `default` as an alias of `workstation` for x86_64/aarch64 Linux and Darwin.
-  Unstable nixpkgs serves Linux and Apple Silicon Darwin, while the separate `nixpkgs-darwin-intel` input (the `nixpkgs-26.05-darwin` branch) serves Intel Darwin through its final support line.
+  Unstable nixpkgs serves Linux and Apple Silicon Darwin; Intel Darwin is unsupported (nixpkgs-unstable dropped the platform), and the bootstrap refuses it.
 - Every bundle uses `pkgs.buildEnv` with `/bin` and `/share`, and `ignoreCollisions = false`.
   Do not hide duplicate ownership with priorities or ignored collisions.
 - `run_onchange_before_15-install-nix-profile.sh.tmpl` hashes every flake file plus machine bundle data, builds and smoke-tests before activation, and manages one `dotfiles-workstation` element in `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles`.
@@ -86,7 +85,7 @@ paths:
 
 - The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, Pyright, TypeScript, typescript-language-server, fnm, and uv on every supported system.
   They are absent from the native manifest.
-  Hunk remains outside Nix because the pinned Intel Darwin package set does not provide it; `run_onchange_before_17` installs `hunkdiff@latest` through fnm-managed npm into the stable `~/.local/share/npm-hunkdiff` prefix and links `hunk` into `~/.local/bin`.
+  Hunk remains outside Nix with Pi (nixpkgs does not package hunkdiff, and npm releases land immediately); `run_onchange_before_17` installs `hunkdiff@latest` through fnm-managed npm into the stable `~/.local/share/npm-hunkdiff` prefix and links `hunk` into `~/.local/bin`.
   Pi remains outside Nix so npm releases land immediately; `run_onchange_before_18` installs `@earendil-works/pi-coding-agent@latest` the same way into `~/.local/share/npm-pi` and links `pi` into `~/.local/bin`.
   Existing stale installs are not automatically deleted, and Fish removes stale mise shims from PATH so migrated owners win.
   Nix also gives Linux a tmux release new enough for the `extended-keys-format` option used by `tmux.conf` instead of Ubuntu 24.04's tmux 3.4.

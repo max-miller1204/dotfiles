@@ -44,6 +44,24 @@ assert.ok(
 	`auto-judge model must remain enabled: ${DEFAULT_GUARD_MODEL}`,
 );
 
+const guardIndex = readFileSync(
+	new URL(
+		"../../dot_pi/agent/extensions/worktree-guard/index.ts",
+		import.meta.url,
+	),
+	"utf8",
+);
+assert.match(
+	guardIndex,
+	/\bbashGuardReason\b/,
+	"extension must use the reload-compatible policy API",
+);
+assert.doesNotMatch(
+	guardIndex,
+	/\bassessBashCommand\b/,
+	"extension must not depend on policy exports added after initial load",
+);
+
 const fixture = mkdtempSync(join(tmpdir(), "worktree-guard-"));
 
 try {
@@ -208,11 +226,11 @@ try {
 	);
 	assert.ok(allowJudgment);
 	assert.equal(autoDecision(allowJudgment), "allow");
+	assert.equal(autoDecision({ ...allowJudgment, confidence: 0.8 }), "ask");
 	assert.equal(
-		autoDecision({ ...allowJudgment, confidence: 0.8 }),
-		"ask",
+		parseJudgeResponse('```json\n{"verdict":"allow"}\n```'),
+		undefined,
 	);
-	assert.equal(parseJudgeResponse('```json\n{"verdict":"allow"}\n```'), undefined);
 	assert.equal(
 		parseJudgeResponse(
 			JSON.stringify({
@@ -225,7 +243,9 @@ try {
 		undefined,
 	);
 
-	process.stdout.write("Treehouse worktree guard policy and auto-judge tests passed\n");
+	process.stdout.write(
+		"Treehouse worktree guard policy and auto-judge tests passed\n",
+	);
 } finally {
 	rmSync(fixture, { recursive: true, force: true });
 }

@@ -1,5 +1,15 @@
+// Pi provides the Node.js runtime, while this source tree intentionally has no
+// local npm dependency tree from which TypeScript could resolve Node's types.
+// @ts-expect-error Runtime-provided Node.js built-in.
 import { existsSync } from "node:fs";
+// @ts-expect-error Runtime-provided Node.js built-in.
 import { basename } from "node:path";
+
+declare const process: {
+	env: Record<string, string | undefined>;
+	argv: string[];
+	execPath: string;
+};
 // Pi supplies this package at runtime; the dotfiles repository has no local npm tree.
 import type {
 	ExtensionAPI,
@@ -17,7 +27,7 @@ import {
 	parseJudgeResponse,
 } from "./auto-judge.mjs";
 import {
-	assessBashCommand,
+	bashGuardReason,
 	detectTreehouseContext,
 	isWritablePath,
 	resolveToolPath,
@@ -188,13 +198,17 @@ async function guardBashTool({
 		);
 	}
 
-	const assessment = assessBashCommand(command, treehouse);
-	if (assessment.action === "allow") return undefined;
-	if (assessment.action === "block") {
-		ctx.ui.notify(`Blocked: ${assessment.reason}`, "warning");
-		return block(`Treehouse worktree guard blocked command: ${assessment.reason}`);
+	const protectedPath = treehouse.protectedPaths.find((path) =>
+		command.includes(path),
+	);
+	if (protectedPath) {
+		const reason = `command references protected path ${protectedPath}`;
+		ctx.ui.notify(`Blocked: ${reason}`, "warning");
+		return block(`Treehouse worktree guard blocked command: ${reason}`);
 	}
-	const reviewReason = assessment.reason ?? "command requires safety review";
+
+	const reviewReason = bashGuardReason(command, treehouse);
+	if (!reviewReason) return undefined;
 	if (runtime.mode === "prompt") {
 		return confirmCommand(command, reviewReason, ctx);
 	}
@@ -221,7 +235,7 @@ async function guardBashTool({
 	const decision = autoDecision(judgment, runtime.confidenceThreshold);
 	if (decision === "allow") return undefined;
 	if (decision === "deny") {
-		const reason = judgment?.reason ?? assessment.reason;
+		const reason = judgment?.reason ?? reviewReason;
 		ctx.ui.notify(`Auto-blocked: ${reason}`, "warning");
 		return block(`Treehouse auto guard blocked command: ${reason}`);
 	}

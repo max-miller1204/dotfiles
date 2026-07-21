@@ -37,6 +37,11 @@ fish_path() {
 	fish -l -i -c "command -v $1" 2>/dev/null |
 		sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1
 }
+canonical_fish_path() {
+	local path
+	path="$(fish_path "$1")" || return 1
+	readlink -f "$path"
+}
 home_manager_owns() {
 	local path resolved
 	path="$(fish_path "$1")"
@@ -222,7 +227,7 @@ nix_direnv_flake_works() {
 	source_dir="$HOME/.local/share/chezmoi"
 	project="$(mktemp -d)" || return 1
 	for command_name in node python cargo go bun; do
-		global_paths+=("$(fish_path "$command_name")")
+		global_paths+=("$(canonical_fish_path "$command_name")")
 	done
 	nixpkgs_path="$("$nix_bin" eval --raw \
 		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
@@ -275,7 +280,8 @@ EOF
 		-exec test -e {} \; -print -quit)"
 	index=0
 	for command_name in node python cargo go bun; do
-		[[ "$(fish_path "$command_name")" == "${global_paths[$index]}" ]] || {
+		[[ "$(canonical_fish_path "$command_name")" \
+			== "${global_paths[$index]}" ]] || {
 			rm -rf "$project"
 			return 1
 		}

@@ -2,6 +2,7 @@
 paths:
   - "dot_pi/**/*"
   - ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl"
   - ".github/e2e/verify.sh"
   - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
 ---
@@ -10,7 +11,8 @@ paths:
 
 # Pi coding agent context
 
-- The pi coding agent is `pkgs.pi-coding-agent` in the cumulative Nix workstation bundle on every supported system.
+- The pi coding agent installs through fnm-managed npm into the stable `~/.local/share/npm-pi` prefix (`run_onchange_before_18-install-pi.sh.tmpl`, `latest` channel), with its CLI linked into `~/.local/bin`.
+  Pi stays outside the Nix bundle so npm releases land immediately instead of trailing the nixpkgs `pi-coding-agent` package bump and a `flake.lock` advance; `update-all` refreshes it alongside Hunk.
   Pi's own npm package extensions continue to install under its unmanaged package directory by invoking fnm-managed npm from the interactive PATH; do not add a second Node runtime owner or a settings-level `npmCommand`.
   Hunk stays outside Nix because the pinned Intel Darwin package set does not provide it.
   `run_onchange_before_17-install-hunk.sh.tmpl` installs `hunkdiff@latest` through fnm-managed npm into `~/.local/share/npm-hunkdiff`, links its CLI into `~/.local/bin`, and gives Pi a stable bundled review skill path that survives fnm Node upgrades.

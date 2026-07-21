@@ -10,6 +10,7 @@ NIX = SCRIPTS / "run_once_before_12-install-nix.sh.tmpl"
 PROFILE = SCRIPTS / "run_onchange_before_15-install-nix-profile.sh.tmpl"
 RUNTIMES = SCRIPTS / "run_onchange_before_16-install-language-runtimes.sh.tmpl"
 HUNK = SCRIPTS / "run_onchange_before_17-install-hunk.sh.tmpl"
+PI = SCRIPTS / "run_onchange_before_18-install-pi.sh.tmpl"
 LSP = SCRIPTS / "run_onchange_after_50-install-lsp-servers.sh.tmpl"
 PACKAGES = REPO_ROOT / ".chezmoidata/packages.yaml"
 
@@ -34,11 +35,11 @@ def assert_before(text: str, first: str, second: str, source: Path) -> None:
 
 
 def main() -> None:
-    ordered_scripts = [NATIVE, NIX, PROFILE, RUNTIMES, HUNK, LSP]
+    ordered_scripts = [NATIVE, NIX, PROFILE, RUNTIMES, HUNK, PI, LSP]
     missing = [path for path in ordered_scripts if not path.is_file()]
     if missing:
         raise SystemExit(f"missing bootstrap scripts: {missing}")
-    expected_stages = ("_10-", "_12-", "_15-", "_16-", "_17-", "_50-")
+    expected_stages = ("_10-", "_12-", "_15-", "_16-", "_17-", "_18-", "_50-")
     for path, stage in zip(ordered_scripts, expected_stages, strict=True):
         if stage not in path.name:
             raise SystemExit(

@@ -20,11 +20,11 @@ APPLY_LOG="${APPLY_LOG:-}"
 MANIFEST_BINS=(fish git jq curl wget gpg unzip add-apt-repository zenity
 	gh op pfetch brev treehouse no-mistakes herdr)
 NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls
-	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi)
+	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 RUNTIME_BINS=(node npm python python3 rustup rustc cargo bun)
-NATIVE_NPM_BINS=(hunk)
+NATIVE_NPM_BINS=(hunk pi)
 AGENT_BINS=(claude codex opencode)
 LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clangd)
 
@@ -54,6 +54,9 @@ fish_uses_bun() {
 }
 fish_uses_native_hunk() {
 	[[ "$(fish_path hunk)" == "$HOME/.local/bin/hunk" ]]
+}
+fish_uses_native_pi() {
+	[[ "$(fish_path pi)" == "$HOME/.local/bin/pi" ]]
 }
 profile_has_one_workstation() {
 	nix profile list --profile "$DOTFILES_NIX_PROFILE" --json |
@@ -126,6 +129,9 @@ for b in "${NATIVE_NPM_BINS[@]}"; do hard "native npm tool $b" fish_has "$b"; do
 hard "hunk resolves through the stable native launcher" fish_uses_native_hunk
 hard "hunk launcher targets the stable native npm prefix" \
 	test "$(readlink "$HOME/.local/bin/hunk")" = "$HOME/.local/share/npm-hunkdiff/bin/hunk"
+hard "pi resolves through the stable native launcher" fish_uses_native_pi
+hard "pi launcher targets the stable native npm prefix" \
+	test "$(readlink "$HOME/.local/bin/pi")" = "$HOME/.local/share/npm-pi/bin/pi"
 
 echo "== coding agents + nix =="
 for b in "${AGENT_BINS[@]}"; do hard "agent $b" fish_has "$b"; done
@@ -196,7 +202,7 @@ hard "pi Hunk review skill declared" \
 hard "Hunk review skill installed" \
 	test -f "$HOME/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
 
-pi_nix_runtime_smoke() (
+pi_native_runtime_smoke() (
 	set -euo pipefail
 	local tmp npm_bin
 	tmp="$(mktemp -d)"
@@ -206,7 +212,7 @@ pi_nix_runtime_smoke() (
 	test -n "${FNM_MULTISHELL_PATH:-}"
 	test "$npm_bin" = "$FNM_MULTISHELL_PATH/bin/npm"
 	PI_WORKTREE_GUARD_MODE=prompt \
-		timeout 300 "$DOTFILES_NIX_PROFILE/bin/pi" --approve --list-models \
+		timeout 300 "$HOME/.local/bin/pi" --approve --list-models \
 		>"$tmp/models"
 	for package in \
 		pi-web-access \
@@ -219,7 +225,7 @@ pi_nix_runtime_smoke() (
 	done
 	printf '%s\n' '{"id":"commands","type":"get_commands"}' \
 		| PI_OFFLINE=1 PI_WORKTREE_GUARD_MODE=prompt \
-			timeout 120 "$DOTFILES_NIX_PROFILE/bin/pi" \
+			timeout 120 "$HOME/.local/bin/pi" \
 			--approve --mode rpc --no-session \
 			>"$tmp/rpc.jsonl"
 	python3 - "$tmp/rpc.jsonl" <<'PY'
@@ -246,10 +252,10 @@ if not required <= commands:
     raise SystemExit(f"Pi RPC smoke is missing commands: {sorted(required - commands)}")
 PY
 )
-PI_RUNTIME_REPORT="$(pi_nix_runtime_smoke 2>&1)"
+PI_RUNTIME_REPORT="$(pi_native_runtime_smoke 2>&1)"
 PI_RUNTIME_RC=$?
 [[ -n "$PI_RUNTIME_REPORT" ]] && echo "$PI_RUNTIME_REPORT"
-hard "Nix Pi loads managed extensions and npm packages through fnm npm" \
+hard "Native Pi loads managed extensions and npm packages through fnm npm" \
 	test "$PI_RUNTIME_RC" -eq 0
 
 hard "generated no-mistakes skills synchronized" \

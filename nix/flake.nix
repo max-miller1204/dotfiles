@@ -107,7 +107,6 @@
               ''
                 fnm --version
                 uv --version
-                pi --version
                 touch "$out"
               '';
         }

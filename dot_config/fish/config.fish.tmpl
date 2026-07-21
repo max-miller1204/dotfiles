@@ -61,7 +61,8 @@ if status is-interactive
     end
     {{- end }}
 
-    # The checked-in flake owns pinned global CLIs, LSP tooling, fnm, uv, and Pi.
+    # The checked-in flake owns pinned global CLIs, LSP tooling, fnm, and uv.
+    # Pi and Hunk resolve through ~/.local/bin from their stable npm prefixes.
     set -l dotfiles_nix_state "$HOME/.local/state"
     if set -q XDG_STATE_HOME; and test -n "$XDG_STATE_HOME"
         set dotfiles_nix_state "$XDG_STATE_HOME"

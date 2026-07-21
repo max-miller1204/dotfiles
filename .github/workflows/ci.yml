@@ -73,15 +73,16 @@ jobs:
             "$flake#default" \
             --no-link
           nix flake check "$flake"
-      - name: Test Nix Pi against managed extensions
+      - name: Test native Pi against managed extensions
         run: |
           set -euo pipefail
-          out=$(
-            nix build "path:$PWD/nix#workstation" \
-              --no-link \
-              --print-out-paths
-          )
-          bash .github/scripts/test-pi-nix-runtime.sh "$out/bin/pi"
+          # Pi is a native npm-prefix install, not a bundle element. Install the
+          # same @latest channel production uses into a throwaway prefix so the
+          # managed extensions are proven against the Pi users actually get.
+          prefix="$RUNNER_TEMP/npm-pi"
+          npm_config_update_notifier=false npm install --global \
+            --prefix "$prefix" @earendil-works/pi-coding-agent@latest
+          bash .github/scripts/test-pi-nix-runtime.sh "$prefix/bin/pi"
       - name: Report workstation closure size
         run: |
           set -euo pipefail

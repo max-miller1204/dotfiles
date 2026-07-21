@@ -81,6 +81,14 @@ def main() -> None:
 
     forbid(profile, "install Nix manually", PROFILE)
     require(profile, "Nix bootstrap did not complete", PROFILE)
+    require(profile, "for brew_bin in /opt/homebrew/bin /usr/local/bin; do", PROFILE)
+    require(profile, "jq is required for dedicated profile activation.", PROFILE)
+    assert_before(
+        profile,
+        "jq is required for dedicated profile activation.",
+        "nix profile list",
+        PROFILE,
+    )
 
     prerequisite_pairs = (
         ("- name: curl", "- name: pfetch"),

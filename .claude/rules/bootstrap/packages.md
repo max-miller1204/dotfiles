@@ -89,6 +89,7 @@ paths:
   Existing stale installs are not automatically deleted, and Fish removes stale mise shims from PATH so migrated owners win.
   Nix also gives Linux a tmux release new enough for the `extended-keys-format` option used by `tmux.conf` instead of Ubuntu 24.04's tmux 3.4.
   `jq` and `op` (1Password) deliberately stay native on Linux: `jq` is a `command -v jq || exit 1` bootstrap dependency of the apply-time MCP/plugin scripts (and is used bare in obsidian's installer), and `op` unlocks chezmoi's secret reads before the dedicated Nix profile is active.
+  On macOS `jq` is brew-installed into a prefix that is not on the stock PATH, and each chezmoi script starts a fresh process that never inherits script 10's `brew shellenv`, so `run_onchange_before_15` probes `/opt/homebrew/bin` and `/usr/local/bin` for `jq` and hard-fails with a clear message before any profile mutation; `check-nix-bootstrap.py` requires that probe and its ordering.
   The eza `ls` aliases are probed after the dedicated Nix profile PATH addition.
   1Password keeps its debsig setup, and Obsidian keeps resolving its `.deb` URL from the GitHub releases API at runtime.
   The manifest is order-sensitive on Linux (curl + ca-certificates before HTTPS vendor installers, gnupg before the op and gh apt-repos, software-properties-common before the ghostty PPA); macOS is brew/cask plus the three self-contained curl `script` installers (treehouse, no-mistakes, herdr), and order-independent.

@@ -30,10 +30,11 @@
     typescript-language-server
   ];
 
-  # Nix owns the manager executables; their mutable runtimes stay outside the
-  # store under fnm and uv.
+  # Nix owns the manager executables and Pi. Mutable runtimes stay outside the
+  # store under fnm and uv, and Pi uses fnm's npm for package extensions.
   workstation = with pkgs; [
     fnm
     uv
+    pi-coding-agent
   ];
 }

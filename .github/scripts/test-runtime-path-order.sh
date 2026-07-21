@@ -29,16 +29,8 @@ make_command() {
 	chmod +x "$path"
 }
 
-# The mise mock prepends stale shims exactly as activation does. The managed
-# config must move this directory behind every other ownership layer afterward.
-cat >"$home/.local/bin/mise" <<'EOF'
-#!/bin/sh
-if [ "${1:-}" = activate ]; then
-    printf 'fish_add_path --global --move --path "%s"\n' "$HOME/.local/share/mise/shims"
-fi
-EOF
-chmod +x "$home/.local/bin/mise"
-
+# Stale mise shims remain on disk and enter through the inherited PATH below.
+# Fish must remove that directory without deleting it or activating mise.
 # The fnm mock emits its multishell path, which must be the final global runtime
 # layer above the profile. It does not download or mutate any runtime.
 cat >"$profile/bin/fnm" <<'EOF'
@@ -49,11 +41,14 @@ fi
 EOF
 chmod +x "$profile/bin/fnm"
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server uv node python rustup rustc cargo bun; do
+for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server uv pi node python rustup rustc cargo bun; do
 	make_command "$profile/bin/$bin"
 	make_command "$home/.local/share/mise/shims/$bin"
 done
 make_command "$home/.local/bin/go"
+make_command "$home/.local/bin/pi"
+make_command "$home/.local/bin/hunk"
+make_command "$home/.local/share/mise/shims/hunk"
 for bin in node npm; do make_command "$runtime/fnm_multishells/test/bin/$bin"; done
 for bin in python python3; do make_command "$data/uv/python-bin/$bin"; done
 for bin in rustup rustc cargo; do make_command "$home/.cargo/bin/$bin"; done
@@ -77,7 +72,7 @@ fish_path() {
 		BUN_INSTALL="$home/.bun" \
 		RUSTUP_TOOLCHAIN=stale-mise-toolchain \
 		NODE_PATH="$tmp/existing-node-modules" \
-		PATH="$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		PATH="$home/.local/share/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
 		fish -l -i -c "command -v $1" 2>/dev/null | tail -1
 }
 
@@ -90,15 +85,25 @@ assert_path() {
 	fi
 }
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
+assert_absent() {
+	local bin="$1" actual
+	actual="$(fish_path "$bin" || true)"
+	if [[ -n "$actual" ]]; then
+		printf '%s unexpectedly resolved to %s\n' "$bin" "$actual" >&2
+		exit 1
+	fi
+}
+
+for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi; do
 	assert_path "$bin" "$profile/bin/$bin"
 done
 for bin in node npm; do assert_path "$bin" "$runtime/fnm_multishells/test/bin/$bin"; done
 for bin in python python3; do assert_path "$bin" "$data/uv/python-bin/$bin"; done
 for bin in rustup rustc cargo; do assert_path "$bin" "$home/.cargo/bin/$bin"; done
 assert_path bun "$home/.bun/bin/bun"
+assert_path hunk "$home/.local/bin/hunk"
 assert_path legacy-only "$tmp/system/bin/legacy-only"
-assert_path mise-only "$home/.local/share/mise/shims/mise-only"
+assert_absent mise-only
 
 node_path="$(
 	env \
@@ -108,7 +113,7 @@ node_path="$(
 		XDG_STATE_HOME="$state" \
 		XDG_RUNTIME_DIR="$runtime" \
 		NODE_PATH="$tmp/existing-node-modules" \
-		PATH="$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		PATH="$home/.local/share/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
 		fish -l -i -c 'printf "%s\n" "$NODE_PATH"' 2>/dev/null | tail -1
 )"
 [[ "$node_path" == "$tmp/existing-node-modules" ]]

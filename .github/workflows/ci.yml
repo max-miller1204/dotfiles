@@ -12,7 +12,7 @@ jobs:
   nix-evaluation:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       # v3
@@ -39,7 +39,7 @@ jobs:
         os: [ubuntu-24.04, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       # v3
@@ -63,6 +63,15 @@ jobs:
             "$flake#default" \
             --no-link
           nix flake check "$flake"
+      - name: Test Nix Pi against managed extensions
+        run: |
+          set -euo pipefail
+          out=$(
+            nix build "path:$PWD/nix#workstation" \
+              --no-link \
+              --print-out-paths
+          )
+          bash .github/scripts/test-pi-nix-runtime.sh "$out/bin/pi"
       - name: Report workstation closure size
         run: |
           set -euo pipefail
@@ -86,7 +95,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
@@ -106,6 +115,7 @@ jobs:
             .github/scripts/check-pi-model-pins.sh \
             .github/scripts/create-direnv-flake-fixture.sh \
             .github/scripts/test-nix-profile.sh \
+            .github/scripts/test-pi-nix-runtime.sh \
             .github/scripts/test-runtime-path-order.sh \
             .github/e2e/verify.sh
           shellcheck --severity=warning -s sh \
@@ -130,7 +140,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
@@ -171,7 +181,7 @@ jobs:
   config-syntax:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi
@@ -197,6 +207,8 @@ jobs:
           done < <(find . -name '*.json' ! -path './.git/*' -print0)
       - name: Check exact LSP package ownership
         run: python3 .github/scripts/check-lsp-ownership.py
+      - name: Check exact Pi, Hunk, and mise ownership
+        run: python3 .github/scripts/check-agent-tool-ownership.py
       - name: Check pi subagent model pins against enabledModels
         run: |
           set -euo pipefail
@@ -241,7 +253,7 @@ jobs:
   chezmoi-dry-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-chezmoi

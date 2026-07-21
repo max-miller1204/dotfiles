@@ -47,7 +47,7 @@ out="$(
         --no-link \
         --print-out-paths
 )"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi; do
     if [[ ! -x "$out/bin/$bin" ]]; then
         echo "Built bundle is missing executable: $bin" >&2
         exit 1

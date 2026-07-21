@@ -1,7 +1,6 @@
 {{- $nodeVersion := (get . "nodeVersion" | default "lts") -}}
 {{- $pythonVersion := (get . "pythonVersion" | default "3") -}}
 {{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
-{{- $miseTools := list "npm:@earendil-works/pi-coding-agent" "npm:hunkdiff" -}}
 function update-all --description 'Update every package source this dotfiles repo installs'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
@@ -51,9 +50,13 @@ function update-all --description 'Update every package source this dotfiles rep
         bun upgrade; or return
     end
 
-    if command -q mise
-        echo "$section==> remaining mise tools$reset"
-        mise upgrade {{ $miseTools | join " " }}; or return
+    if command -q npm
+        echo "$section==> native Hunk npm package$reset"
+        set -l hunk_prefix "$HOME/.local/share/npm-hunkdiff"
+        env npm_config_update_notifier=false \
+            npm install --global --prefix "$hunk_prefix" hunkdiff@latest; or return
+        mkdir -p "$HOME/.local/bin"; or return
+        ln -sfn "$hunk_prefix/bin/hunk" "$HOME/.local/bin/hunk"; or return
     end
 
     echo "$section==> chezmoi$reset"

@@ -14,7 +14,7 @@ Read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md
 - `.chezmoidata/packages.yaml`
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl`
 - `.chezmoitemplates/lib-install.sh`, `lib-apt.sh`, or `lib-resolve.sh`
-- package ordering, install methods, mise-managed tools, fnm/uv/rustup/Bun runtimes, vendor install scripts, native packages, or dedicated Nix profile ownership
+- package ordering, install methods, retired mise state, fnm/uv/rustup/Bun runtimes, vendor install scripts, native packages, or dedicated Nix profile ownership
 - `nix/**`, `renovate.json`, or the checked-in flake update workflow
 
 ## Script and tool-owned configuration

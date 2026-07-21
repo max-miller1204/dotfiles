@@ -1,14 +1,3 @@
-# Resolve mise without relying on PATH activation: the mise bootstrap installs it
-# under ~/.local/bin, which is not on PATH in a non-interactive `chezmoi apply`.
-# Prints the resolved mise path on stdout, or nothing if mise is not installed.
-resolve_mise() {
-    if command -v mise >/dev/null 2>&1; then
-        command -v mise
-    elif [[ -x "$HOME/.local/bin/mise" ]]; then
-        printf '%s\n' "$HOME/.local/bin/mise"
-    fi
-}
-
 # Resolve a rustup-managed binary (rustup itself, or a component shim such as
 # rust-analyzer) without relying on PATH activation. The native rustup bootstrap
 # installs shims under ${CARGO_HOME:-~/.cargo}/bin, which is not on PATH in a

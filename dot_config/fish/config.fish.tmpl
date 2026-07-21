@@ -61,32 +61,23 @@ if status is-interactive
     end
     {{- end }}
 
-    # mise remains only for tools that migrate in later phases. Shims mode avoids
-    # dynamic directory hooks re-prepending stale runtime declarations after fnm,
-    # uv, rustup, or Nix have established ownership.
-    if type -q mise
-        mise activate --shims fish | source
-    end
-
-    # The checked-in flake owns pinned global CLIs, LSP tooling, fnm, and uv.
+    # The checked-in flake owns pinned global CLIs, LSP tooling, fnm, uv, and Pi.
     set -l dotfiles_nix_state "$HOME/.local/state"
     if set -q XDG_STATE_HOME; and test -n "$XDG_STATE_HOME"
         set dotfiles_nix_state "$XDG_STATE_HOME"
     end
     fish_add_path --prepend --move "$dotfiles_nix_state/nix/profiles/dotfiles/bin"
 
-    # fish_add_path always keeps fish_user_paths above inherited system paths,
-    # even with --append. Manipulate PATH directly so mise is genuinely last.
-    set -l mise_shims "$HOME/.local/share/mise/shims"
+    # Never delete stale mise installations automatically, but retire any shim
+    # path inherited from an older shell so migrated commands cannot regain
+    # ownership.
+    set -l stale_mise_shims "$HOME/.local/share/mise/shims"
     if set -q fish_user_paths
-        set -g fish_user_paths (string match -v -- "$mise_shims" $fish_user_paths)
+        set -g fish_user_paths (string match -v -- "$stale_mise_shims" $fish_user_paths)
     end
-    while contains -- "$mise_shims" $PATH
-        set -l mise_index (contains -i -- "$mise_shims" $PATH)
+    while contains -- "$stale_mise_shims" $PATH
+        set -l mise_index (contains -i -- "$stale_mise_shims" $PATH)
         set -e PATH[$mise_index]
-    end
-    if test -d "$mise_shims"
-        set -a PATH "$mise_shims"
     end
 
     # Mutable runtime paths intentionally sit above the Nix profile. uv-managed

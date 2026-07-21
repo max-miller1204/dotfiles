@@ -15,21 +15,22 @@ ENVIRONMENT="${2:-sandbox}"
 APPLY_LOG="${APPLY_LOG:-}"
 
 # Expected command names, mirroring the native manifest, checked-in Nix bundle,
-# mutable runtime managers, remaining mise tools, coding agents, and LSP servers.
+# mutable runtime managers, native npm tools, coding agents, and LSP servers.
 # Kept explicit so this file doubles as the ownership checklist specification.
-MANIFEST_BINS=(fish git jq curl wget gpg unzip add-apt-repository zenity mise
+MANIFEST_BINS=(fish git jq curl wget gpg unzip add-apt-repository zenity
 	gh op pfetch brev treehouse no-mistakes herdr)
 NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls
-	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv)
+	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
-RUNTIME_BINS=(node npm python python3 rustup rustc cargo bun hunk)
-AGENT_BINS=(claude codex opencode pi)
+RUNTIME_BINS=(node npm python python3 rustup rustc cargo bun)
+NATIVE_NPM_BINS=(hunk)
+AGENT_BINS=(claude codex opencode)
 LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clangd)
 
 # Resolve through a login+interactive fish so PATH reflects the real UX the
 # dotfiles set up: project hooks, native runtime managers, the dedicated profile,
-# native package managers, and finally transitional mise shims.
+# and native package managers, with inherited stale mise shims removed.
 fish_has() { fish -l -i -c "command -q $1" 2>/dev/null; }
 fish_path() {
 	fish -l -i -c "command -v $1" 2>/dev/null |
@@ -51,21 +52,16 @@ fish_uses_rustup() {
 fish_uses_bun() {
 	[[ "$(fish_path "$1")" == "${BUN_INSTALL:-$HOME/.bun}/bin/$1" ]]
 }
-fish_uses_mise() {
-	[[ "$(fish_path "$1")" == "$HOME/.local/share/mise/shims/$1" ]]
+fish_uses_native_hunk() {
+	[[ "$(fish_path hunk)" == "$HOME/.local/bin/hunk" ]]
 }
 profile_has_one_workstation() {
 	nix profile list --profile "$DOTFILES_NIX_PROFILE" --json |
 		jq -e '.elements | length == 1 and ([.[] | .storePaths[]? | contains("dotfiles-workstation")] | any)'
 }
-mise_owns_only_pi_and_hunk() {
-	"$HOME/.local/bin/mise" ls --global --json |
-		jq -e 'keys | sort == ["npm:@earendil-works/pi-coding-agent", "npm:hunkdiff"]'
-}
-
 if [[ "$MODE" == "preflight" ]]; then
 	echo "== preflight inventory (bins present BEFORE apply; install NOT proven for these) =="
-	for b in "${MANIFEST_BINS[@]}" "${NIX_BINS[@]}" "${GUI_BINS[@]}" "${RUNTIME_BINS[@]}" "${AGENT_BINS[@]}" "${LSP_BINS[@]}"; do
+	for b in "${MANIFEST_BINS[@]}" "${NIX_BINS[@]}" "${GUI_BINS[@]}" "${RUNTIME_BINS[@]}" "${NATIVE_NPM_BINS[@]}" "${AGENT_BINS[@]}" "${LSP_BINS[@]}"; do
 		if command -v "$b" >/dev/null 2>&1; then
 			echo "PREEXISTING: $b -> $(command -v "$b")"
 		else
@@ -124,9 +120,12 @@ hard "python resolves through uv" fish_uses_uv_python python
 hard "python3 resolves through uv" fish_uses_uv_python python3
 for b in rustup rustc cargo; do hard "$b resolves through rustup" fish_uses_rustup "$b"; done
 hard "bun resolves through native installer" fish_uses_bun bun
-hard "fresh mise config owns only Pi and Hunk" mise_owns_only_pi_and_hunk
-hard "pi resolves through mise" fish_uses_mise pi
-hard "hunk resolves through mise" fish_uses_mise hunk
+
+echo "== native npm tooling =="
+for b in "${NATIVE_NPM_BINS[@]}"; do hard "native npm tool $b" fish_has "$b"; done
+hard "hunk resolves through the stable native launcher" fish_uses_native_hunk
+hard "hunk launcher targets the stable native npm prefix" \
+	test "$(readlink "$HOME/.local/bin/hunk")" = "$HOME/.local/share/npm-hunkdiff/bin/hunk"
 
 echo "== coding agents + nix =="
 for b in "${AGENT_BINS[@]}"; do hard "agent $b" fish_has "$b"; done
@@ -140,6 +139,11 @@ OWNERSHIP_RC=$?
 [[ -n "$OWNERSHIP_REPORT" ]] && echo "$OWNERSHIP_REPORT"
 hard "source declarations assign every LSP tool to exactly one owner" \
 	test "$OWNERSHIP_RC" -eq 0
+AGENT_OWNERSHIP_REPORT="$(python3 "$SOURCE_PATH/.github/scripts/check-agent-tool-ownership.py" 2>&1)"
+AGENT_OWNERSHIP_RC=$?
+[[ -n "$AGENT_OWNERSHIP_REPORT" ]] && echo "$AGENT_OWNERSHIP_REPORT"
+hard "source declarations assign Pi and Hunk to exact owners with mise inactive" \
+	test "$AGENT_OWNERSHIP_RC" -eq 0
 LSP_REPORT="$(
 	python3 "$SOURCE_PATH/nix/lsp-smoke.py" \
 		"$DOTFILES_NIX_PROFILE/bin/pyright-langserver" \
@@ -187,10 +191,67 @@ PIN_RC=$?
 [[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
 hard "pi subagent model pins are all in enabledModels" test "$PIN_RC" -eq 0
 hard "pi Hunk review skill declared" \
-	jq -e '.skills | index("~/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md") != null' \
+	jq -e '.skills == ["~/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"]' \
 	"$HOME/.pi/agent/settings.json"
 hard "Hunk review skill installed" \
-	test -f "$HOME/.local/share/mise/installs/npm-hunkdiff/latest/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+	test -f "$HOME/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+
+pi_nix_runtime_smoke() (
+	set -euo pipefail
+	local tmp npm_bin
+	tmp="$(mktemp -d)"
+	trap 'rm -rf "$tmp"' EXIT
+	eval "$("$DOTFILES_NIX_PROFILE/bin/fnm" env --shell bash)"
+	npm_bin="$(command -v npm)"
+	test -n "${FNM_MULTISHELL_PATH:-}"
+	test "$npm_bin" = "$FNM_MULTISHELL_PATH/bin/npm"
+	PI_WORKTREE_GUARD_MODE=prompt \
+		timeout 300 "$DOTFILES_NIX_PROFILE/bin/pi" --approve --list-models \
+		>"$tmp/models"
+	for package in \
+		pi-web-access \
+		@tintinweb/pi-subagents \
+		pi-mcp-adapter \
+		pi-lens \
+		pi-worklist \
+		pi-git-diff; do
+		test -d "$HOME/.pi/agent/npm/node_modules/$package"
+	done
+	printf '%s\n' '{"id":"commands","type":"get_commands"}' \
+		| PI_OFFLINE=1 PI_WORKTREE_GUARD_MODE=prompt \
+			timeout 120 "$DOTFILES_NIX_PROFILE/bin/pi" \
+			--approve --mode rpc --no-session \
+			>"$tmp/rpc.jsonl"
+	python3 - "$tmp/rpc.jsonl" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    events = [json.loads(line) for line in path.read_text().splitlines() if line]
+except (OSError, json.JSONDecodeError) as error:
+    raise SystemExit(f"could not parse Pi RPC output: {error}") from error
+errors = [event for event in events if event.get("type") == "extension_error"]
+responses = [
+    event
+    for event in events
+    if event.get("type") == "response" and event.get("command") == "get_commands"
+]
+if errors or len(responses) != 1 or not responses[0].get("success"):
+    raise SystemExit(f"Pi RPC smoke failed: errors={errors!r} responses={responses!r}")
+commands = {command["name"] for command in responses[0]["data"]["commands"]}
+required = {"handoff", "skill:hunk-review", "worktree-guard"}
+if not required <= commands:
+    raise SystemExit(f"Pi RPC smoke is missing commands: {sorted(required - commands)}")
+PY
+)
+PI_RUNTIME_REPORT="$(pi_nix_runtime_smoke 2>&1)"
+PI_RUNTIME_RC=$?
+[[ -n "$PI_RUNTIME_REPORT" ]] && echo "$PI_RUNTIME_REPORT"
+hard "Nix Pi loads managed extensions and npm packages through fnm npm" \
+	test "$PI_RUNTIME_RC" -eq 0
+
 hard "generated no-mistakes skills synchronized" \
 	bash -c 'test -f "$HOME/.agents/skills/no-mistakes/SKILL.md" && cmp -s "$HOME/.agents/skills/no-mistakes/SKILL.md" "$HOME/.claude/skills/no-mistakes/SKILL.md"'
 
@@ -353,7 +414,7 @@ echo "== versions (for the report) =="
 # pipefail), then invoke the binary directly for its version. pfetch's last
 # escape sequence (ESC[?7h) has no trailing newline and lands on the path's
 # line, so strip ANSI/DEC escapes before picking the line.
-for b in chezmoi nix mise fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim fnm uv go gopls pyright typescript-language-server tsc node python rustup rustc cargo bun gh op; do
+for b in chezmoi nix fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim fnm uv go gopls pyright typescript-language-server tsc node python rustup rustc cargo bun pi hunk gh op; do
 	p="$(fish -l -i -c "command -v $b" 2>/dev/null | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1 || true)"
 	if [[ -n "$p" && -x "$p" ]]; then
 		case "$b" in

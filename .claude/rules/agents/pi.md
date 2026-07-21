@@ -1,17 +1,20 @@
 ---
 paths:
   - "dot_pi/**/*"
-  - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl"
   - ".github/e2e/verify.sh"
-  - ".github/scripts/{check-pi-model-pins.sh,test-worktree-guard.mjs}"
+  - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
 ---
 
 <!-- markdownlint-disable MD013 -->
 
 # Pi coding agent context
 
-- The pi coding agent and Hunk install as mise-managed npm tools (`npm:@earendil-works/pi-coding-agent` and `npm:hunkdiff` via `mise use -g` in `run_once_before_10`, after the toolchains block so node exists) rather than plain `npm -g`, so they survive node upgrades instead of becoming orphaned in a version-pinned runtime directory.
-  Pi loads Hunk's bundled review skill from the stable `npm-hunkdiff/latest` mise path in `agent/settings.json`, which works on both macOS and Linux without a Homebrew-specific branch.
+- The pi coding agent is `pkgs.pi-coding-agent` in the cumulative Nix workstation bundle on every supported system.
+  Pi's own npm package extensions continue to install under its unmanaged package directory by invoking fnm-managed npm from the interactive PATH; do not add a second Node runtime owner or a settings-level `npmCommand`.
+  Hunk stays outside Nix because the pinned Intel Darwin package set does not provide it.
+  `run_onchange_before_17-install-hunk.sh.tmpl` installs `hunkdiff@latest` through fnm-managed npm into `~/.local/share/npm-hunkdiff`, links its CLI into `~/.local/bin`, and gives Pi a stable bundled review skill path that survives fnm Node upgrades.
+  mise is no longer installed or activated, but stale mise state is never deleted automatically.
   Pi's config lives under `dot_pi/` (settings, extensions, prompts, web-search provider, plus the rendered `agent/mcp.json`); pi's runtime state - credentials, sessions, run history, npm package checkouts, the mcp adapter caches, the generated models store, and scratch dirs - is deliberately unmanaged, and `.chezmoiignore`'s pi block is the authoritative list of those paths.
   The locally vendored extensions stay under `dot_pi/agent/extensions/` (the README's pi config ownership section lists them), while the Git diff viewer is the published `npm:pi-git-diff` package declared in `agent/settings.json`; do not vendor a second local copy.
   The `worktree-guard` extension is globally loaded but activates only when `TREEHOUSE_DIR` or an ancestor `treehouse-state.json` proves the current directory belongs to a managed tree.

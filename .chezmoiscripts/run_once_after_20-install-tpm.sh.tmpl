@@ -11,7 +11,7 @@ if [[ ! -d "$TPM_DIR" ]]; then
     git clone --depth 1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
 fi
 DOTFILES_NIX_PROFILE="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-prepend_path "$DOTFILES_NIX_PROFILE/bin" "$HOME/.local/bin" "$HOME/.local/share/mise/shims"
+prepend_path "$DOTFILES_NIX_PROFILE/bin" "$HOME/.local/bin"
 if command -v tmux >/dev/null 2>&1; then
     log "Installing tmux plugins"
     "$TPM_DIR/bin/install_plugins" >/dev/null 2>&1 || true

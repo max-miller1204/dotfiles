@@ -59,19 +59,6 @@ def main() -> None:
     if nix_lsp != expected_nix_lsp:
         fail(f"Nix lsp group is {nix_lsp!r}, expected {expected_nix_lsp!r}")
 
-    installer = read(".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl")
-    mise_tools = set(re.findall(r'"\$MISE_BIN" use -g (\S+)', installer))
-    expected_mise = {"npm:@earendil-works/pi-coding-agent", "npm:hunkdiff"}
-    if mise_tools != expected_mise:
-        fail(f"mise installer owns {mise_tools!r}, expected only {expected_mise!r}")
-
-    update_all = read("dot_config/fish/functions/update-all.fish.tmpl")
-    update_match = re.search(r"\$miseTools := list (.*?) -}}", update_all)
-    if not update_match:
-        fail("could not find update-all's mise tool list")
-    mise_upgrades = set(re.findall(r'"([^"]+)"', update_match.group(1)))
-    if mise_upgrades != expected_mise:
-        fail(f"mise upgrades {mise_upgrades!r}, expected only {expected_mise!r}")
     lsp_installer = read(
         ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
     )
@@ -102,9 +89,7 @@ def main() -> None:
     if "NODE_PATH" in read("dot_config/fish/config.fish.tmpl"):
         fail("Fish still exports NODE_PATH")
 
-    print(
-        "LSP ownership is exact: Nix owns Pyright and TypeScript; mise owns Pi and Hunk only"
-    )
+    print("LSP ownership is exact: Nix owns Pyright and TypeScript tooling")
 
 
 if __name__ == "__main__":

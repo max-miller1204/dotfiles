@@ -19,8 +19,7 @@ if ! command -v nix >/dev/null 2>&1; then
 	unset __ETC_PROFILE_NIX_SOURCED
 	for nix_init in \
 		/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
-		"$HOME/.nix-profile/etc/profile.d/nix.sh"
-	do
+		"$HOME/.nix-profile/etc/profile.d/nix.sh"; do
 		if [[ -r "$nix_init" ]]; then
 			# shellcheck source=/dev/null
 			source "$nix_init"

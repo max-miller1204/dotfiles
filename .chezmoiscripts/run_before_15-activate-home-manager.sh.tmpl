@@ -53,6 +53,14 @@ exit 0
 CHEZMOI_SOURCE={{ .chezmoi.sourceDir | quote }}
 HOME_MANAGER_CONFIGURATION={{ $configuration | quote }}
 EXPECTED_NIX_SYSTEM={{ $nixSystem | quote }}
+# Address the flake by the source directory's physical path: some Nix
+# releases (for example the pinned Intel macOS fallback) reject `path:`
+# flake refs that traverse a symlink such as CI's ~/.local/share/chezmoi.
+if ! CHEZMOI_SOURCE="$(cd "$CHEZMOI_SOURCE" 2>/dev/null && pwd -P)"; then
+    printf 'chezmoi source directory is missing: %s\n' \
+        {{ .chezmoi.sourceDir | quote }} >&2
+    exit 1
+fi
 FLAKE="path:$CHEZMOI_SOURCE/nix"
 
 case "$HOME_MANAGER_CONFIGURATION" in

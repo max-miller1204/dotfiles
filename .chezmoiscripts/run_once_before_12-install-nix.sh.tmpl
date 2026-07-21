@@ -94,6 +94,14 @@ case "$(uname -m)" in
             echo "The upstream Nix installation failed." >&2
             exit 1
         fi
+        # Determinate enables flakes by default, but upstream Nix keeps
+        # nix-command and flakes experimental. Profile activation builds the
+        # bundle from a flake, so enable them system-wide to match the
+        # Determinate platforms.
+        if ! grep -qs 'nix-command' /etc/nix/nix.conf; then
+            printf 'extra-experimental-features = nix-command flakes\n' \
+                | sudo tee -a /etc/nix/nix.conf >/dev/null
+        fi
         ;;
     *)
         echo "Unsupported macOS architecture for Nix bootstrap: $(uname -m)" >&2

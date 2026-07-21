@@ -68,6 +68,7 @@ def main() -> None:
         '--yes',
         '--no-channel-add',
         '--no-modify-profile',
+        'extra-experimental-features = nix-command flakes',
         'Refusing to modify existing Nix state automatically.',
     ):
         require(nix, invariant, NIX)

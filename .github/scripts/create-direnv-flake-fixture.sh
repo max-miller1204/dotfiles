@@ -7,7 +7,7 @@ dotfiles_source="${2:?missing dotfiles source path}"
 system="${3:?missing Nix system}"
 nixpkgs_input="nixpkgs"
 if [[ "$system" == "x86_64-darwin" ]]; then
-    nixpkgs_input="nixpkgs-darwin-intel"
+	nixpkgs_input="nixpkgs-darwin-intel"
 fi
 
 cat >"$output" <<EOF

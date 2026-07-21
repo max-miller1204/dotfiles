@@ -14,13 +14,6 @@
       "matchManagers": ["nix"],
       "matchDepNames": ["nixpkgs"],
       "groupName": "nixpkgs unstable"
-    },
-    {
-      "description": ["Keep Intel Darwin on its final maintained nixpkgs line"],
-      "matchManagers": ["nix"],
-      "matchDepNames": ["nixpkgs-darwin-intel"],
-      "groupName": "nixpkgs Intel Darwin",
-      "schedule": ["* * 1-7 * 1"]
     }
   ]
 }

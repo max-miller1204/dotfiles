@@ -54,22 +54,21 @@ def main() -> None:
     for installer_url in (
         "install.determinate.systems/nix",
         "determinate-pkg/stable/Universal",
-        "nixos.org/nix/install",
     ):
         forbid(native, installer_url, NATIVE)
         require(nix, installer_url, NIX)
+
+    # Intel macOS is unsupported: the upstream installer must not reappear in
+    # any bootstrap stage now that the flake no longer targets x86_64-darwin.
+    forbid(native, "nixos.org/nix/install", NATIVE)
+    forbid(nix, "nixos.org/nix/install", NIX)
 
     for invariant in (
         'sudo HOME=/root XDG_CONFIG_HOME=/root/.config',
         'case "$(uname -m)"',
         'arm64)',
-        'x86_64)',
         'X3JQ4VPJZ6',
-        '--daemon',
-        '--yes',
-        '--no-channel-add',
-        '--no-modify-profile',
-        'extra-experimental-features = nix-command flakes',
+        'Unsupported macOS architecture for Nix bootstrap',
         'Refusing to modify existing Nix state automatically.',
     ):
         require(nix, invariant, NIX)

@@ -32,7 +32,8 @@ paths:
 - `run_once_before_12-install-nix.sh.tmpl` is the only active Nix installer and runs after native prerequisites but before profile activation.
   Linux uses the Determinate installer with root's `HOME` and `XDG_CONFIG_HOME` pinned to prevent sudo environment leaks from creating root-owned files in the user's home.
   Apple Silicon macOS downloads Determinate's recommended package, verifies Apple Developer team `X3JQ4VPJZ6`, and invokes the system installer.
-  Intel macOS uses the upstream noninteractive multi-user installer because Determinate no longer supports x86_64 Darwin.
+  Intel macOS uses the upstream noninteractive multi-user installer because Determinate no longer supports x86_64 Darwin, then appends `extra-experimental-features = nix-command flakes` to `/etc/nix/nix.conf`.
+  Determinate enables those features by default, but upstream Nix does not, and every later bootstrap stage builds the bundle from a flake.
   The script first activates an existing daemon or single-user environment, exits idempotently when Nix is usable, and refuses to overwrite or delete existing `/nix` state when it is not.
   Recovery from stale macOS APFS state is always manual and links to Determinate's recovery guide.
 - `run_once_before_10-install-packages.sh.tmpl` must not install Nix.

@@ -107,7 +107,7 @@ The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.
 The cumulative `headless` output adds `gum`, `starship`, `atuin`, `zoxide`, `direnv`, `tmux`, Neovim, and nix-direnv.
 The cumulative `lsp` output adds Go, gopls, Pyright, TypeScript, and typescript-language-server together.
 The Nix package gives the language server a pinned TypeScript fallback internally, so no shell-wide `NODE_PATH` is needed.
-The cumulative `workstation` output adds the `fnm` and `uv` manager executables plus Pi.
+The cumulative `workstation` output adds the `fnm` and `uv` manager executables.
 Only `workstation` is installed, so overlapping bundle elements never enter the profile.
 
 Build and smoke-test without activation:
@@ -419,6 +419,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl` - build-first installation or upgrade of the one-element dedicated `dotfiles-workstation` profile whenever flake, lock, or bundle selection changes
 - `.chezmoiscripts/run_onchange_before_16-install-language-runtimes.sh.tmpl` - installs or updates mutable fnm Node, uv Python, rustup Rust, and native Bun after their Nix-owned manager executables are active
 - `.chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl` - installs Hunk through fnm-managed npm into a stable native prefix and links its CLI into `~/.local/bin`
+- `.chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl` - installs Pi through fnm-managed npm into its stable native prefix on the `latest` channel and links its CLI into `~/.local/bin`
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
@@ -568,8 +569,8 @@ the repo and need manual hand-off.
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
    nix profile list --profile "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi # first result should be the dedicated profile
-   type -a hunk              # first result should be ~/.local/bin/hunk
+   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv # first result should be the dedicated profile
+   type -a hunk pi           # first results should be the ~/.local/bin launchers
    type -a node python rustc bun # native runtime-manager paths should win
    which brew fish claude codex opencode pi op
    op whoami                 # confirms 1Password sign-in

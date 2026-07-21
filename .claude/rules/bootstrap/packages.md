@@ -32,7 +32,7 @@ paths:
 - `run_once_before_12-install-nix.sh.tmpl` is the only active Nix installer and runs after native prerequisites but before profile activation.
   Linux uses the Determinate installer with root's `HOME` and `XDG_CONFIG_HOME` pinned to prevent sudo environment leaks from creating root-owned files in the user's home.
   Apple Silicon macOS downloads Determinate's recommended package, verifies Apple Developer team `X3JQ4VPJZ6`, and invokes the system installer.
-  Determinate enables those features by default, but upstream Nix does not, and every later bootstrap stage builds the bundle from a flake.
+  Both Determinate installers enable the `nix-command` and `flakes` features by default, which every later bootstrap stage needs to build the bundle from a flake.
   The script first activates an existing daemon or single-user environment, exits idempotently when Nix is usable, and refuses to overwrite or delete existing `/nix` state when it is not.
   Recovery from stale macOS APFS state is always manual and links to Determinate's recovery guide.
 - `run_once_before_10-install-packages.sh.tmpl` must not install Nix.
@@ -45,7 +45,7 @@ paths:
   Use an explicit `path:.../nix` flake reference even when running from inside that directory.
   An implicit Git flake can select the repository root and copy unrelated tracked files into the store.
   Never point a Nix command at the chezmoi repository root because future encrypted data or secret templates elsewhere in the source must not enter the store.
-- `nix/flake.nix` exposes `core`, cumulative `headless`, cumulative `lsp`, cumulative `workstation`, and `default` as an alias of `workstation` for x86_64/aarch64 Linux and Darwin.
+- `nix/flake.nix` exposes `core`, cumulative `headless`, cumulative `lsp`, cumulative `workstation`, and `default` as an alias of `workstation` for x86_64/aarch64 Linux and aarch64 Darwin.
   Unstable nixpkgs serves Linux and Apple Silicon Darwin; Intel Darwin is unsupported (nixpkgs-unstable dropped the platform), and the bootstrap refuses it.
 - Every bundle uses `pkgs.buildEnv` with `/bin` and `/share`, and `ignoreCollisions = false`.
   Do not hide duplicate ownership with priorities or ignored collisions.

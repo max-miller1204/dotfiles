@@ -309,7 +309,11 @@ The five LSP plugins are not hand-listed here: they derive from the single-sourc
 
 **pi config ownership.**
 pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models and published extension packages, including `npm:pi-git-diff` and `npm:@tintinweb/pi-subagents`), `agent/agents/` (the read-only `Explore` and `Plan` subagent definitions), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, `/handoff`, and Treehouse worktree guard extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
-The worktree guard activates only inside a Treehouse-managed worktree, allows direct Pi writes only within its assigned tree and the canonical OS temporary directory, and asks before shell commands that can target the live source, sibling trees, or shared Git state.
+The worktree guard activates only inside a Treehouse-managed worktree and allows direct Pi writes only within its assigned tree and the canonical OS temporary directory.
+Its default `auto` mode sends ambiguous shell commands to an isolated, tool-less `opencode-go/deepseek-v4-flash` judge and automatically accepts only strict JSON approvals at 95 percent confidence or higher.
+Explicit protected-path references remain deterministic hard blocks, while an unavailable or uncertain judge falls back to interactive confirmation and fails closed without a UI.
+Use `/worktree-guard prompt` for confirmation-only behavior, `/worktree-guard auto` to switch back, and `/worktree-guard status` to inspect the active policy.
+`PI_WORKTREE_GUARD_MODEL`, `PI_WORKTREE_GUARD_CONFIDENCE`, `PI_WORKTREE_GUARD_TIMEOUT_MS`, and `PI_WORKTREE_GUARD_MODE=prompt` provide startup overrides.
 Symlinks from either writable root are canonicalized before policy checks, so they cannot grant write access to protected repositories.
 It is an accident-prevention policy rather than a security sandbox because arbitrary extension tools still run with Pi's host permissions.
 Subagent routing lives in the `agent/agents/*.md` frontmatter, not in `settings.json`: `npm:@tintinweb/pi-subagents` discovers those files and they replace the settings-level `subagents.agentOverrides` block the previous `npm:pi-subagents` package used.

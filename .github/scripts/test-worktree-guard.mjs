@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -11,12 +12,37 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	autoDecision,
+	buildJudgePrompt,
+	DEFAULT_GUARD_MODEL,
+	parseJudgeResponse,
+} from "../../dot_pi/agent/extensions/worktree-guard/auto-judge.mjs";
+import {
+	assessBashCommand,
 	bashGuardReason,
 	canonicalizePath,
 	detectTreehouseContext,
 	isWritablePath,
 	resolveToolPath,
 } from "../../dot_pi/agent/extensions/worktree-guard/policy.mjs";
+
+let settings;
+try {
+	settings = JSON.parse(
+		readFileSync(
+			new URL("../../dot_pi/agent/settings.json", import.meta.url),
+			"utf8",
+		),
+	);
+} catch (error) {
+	throw new Error("could not parse dot_pi/agent/settings.json", {
+		cause: error,
+	});
+}
+assert.ok(
+	settings.enabledModels.includes(DEFAULT_GUARD_MODEL),
+	`auto-judge model must remain enabled: ${DEFAULT_GUARD_MODEL}`,
+);
 
 const fixture = mkdtempSync(join(tmpdir(), "worktree-guard-"));
 
@@ -133,9 +159,24 @@ try {
 
 	assert.equal(bashGuardReason("git status --short", context), undefined);
 	assert.equal(bashGuardReason("npm test", context), undefined);
+	assert.deepEqual(assessBashCommand("npm test", context), {
+		action: "allow",
+	});
+	assert.deepEqual(assessBashCommand("git commit -m test", context), {
+		action: "review",
+		reason:
+			"this Git operation can mutate shared worktree metadata or repository state",
+	});
 	assert.match(
 		bashGuardReason(`git -C ${mainSource} status`, context) ?? "",
 		/protected path/,
+	);
+	assert.deepEqual(
+		assessBashCommand(`printf data > ${sibling}/file`, context),
+		{
+			action: "block",
+			reason: `command references protected path ${canonicalizePath(sibling)}`,
+		},
 	);
 	assert.match(bashGuardReason("chezmoi apply", context) ?? "", /chezmoi/);
 	assert.match(
@@ -147,7 +188,44 @@ try {
 		/recursive removal/,
 	);
 
-	process.stdout.write("Treehouse worktree guard policy tests passed\n");
+	const judgePrompt = JSON.parse(
+		buildJudgePrompt("git commit -m test", "git mutation", context),
+	);
+	assert.equal(judgePrompt.command, "git commit -m test");
+	assert.equal(judgePrompt.workspace, canonicalizePath(workspace));
+	assert.deepEqual(
+		new Set(judgePrompt.protectedPaths),
+		new Set([canonicalizePath(sibling), canonicalizePath(mainSource)]),
+	);
+
+	const allowJudgment = parseJudgeResponse(
+		JSON.stringify({
+			verdict: "allow",
+			confidence: 0.99,
+			reason: "targets only the assigned worktree",
+			affectedPaths: [canonicalizePath(workspace)],
+		}),
+	);
+	assert.ok(allowJudgment);
+	assert.equal(autoDecision(allowJudgment), "allow");
+	assert.equal(
+		autoDecision({ ...allowJudgment, confidence: 0.8 }),
+		"ask",
+	);
+	assert.equal(parseJudgeResponse('```json\n{"verdict":"allow"}\n```'), undefined);
+	assert.equal(
+		parseJudgeResponse(
+			JSON.stringify({
+				verdict: "allow",
+				confidence: 2,
+				reason: "invalid confidence",
+				affectedPaths: [],
+			}),
+		),
+		undefined,
+	);
+
+	process.stdout.write("Treehouse worktree guard policy and auto-judge tests passed\n");
 } finally {
 	rmSync(fixture, { recursive: true, force: true });
 }

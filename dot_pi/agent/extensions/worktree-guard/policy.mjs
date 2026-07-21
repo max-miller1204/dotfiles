@@ -175,16 +175,24 @@ export function detectTreehouseContext(
 	};
 }
 
-export function bashGuardReason(command, context) {
+export function assessBashCommand(command, context) {
 	for (const protectedPath of context.protectedPaths) {
 		if (command.includes(protectedPath)) {
-			return `command references protected path ${protectedPath}`;
+			return {
+				action: "block",
+				reason: `command references protected path ${protectedPath}`,
+			};
 		}
 	}
 
 	for (const { pattern, reason } of SUSPICIOUS_BASH_PATTERNS) {
-		if (pattern.test(command)) return reason;
+		if (pattern.test(command)) return { action: "review", reason };
 	}
 
-	return undefined;
+	return { action: "allow" };
+}
+
+export function bashGuardReason(command, context) {
+	const assessment = assessBashCommand(command, context);
+	return assessment.action === "allow" ? undefined : assessment.reason;
 }

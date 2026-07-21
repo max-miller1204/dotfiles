@@ -3,7 +3,7 @@ paths:
   - "dot_pi/**/*"
   - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
   - ".github/e2e/verify.sh"
-  - ".github/scripts/check-pi-model-pins.sh"
+  - ".github/scripts/{check-pi-model-pins.sh,test-worktree-guard.mjs}"
 ---
 
 <!-- markdownlint-disable MD013 -->
@@ -15,9 +15,13 @@ paths:
   Pi's config lives under `dot_pi/` (settings, extensions, prompts, web-search provider, plus the rendered `agent/mcp.json`); pi's runtime state - credentials, sessions, run history, npm package checkouts, the mcp adapter caches, the generated models store, and scratch dirs - is deliberately unmanaged, and `.chezmoiignore`'s pi block is the authoritative list of those paths.
   The locally vendored extensions stay under `dot_pi/agent/extensions/` (the README's pi config ownership section lists them), while the Git diff viewer is the published `npm:pi-git-diff` package declared in `agent/settings.json`; do not vendor a second local copy.
   The `worktree-guard` extension is globally loaded but activates only when `TREEHOUSE_DIR` or an ancestor `treehouse-state.json` proves the current directory belongs to a managed tree.
-  Its direct write/edit boundary allows only the active worktree and Node's canonical `os.tmpdir()`, while risky Bash commands require interactive approval and fail closed without UI.
+  Its direct write/edit boundary allows only the active worktree and Node's canonical `os.tmpdir()`.
+  Ambiguous Bash commands default to `auto` mode, where an isolated, tool-less model returns a strict allow/deny/ask judgment; only approvals at or above the configured confidence threshold run without interaction.
+  Explicit protected-path references remain deterministic hard blocks, while an unavailable, malformed, uncertain, or ask judgment falls back to interactive approval and fails closed without UI.
+  `/worktree-guard auto|prompt|status` controls the current session, and the `PI_WORKTREE_GUARD_*` environment variables provide startup overrides.
   Canonicalize both existing and not-yet-created targets before checking the boundary, reject temporary-directory symlinks that resolve into protected paths, and do not broaden the exception to arbitrary external directories.
-  Keep the policy logic dependency-free in `policy.mjs` so `.github/scripts/test-worktree-guard.mjs` can exercise custom-root detection, temporary-file access, sibling and live-source protection, symlink escapes, and command classification in CI without launching a model.
+  Keep deterministic path and command classification dependency-free in `policy.mjs`, and keep strict model prompt/response validation in `auto-judge.mjs`.
+  `.github/scripts/test-worktree-guard.mjs` must exercise custom-root detection, temporary-file access, sibling and live-source protection, symlink escapes, deterministic classification, malformed model output, confidence fallback, and the default judge model's presence in `enabledModels` without making a network call.
   This extension prevents accidental cross-tree edits but is not an OS security sandbox and must never be documented as one.
   `verify.sh` hard-gates that the package remains declared and that the obsolete local extension directory does not materialize on the E2E box.
   Subagents come from the published `npm:@tintinweb/pi-subagents` package, which discovers agent definitions from `~/.pi/agent/agents/*.md` (source `dot_pi/agent/agents/`); that Markdown frontmatter is the whole routing surface, so do not reintroduce a `subagents.agentOverrides` block in `agent/settings.json` - the package never reads one.

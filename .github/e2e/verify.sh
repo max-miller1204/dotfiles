@@ -173,6 +173,8 @@ hard "pi Treehouse worktree guard materialized" \
 	test -f "$HOME/.pi/agent/extensions/worktree-guard/index.ts"
 hard "pi Treehouse worktree guard policy materialized" \
 	test -f "$HOME/.pi/agent/extensions/worktree-guard/policy.mjs"
+hard "pi Treehouse worktree guard auto judge materialized" \
+	test -f "$HOME/.pi/agent/extensions/worktree-guard/auto-judge.mjs"
 hard "pi subagents package declared" \
 	jq -e '.packages | index("npm:@tintinweb/pi-subagents") != null' "$HOME/.pi/agent/settings.json"
 hard "pi Explore subagent definition materialized" test -f "$HOME/.pi/agent/agents/Explore.md"

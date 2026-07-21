@@ -2,7 +2,7 @@
 paths:
   - ".chezmoidata/packages.yaml"
   - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
-  - ".chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes}.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes,17-install-hunk}.sh.tmpl"
   - ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
   - ".github/e2e/verify.sh"
@@ -34,7 +34,7 @@ paths:
   An implicit Git flake can select the repository root and copy unrelated tracked files into the store.
   Never point a Nix command at the chezmoi repository root because future encrypted data or secret templates elsewhere in the source must not enter the store.
 - `nix/flake.nix` exposes `core`, cumulative `headless`, cumulative `lsp`, cumulative `workstation`, and `default` as an alias of `workstation` for x86_64/aarch64 Linux and Darwin.
-  Unstable nixpkgs serves Linux and Apple Silicon Darwin, while the separate `nixpkgs-26.05-darwin` input serves Intel Darwin through its final support line.
+  Unstable nixpkgs serves Linux and Apple Silicon Darwin, while the separate `nixpkgs-darwin-intel` input (the `nixpkgs-26.05-darwin` branch) serves Intel Darwin through its final support line.
 - Every bundle uses `pkgs.buildEnv` with `/bin` and `/share`, and `ignoreCollisions = false`.
   Do not hide duplicate ownership with priorities or ignored collisions.
 - `run_onchange_before_15-install-nix-profile.sh.tmpl` hashes every flake file plus machine bundle data, builds and smoke-tests before activation, and manages one `dotfiles-workstation` element in `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles`.

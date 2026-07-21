@@ -95,7 +95,7 @@ chsh -s "$(command -v fish)"
 
 The source-only flake lives under `nix/` and supports `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, and `x86_64-darwin`.
 Linux and Apple Silicon macOS follow `nixpkgs-unstable`.
-Intel macOS follows the separate `nixpkgs-26.05-darwin` input, its final maintained line, so versions may diverge and support is expected to end after 2026.
+Intel macOS follows the separate `nixpkgs-darwin-intel` input, pinned to the `nixpkgs-26.05-darwin` branch, its final maintained line, so versions may diverge and support is expected to end after 2026.
 
 The flake exposes cumulative `core`, `headless`, `lsp`, and `workstation` package outputs, plus `default` as an alias of `workstation`.
 The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.

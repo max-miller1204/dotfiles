@@ -28,9 +28,11 @@ paths:
   The helper follows `nixpkgs-darwin-intel` for x86_64 Darwin and the normal `nixpkgs` input elsewhere, matching the package bundle's supported-system routing.
   The E2E verifier copies the applied `~/.config/direnv/direnvrc` into isolated XDG config and data directories before running that fixture, invokes direnv explicitly from `$DOTFILES_NIX_PROFILE/bin`, and prints captured output before gating on its exit code so runner-global binaries and allow state cannot affect the result or hide the cause of a failure.
   `verify.sh` doubles as the package checklist spec: `MANIFEST_BINS` mirrors `.chezmoidata/packages.yaml`, `NIX_BINS` mirrors the checked-in cumulative bundle, `RUNTIME_BINS` mirrors native mutable runtimes and remaining native tools, and the remaining arrays mirror GUI packages, coding agents, and LSP languages.
-  Runtime and LSP ownership checks must assert exact Fish resolution through fnm, uv, rustup, native Bun, mise for Pi and Hunk only, or the dedicated Nix profile rather than merely checking command presence.
+  Runtime, agent-tool, and LSP ownership checks must assert exact Fish resolution through fnm, uv, rustup, native Bun, the stable native Hunk launcher, or the dedicated Nix profile rather than merely checking command presence.
   The Pyright and TypeScript smoke sends Claude-like initialize, hover, shutdown, and exit messages with `NODE_PATH` removed, proving server startup and pinned TypeScript module resolution.
-  `check-lsp-ownership.py` statically proves the same source ownership split in CI and E2E, including that mise declares only Pi and Hunk.
+  `check-lsp-ownership.py` statically proves exact language-server ownership in CI and E2E.
+  `check-agent-tool-ownership.py` separately proves that Nix owns Pi, the stable native npm prefix owns Hunk, and no active source declaration owns tools through mise.
+  `test-pi-nix-runtime.sh` uses RPC `get_commands` without a model call to prove the Nix-owned Pi loads the managed local extensions on every native Nix CI system; E2E additionally installs Pi's npm packages through fnm npm and repeats that RPC smoke against the applied configuration.
   `.github/scripts/test-runtime-path-order.sh` supplies isolated fake commands to prove the precedence chain on every Linux CI run without downloading mutable runtimes.
   Every ownership change needs the matching verification edit.
   Invariants that hold over plain, non-templated source files belong in a script under `.github/scripts/` that BOTH `ci.yml` and `verify.sh` call, not inline in `verify.sh` alone: the E2E is dispatch-only, so a check that lives only there never runs on a PR.

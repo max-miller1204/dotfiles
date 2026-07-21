@@ -31,7 +31,7 @@ MARKETPLACE_URL="https://github.com/anthropics/claude-plugins-official.git"
 # claude is installed by run_once_before_10 to ~/.local/bin; not necessarily on
 # PATH in a non-interactive apply. Guard so a not-yet-installed agent degrades to
 # a skip instead of failing the whole apply (self-heals on the next apply).
-prepend_path "$HOME/.local/bin" "$HOME/.local/share/mise/shims"
+prepend_path "$HOME/.local/bin"
 if ! command -v claude >/dev/null 2>&1; then
     log "skip: claude not on PATH yet (will set up plugins on next apply)"
     exit 0

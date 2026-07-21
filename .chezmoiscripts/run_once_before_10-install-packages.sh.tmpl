@@ -3,13 +3,13 @@
 # handled by run_onchange_before_15, and mutable runtimes by run_onchange_before_16.
 # Runs once per content hash.
 #
-# The native/mise package set is data, not code: .chezmoidata/packages.yaml
+# The native package set is data, not code: .chezmoidata/packages.yaml
 # describes each package once with its per-OS install method, and the loop walks
 # `.packages` and dispatches each entry to the matching install_* helper in
 # .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
 # manifest edit. GUI packages are skipped when headless or on WSL (Windows-native
-# versions are used there). Everything after the loop (transitional mise tools,
-# Nix, coding agents, login shell) is not part of the manifest. The dedicated Nix
+# versions are used there). Everything after the loop (Nix, coding agents, login
+# shell) is not part of the manifest. The dedicated Nix
 # package profile is installed by the following run_onchange_before script.
 {{ template "lib-log.sh" . }}
 
@@ -67,7 +67,7 @@ log "headless/WSL - skipping GUI desktop apps"
 #                  treehouse off that same sudo branch: treehouse guards its plain
 #                  `mv` on `[ -w "$INSTALL_DIR" ]`, which a nonexistent dir fails, so
 #                  PATH membership without the dir yields a root-owned ~/.local/bin.
-# mise, brev and herdr need neither line - each writes to ~/.local/bin unconditionally
+# brev and herdr need neither line - each writes to ~/.local/bin unconditionally
 # and creates it itself. `prepend_path` also makes the loop's `command -v <bin>` guards
 # see what a previous apply installed there. An existing dedicated Nix profile is
 # also explicit because non-interactive chezmoi scripts do not load Fish config.
@@ -137,24 +137,9 @@ if ! command -v {{ get $pkg "bin" }} >/dev/null 2>&1; then
     {{ $os.script }}
 fi
 {{-       end }}
-{{-     else if hasKey $os "mise" }}
-install_mise "{{ get $pkg "bin" }}" "{{ $os.mise }}"
 {{-     end }}
 {{-   end }}
 {{- end }}
-
-# ---- transitional mise tools -------------------------------------
-# Pi and Hunk stay outside Nix until their extension/skill behavior is tested in
-# a later phase. Their mise npm backends are self-contained and do not own the
-# interactive Node runtime, which run_onchange_before_16 installs through fnm.
-MISE_BIN="$(resolve_mise)"
-if [[ -n "$MISE_BIN" ]]; then
-    log "Installing pi coding agent"
-    "$MISE_BIN" use -g npm:@earendil-works/pi-coding-agent
-
-    log "Installing Hunk"
-    "$MISE_BIN" use -g npm:hunkdiff
-fi
 
 {{- if eq .chezmoi.os "linux" }}
 # ---- Nix (Determinate installer) - macOS uses the .pkg manually ---

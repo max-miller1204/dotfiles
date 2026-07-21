@@ -16,11 +16,14 @@ cp -R "$repo_root/dot_pi/agent/extensions/." "$tmp/agent/extensions/"
 printf '%s\n' '{"packages":[],"skills":[],"enabledModels":[]}' \
     >"$tmp/agent/settings.json"
 
-printf '%s\n' '{"id":"commands","type":"get_commands"}' \
+if ! printf '%s\n' '{"id":"commands","type":"get_commands"}' \
     | PI_CODING_AGENT_DIR="$tmp/agent" \
         PI_WORKTREE_GUARD_MODE=prompt \
-        "$pi_bin" --approve --mode rpc --no-session \
-        >"$tmp/rpc.jsonl" 2>"$tmp/stderr"
+        "$pi_bin" --mode rpc --no-session \
+        >"$tmp/rpc.jsonl" 2>"$tmp/stderr"; then
+    cat "$tmp/stderr" >&2
+    exit 1
+fi
 
 if [[ -s "$tmp/stderr" ]]; then
     cat "$tmp/stderr" >&2

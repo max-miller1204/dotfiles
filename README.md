@@ -123,9 +123,12 @@ if [ "$previous" != '<none>' ]; then
     version=${version%-link}
     break
   done
-  [ -n "$version" ] || exit 1
-  nix profile rollback --profile "$profile_dir/home-manager" --to "$version"
-  "$previous/activate"
+  if [ -n "$version" ]; then
+    nix profile rollback --profile "$profile_dir/home-manager" --to "$version"
+    "$previous/activate"
+  else
+    echo "No home-manager-*-link generation points at $previous" >&2
+  fi
 fi
 ```
 

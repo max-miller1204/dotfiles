@@ -245,7 +245,14 @@ if [[ "$switch_status" -ne 0 ]]; then
                 'manually before retrying.' >&2
         else
             printf '%s\n' \
-                "Restore $before_generation manually before retrying." >&2
+                "Restore Home Manager generation $before_generation" \
+                "(profile version $before_profile_version)" \
+                'manually before retrying.' >&2
+            if [[ "$before_package_generation" != '<none>' ]]; then
+                printf '%s\n' \
+                    "Also restore $package_profile to $before_package_generation" \
+                    "(profile version $before_package_profile_version)." >&2
+            fi
         fi
     fi
     exit "$switch_status"

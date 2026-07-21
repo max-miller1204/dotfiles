@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Install Nix before the dedicated dotfiles profile is built and activated.
+# Runs once per content hash, but remains safe to invoke again when Nix exists.
+{{ template "lib-log.sh" . }}
+
+source_nix_environment() {
+    local nix_init
+    unset __ETC_PROFILE_NIX_SOURCED
+    for nix_init in \
+        /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+        "$HOME/.nix-profile/etc/profile.d/nix.sh"
+    do
+        if [[ -r "$nix_init" ]]; then
+            # shellcheck source=/dev/null
+            source "$nix_init"
+            return
+        fi
+    done
+}
+
+# An installer subprocess cannot update this running shell. Existing machines
+# may already have Nix installed even when the invoking PATH is sanitized.
+if ! command -v nix >/dev/null 2>&1; then
+    source_nix_environment
+fi
+if command -v nix >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Never overwrite or delete an incomplete installation. On macOS this may be an
+# APFS volume requiring deliberate recovery; on Linux it may contain user data.
+if [[ -e /nix || -L /nix ]]; then
+    echo "Nix is not usable, but /nix already exists." >&2
+    echo "Refusing to modify existing Nix state automatically." >&2
+    echo "Repair or uninstall that installation, then run chezmoi apply again." >&2
+    exit 1
+fi
+
+{{- if eq .chezmoi.os "linux" }}
+# The Determinate installer's shell self-test launches root-run interactive
+# shells. Pin root's HOME and XDG_CONFIG_HOME so a sudo environment leak cannot
+# create root-owned configuration in the invoking user's home.
+log "Installing Nix via the Determinate installer"
+if ! curl --proto '=https' --tlsv1.2 -fsSL \
+    https://install.determinate.systems/nix \
+    | sudo HOME=/root XDG_CONFIG_HOME=/root/.config \
+        sh -s -- install --no-confirm
+then
+    echo "The Determinate Nix installation failed." >&2
+    exit 1
+fi
+{{- else if eq .chezmoi.os "darwin" }}
+case "$(uname -m)" in
+    arm64)
+        # Determinate recommends its signed package on macOS. Validate the
+        # Apple Developer team before allowing the system installer to run.
+        log "Installing Nix via the signed Determinate macOS package"
+        scratch="$(mktemp -d "${TMPDIR:-/tmp}/determinate.XXXXXX")"
+        trap 'rm -rf "$scratch"' EXIT
+        pkg="$scratch/Determinate.pkg"
+        curl --proto '=https' --tlsv1.2 -fsSL \
+            https://install.determinate.systems/determinate-pkg/stable/Universal \
+            -o "$pkg"
+        actual_team_id="$(
+            spctl -a -vv -t install "$pkg" 2>&1 \
+                | awk -F '(' '/origin=/ {print $2}' \
+                | tr -d '()' \
+                || true
+        )"
+        if [[ "$actual_team_id" != "X3JQ4VPJZ6" ]]; then
+            echo "Determinate package signature mismatch." >&2
+            echo "Expected Apple team X3JQ4VPJZ6, got: ${actual_team_id:-unknown}" >&2
+            exit 1
+        fi
+        if ! sudo installer -verboseR -pkg "$pkg" -target /; then
+            echo "The Determinate package installation failed." >&2
+            echo "For stale APFS volume recovery, see:" >&2
+            echo "https://docs.determinate.systems/troubleshooting/installation-failed-macos/" >&2
+            exit 1
+        fi
+        ;;
+    x86_64)
+        # Determinate no longer ships an Intel macOS installer. The upstream
+        # multi-user installer remains the supported x86_64 Darwin path.
+        log "Installing upstream Nix for Intel macOS"
+        if ! curl --proto '=https' --tlsv1.2 -fsSL \
+            https://nixos.org/nix/install \
+            | sh -s -- \
+                --daemon \
+                --yes \
+                --no-channel-add \
+                --no-modify-profile
+        then
+            echo "The upstream Nix installation failed." >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Unsupported macOS architecture for Nix bootstrap: $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+{{- else }}
+echo "Unsupported operating system for Nix bootstrap: {{ .chezmoi.os }}" >&2
+exit 1
+{{- end }}
+
+source_nix_environment
+if ! command -v nix >/dev/null 2>&1; then
+    echo "Nix was installed, but this shell could not activate it." >&2
+    echo "Open a new shell and run chezmoi apply again." >&2
+    exit 1
+fi
+nix --version

@@ -126,8 +126,9 @@ jobs:
           # Plain grep of template text: rendering needs the chezmoi config,
           # which does not exist until the init --apply step below.
           scripts="$HOME/.local/share/chezmoi/.chezmoiscripts"
-          grep -n -B2 -A2 'determinate' \
-            "$scripts/run_once_before_10-install-packages.sh.tmpl"
+          python3 .github/scripts/check-nix-bootstrap.py
+          grep -n -B2 -A2 'Determinate installer' \
+            "$scripts/run_once_before_12-install-nix.sh.tmpl"
           grep -n 'flake hashes' \
             "$scripts/run_onchange_before_15-install-nix-profile.sh.tmpl"
           grep -n 'Runtime policies' \

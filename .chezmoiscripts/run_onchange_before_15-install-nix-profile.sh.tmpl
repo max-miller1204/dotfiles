@@ -32,8 +32,8 @@ do
     fi
 done
 if ! command -v nix >/dev/null 2>&1; then
-    echo "Nix is required before installing the dotfiles profile." >&2
-    echo "On macOS, install Nix manually, then run chezmoi apply again." >&2
+    echo "Nix bootstrap did not complete before profile activation." >&2
+    echo "Resolve the earlier installer error, then run chezmoi apply again." >&2
     exit 1
 fi
 

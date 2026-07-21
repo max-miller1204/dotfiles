@@ -1,7 +1,7 @@
 ---
 paths:
   - ".chezmoidata/packages.yaml"
-  - ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
+  - ".chezmoiscripts/run_once_before_{10-install-packages,12-install-nix}.sh.tmpl"
   - ".chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes,17-install-hunk}.sh.tmpl"
   - ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
@@ -26,6 +26,18 @@ paths:
   A package carries its method under `darwin:`, `linux:`, or the shared fallback `any:`; the loop takes the current OS's key when the package has one and falls back to `any:` otherwise, so an explicit `darwin:`/`linux:` always overrides `any:` and a package with neither is skipped on that OS.
   `any:` is for tools whose installer command is byte-identical on both OSes - today the three curl `script` installers treehouse, no-mistakes, and herdr - so the command is single-sourced and cannot drift on one OS during a URL or flag change; the `any:` branch is additionally gated on `$supportedOS` (darwin or linux) so an unsupported OS still installs nothing.
   mise is not an active package owner or install method.
+
+## Fresh-machine Nix bootstrap
+
+- `run_once_before_12-install-nix.sh.tmpl` is the only active Nix installer and runs after native prerequisites but before profile activation.
+  Linux uses the Determinate installer with root's `HOME` and `XDG_CONFIG_HOME` pinned to prevent sudo environment leaks from creating root-owned files in the user's home.
+  Apple Silicon macOS downloads Determinate's recommended package, verifies Apple Developer team `X3JQ4VPJZ6`, and invokes the system installer.
+  Intel macOS uses the upstream noninteractive multi-user installer because Determinate no longer supports x86_64 Darwin.
+  The script first activates an existing daemon or single-user environment, exits idempotently when Nix is usable, and refuses to overwrite or delete existing `/nix` state when it is not.
+  Recovery from stale macOS APFS state is always manual and links to Determinate's recovery guide.
+- `run_once_before_10-install-packages.sh.tmpl` must not install Nix.
+  Keeping native prerequisites, Nix bootstrap, profile activation, mutable runtimes, and Hunk in scripts numbered 10, 12, 15, 16, and 17 makes the dependency order explicit.
+  `.github/scripts/check-nix-bootstrap.py` mechanically protects that order and the installer ownership boundary.
 
 ## Checked-in Nix bundle
 

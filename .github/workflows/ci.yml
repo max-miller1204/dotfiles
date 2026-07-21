@@ -42,15 +42,25 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
-      # v3
-      - name: Install Determinate Nix
-        if: matrix.os != 'macos-15-intel'
-        uses: >-
-          DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88
-      # v31.11.0 - Determinate Nix no longer supports Intel macOS.
-      - name: Install upstream Nix on Intel macOS
-        if: matrix.os == 'macos-15-intel'
-        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342
+      - uses: ./.github/actions/setup-chezmoi
+      - name: Bootstrap Nix through the production template
+        run: |
+          set -euo pipefail
+          script=$(mktemp "${TMPDIR:-/tmp}/nix-bootstrap.XXXXXX")
+          trap 'rm -f "$script"' EXIT
+          chezmoi execute-template \
+            < .chezmoiscripts/run_once_before_12-install-nix.sh.tmpl \
+            > "$script"
+          bash "$script"
+          # A second isolated invocation must discover the installed daemon
+          # environment and leave the installation unchanged.
+          bash "$script"
+          # Publish Nix to later Actions steps; installer subprocesses cannot
+          # mutate their parent job environment.
+          # shellcheck source=/dev/null
+          source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          nix --version
+          dirname "$(command -v nix)" >> "$GITHUB_PATH"
       - name: Build every bundle and run checks
         run: |
           set -euo pipefail
@@ -205,6 +215,8 @@ jobs:
             jq empty "$f"
             echo "::endgroup::"
           done < <(find . -name '*.json' ! -path './.git/*' -print0)
+      - name: Check fresh-machine Nix bootstrap invariants
+        run: python3 .github/scripts/check-nix-bootstrap.py
       - name: Check exact LSP package ownership
         run: python3 .github/scripts/check-lsp-ownership.py
       - name: Check exact Pi, Hunk, and mise ownership

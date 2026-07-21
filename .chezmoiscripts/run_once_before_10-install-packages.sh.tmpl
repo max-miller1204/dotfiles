@@ -9,8 +9,8 @@
 # .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
 # manifest edit. GUI packages are skipped when headless or on WSL (Windows-native
 # versions are used there). Everything after the loop (Nix, coding agents, login
-# shell) is not part of the manifest. The dedicated Nix
-# package profile is installed by the following run_onchange_before script.
+# shell) is not part of the manifest. Nix bootstrap and dedicated-profile
+# activation are handled by the following before scripts.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
@@ -139,30 +139,6 @@ fi
 {{-       end }}
 {{-     end }}
 {{-   end }}
-{{- end }}
-
-{{- if eq .chezmoi.os "linux" }}
-# ---- Nix (Determinate installer) - macOS uses the .pkg manually ---
-# Run the installer as root with HOME and XDG_CONFIG_HOME pinned to root's own:
-# the installer's shell self-test launches root-run INTERACTIVE user shells
-# (fish -ic), and fish creates its config dir at $XDG_CONFIG_HOME/fish on
-# startup. On hosts whose environment leaks the invoking user's paths into
-# root's env (GitHub runners put XDG_CONFIG_HOME=$HOME/.config in
-# /etc/environment; some setups env_keep it through sudo), that self-test
-# created a root-owned ~/.config/fish in the USER's home, which then broke
-# chezmoi's own write of the fish config. Pinning both variables makes the
-# self-test write under /root regardless of the host's sudo/env quirks;
-# sudo still exposes SUDO_USER so the installer can see the real user.
-if ! command -v nix >/dev/null 2>&1 && [[ ! -d /nix ]]; then
-    log "Installing Nix via Determinate installer"
-    curl -fsSL https://install.determinate.systems/nix | sudo HOME=/root XDG_CONFIG_HOME=/root/.config sh -s -- install --no-confirm
-fi
-# The installer cannot modify this running shell. Source the daemon environment
-# now so every later bootstrap step has the same Nix environment as a new login.
-if ! command -v nix >/dev/null 2>&1 && [[ -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
-    # shellcheck source=/dev/null
-    source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-fi
 {{- end }}
 
 # ---- Coding agents (native installers, not npm) -------------------

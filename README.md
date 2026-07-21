@@ -28,11 +28,11 @@ starter into `~/.config/nvim` if it's empty.
 ## Bootstrap a new machine
 
 ```sh
-# macOS: install chezmoi (brings curl along for the ride)
-brew install chezmoi
-# Install Nix manually on macOS before the first apply.
-# Ubuntu: one-liner from the chezmoi site
-sh -c "$(curl -fsSL https://get.chezmoi.io)"
+# macOS only, run this first: xcode-select --install
+
+# Every platform: install chezmoi without requiring a package manager.
+sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
 
 chezmoi init --apply max-miller1204/dotfiles
 ```
@@ -51,8 +51,11 @@ That's it - the install scripts run during `apply` and handle the rest:
   Bun remains on its official native installer.
   Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, typescript-language-server, and Pi.
   Existing stale mise installations are not deleted, but their shims are removed from Fish PATH.
-- installs **Nix** via the Determinate installer on Linux.
-  macOS currently requires an existing manual Nix installation before `chezmoi apply`.
+- installs **Nix** before profile activation.
+  Linux uses the Determinate installer with a sanitized root environment.
+  Apple Silicon macOS uses Determinate's signed package after verifying its Apple Developer team.
+  Intel macOS uses the upstream multi-user installer because Determinate no longer supports that architecture.
+  Existing or incomplete `/nix` state is never deleted automatically.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
@@ -409,7 +412,8 @@ To update the snapshot after changing settings: re-export from Raycast
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - native packages, Linux Nix bootstrap, coding agents, and Fish as the login shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - native packages, coding agents, and Fish as the login shell
+- `.chezmoiscripts/run_once_before_12-install-nix.sh.tmpl` - architecture-aware Linux and macOS Nix bootstrap, with existing-state refusal and post-install activation verification
 - `.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl` - build-first installation or upgrade of the one-element dedicated `dotfiles-workstation` profile whenever flake, lock, or bundle selection changes
 - `.chezmoiscripts/run_onchange_before_16-install-language-runtimes.sh.tmpl` - installs or updates mutable fnm Node, uv Python, rustup Rust, and native Bun after their Nix-owned manager executables are active
 - `.chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl` - installs Hunk through fnm-managed npm into a stable native prefix and links its CLI into `~/.local/bin`
@@ -532,11 +536,12 @@ the repo and need manual hand-off.
    chmod 600 ~/.ssh/id_*
    ```
 
-3. **Bootstrap** after installing Nix with the Determinate installer or package:
+3. **Bootstrap** with the standalone chezmoi installer.
+   The apply installs Homebrew when needed, installs Nix through the architecture-appropriate path, and then activates the dedicated profile:
 
    ```sh
-   brew install chezmoi
-   nix --version
+   sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+   export PATH="$HOME/.local/bin:$PATH"
    chezmoi init --apply max-miller1204/dotfiles
    ```
 

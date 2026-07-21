@@ -20,10 +20,14 @@
     neovim
     nix-direnv
   ];
-  # gopls invokes Go from PATH, so they are pinned and updated together.
+  # gopls invokes Go from PATH, and typescript-language-server loads the
+  # TypeScript module at runtime, so each server stays pinned with its runtime.
   lsp = with pkgs; [
     go
     gopls
+    pyright
+    typescript
+    typescript-language-server
   ];
 
   # Nix owns the manager executables; their mutable runtimes stay outside the

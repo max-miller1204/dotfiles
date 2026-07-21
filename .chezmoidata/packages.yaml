@@ -4,10 +4,12 @@
 # .chezmoidata/*, so `packages` is available as `.packages` (and `aptrepos` as
 # `.aptrepos`) in every template; run_once_before_10-install-packages.sh.tmpl
 # walks `.packages` in one loop and dispatches each entry to the matching helper
-# in .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a one-line
+# in .chezmoitemplates/lib-install.sh by OS + method. Adding a tool is a
+# one-line
 # (one-stanza) edit here - no shell edits.
 #
-# Order matters on Linux: the list is walked top-to-bottom, so a prerequisite must
+# Order matters on Linux: the list is walked top-to-bottom, so a prerequisite
+# must
 # precede its consumers. `curl` + `ca-certificates` come before `mise` and the
 # native runtime installers that curl over HTTPS; `gnupg` (gpg) comes before the
 # `op` and `gh` apt-repos; `unzip` precedes the native Bun installer;
@@ -18,16 +20,20 @@
 #
 # Per-package fields:
 #   name  - human label, used in log lines
-#   gui   - true for desktop apps; GUI packages are skipped when headless or on WSL
+#   gui   - true for desktop apps; GUI packages are skipped when headless or on
+#           WSL
 #           (Windows-native versions are used there instead). Non-GUI CLI tools
 #           install everywhere.
-#   bin   - the command the method guards on (command -v <bin>), required wherever
+#   bin   - the command the method guards on (command -v <bin>), required
+#           wherever
 #           the method needs a command-name guard (apt+ppa, aptrepo, deburl,
-#           script, mise); omit where the method carries its own guard (brew/cask
+#           script, mise); omit where the method carries its own guard
+#           (brew/cask
 #           are idempotent, flatpak guards on its app id, a `script` carrying
 #           `dpkg` guards on that package instead).
 #   darwin / linux / any - the install method, as a single-key map. `darwin` and
-#           `linux` are the per-OS methods; `any` is the shared fallback the loop
+#           `linux` are the per-OS methods; `any` is the shared fallback the
+#           loop
 #           uses when the current OS has no explicit key of its own, so a tool
 #           whose installer is byte-identical on both OSes is declared once. An
 #           explicit `darwin:`/`linux:` always wins over `any:`, and a package
@@ -36,22 +42,28 @@
 #     brew:    <formula>            strict `brew install` (core CLI formulae)
 #     cask:    <cask>               `brew install --cask` (tolerant, `|| true`)
 #     apt:     <pkg> [ppa: <ppa>]   apt package; optional PPA added first
-#     aptrepo: <name>               third-party apt repo; params from `aptrepos.<name>`
+#     aptrepo: <name>               third-party apt repo; params from
+#                                   `aptrepos.<name>`
 #     flatpak: <app-id>             flatpak from flathub
-#     deburl:  <url>                download a .deb from <url> and apt-install it
+#     deburl:  <url>                download a .deb from <url> and apt-install
+#                                   it
 #     script:  <cmd> [altpath/dpkg] curl-style vendor installer run verbatim
 #     mise:    <tool>              transitional mise-managed tool
-#   tolerant - on a brew entry, append `|| true` (optional/extra formula, e.g. brev)
+#   tolerant - on a brew entry, append `|| true` (optional/extra formula, e.g.
+#              brev)
 #
 # The core and headless commands owned by the checked-in nix/ flake are
 # intentionally absent on every supported platform, so this native/mise manifest
-# must not install a second copy. Existing stale installs are audited, not removed.
+# must not install a second copy. Existing stale installs are audited, not
+# removed.
 
 packages:
-  # ---- core CLI, cross-platform, native on each OS (brew macOS / apt Linux) ----
+  # ---- core CLI, cross-platform, native on each OS
+  #      (brew macOS / apt Linux) ----
   # fish/git stay apt on Linux; jq deliberately stays native too - it is a
-  # `command -v jq || exit 1` dependency of the apply-time MCP/plugin scripts and
-  # is used bare in obsidian's installer, so it must not depend on mise shims that
+  # `command -v jq || exit 1` dependency of the apply-time MCP/plugin scripts
+  # and is used bare in obsidian's installer, so it must not depend on mise
+  # shims that
   # are not on PATH during a fresh apply.
   - name: fish
     gui: false
@@ -104,8 +116,9 @@ packages:
     bin: zenity
     linux: { apt: zenity }
 
-  # ---- mise: retained temporarily for npm-distributed tools that move in later
-  #      phases. Language runtimes are no longer declared through mise. ----
+  # ---- mise: retained only for the npm-distributed Pi and Hunk tools.
+  #      Language runtimes and LSP tooling are no longer declared through
+  #      mise. ----
   - name: mise
     gui: false
     bin: mise
@@ -118,8 +131,9 @@ packages:
   # checked-in Nix headless bundle and are absent here on both platforms.
   # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
   #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
-  #      from the base apt block above; params in `aptrepos.gh`). Deliberately NOT
-  #      mise: a mise-shim gh is invisible to any process launched with a sanitized
+  #      from the base apt block above; params in `aptrepos.gh`). Deliberately
+  #      NOT mise: a mise-shim gh is invisible to any process launched with a
+  #      sanitized
   #      PATH that drops the shims dir - notably the no-mistakes daemon's git
   #      subprocess - whereas an apt gh at /usr/bin/gh sits on the plain system
   #      PATH everything sees, so no per-machine symlink stopgap is needed. ----
@@ -129,7 +143,8 @@ packages:
     darwin: { brew: gh }
     linux: { aptrepo: gh }
 
-  # ---- op (1Password CLI): deliberately NOT moved to mise. Stays native on Linux
+  # ---- op (1Password CLI): deliberately NOT moved to mise. Stays native on
+  #      Linux
   #      via a debsig-verified third-party apt-repo (needs gnupg above); brew on
   #      macOS. Kept native because op unlocks chezmoi's secret reads at apply
   #      time, before mise shims are on PATH. ----
@@ -139,8 +154,9 @@ packages:
     darwin: { brew: 1password-cli }
     linux: { aptrepo: 1password-cli }
 
-  # ---- remaining curl-installed CLI tools. pfetch and brev take brew on macOS and
-  #      the vendor installer on Ubuntu; treehouse, no-mistakes and herdr curl the
+  # ---- remaining curl-installed CLI tools. pfetch and brev take brew on
+  #      macOS and the vendor installer on Ubuntu; treehouse, no-mistakes and
+  #      herdr curl the
   #      same installer on both OSes (see their `any:` note below). mise itself
   #      lives above; these carry shell quoting that cannot round-trip through a
   #      helper, so the loop emits them verbatim. ----
@@ -149,20 +165,22 @@ packages:
     bin: pfetch
     darwin: { brew: pfetch }
     linux:
-      {
-        script: 'curl -fsSL https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch -o "$HOME/.local/bin/pfetch" && chmod +x "$HOME/.local/bin/pfetch"',
-      }
+      script: >-
+        curl -fsSL
+        https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch -o
+        "$HOME/.local/bin/pfetch" && chmod +x "$HOME/.local/bin/pfetch"
   - name: brev
     gui: false
     bin: brev
     darwin: { brew: brevdev/homebrew-brev/brev, tolerant: true }
     # Deliberately NOT sudo: the upstream installer places the binary in
-    # $HOME/.local/bin, so running it under sudo strands brev in /root/.local/bin
+    # $HOME/.local/bin, so running it under sudo strands brev in
+    # /root/.local/bin
     # where no user PATH (nor run_once_after_70's probe) can see it.
     linux:
-      {
-        script: 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"',
-      }
+      script: |-
+        bash -c "$(curl -fsSL \
+          https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
   # treehouse, no-mistakes, and herdr (agent multiplexer / terminal workspace
   # manager) are self-contained prebuilt binaries whose official curl installers
   # behave identically on macOS and Linux - curl works in every environment, no
@@ -180,16 +198,17 @@ packages:
     gui: false
     bin: treehouse
     any:
-      {
-        script: "curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh",
-      }
+      script: >-
+        curl -fsSL https://kunchenguid.github.io/treehouse/install.sh | sh
   - name: no-mistakes
     gui: false
     bin: no-mistakes
     any:
-      {
-        script: "curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh",
-      }
+      script: |-
+        url="$(printf '%s' \
+          'https://raw.githubusercontent.com/kunchenguid/no-mistakes/' \
+          'main/docs/install.sh')"
+        curl -fsSL "$url" | sh
   - name: herdr
     gui: false
     bin: herdr
@@ -212,22 +231,24 @@ packages:
     bin: google-chrome-stable
     darwin: { cask: google-chrome }
     linux:
-      {
-        deburl: "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb",
-      }
+      deburl: >-
+        $(printf '%s' 'https://dl.google.com/linux/direct/google-chrome-'
+        'stable_current_amd64.deb')
   # 1Password desktop app, distinct from the `op` CLI (1password-cli) above (its
   # cask is `1password`, the CLI's is `1password-cli`). On Linux, a direct .deb
   # download per the user's request; apt resolves its deps and does not enforce
-  # debsig on a local .deb, so this is independent of the CLI's apt-repo/debsig setup.
-  # $(dpkg --print-architecture) is evaluated at the call site (like obsidian's URL).
+  # debsig on a local .deb, so this is independent of the CLI's
+  # apt-repo/debsig setup.
+  # $(dpkg --print-architecture) is evaluated at the call site (like obsidian's
+  # URL).
   - name: 1password
     gui: true
     bin: 1password
     darwin: { cask: 1password }
     linux:
-      {
-        deburl: "https://downloads.1password.com/linux/debian/$(dpkg --print-architecture)/stable/1password-latest.deb",
-      }
+      deburl: >-
+        https://downloads.1password.com/linux/debian/$(dpkg
+        --print-architecture)/stable/1password-latest.deb
   - name: voquill
     gui: true
     darwin: { cask: voquill/voquill/voquill-desktop }
@@ -239,9 +260,13 @@ packages:
     bin: obsidian
     darwin: { cask: obsidian }
     linux:
-      {
-        deburl: '$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | jq -r ''.assets[] | select(.name | endswith("_amd64.deb")) | .browser_download_url'' | head -n1)',
-      }
+      deburl: |-
+        $(releases_api=$(printf '%s' \
+          'https://api.github.com/repos/obsidianmd/' \
+          'obsidian-releases/releases/latest')
+        curl -fsSL "$releases_api" \
+          | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | \
+          .browser_download_url' | head -n1)
   - name: anki
     gui: true
     darwin: { cask: anki }
@@ -287,27 +312,36 @@ packages:
     gui: true
     darwin: { cask: font-jetbrains-mono-nerd-font }
 
-# ---- third-party apt-repo definitions, keyed by the `aptrepo:` value above ----
-# GitHub CLI (gh) and 1Password (op) are the native apt-repo installs. Each entry
-# carries the six positional args the install_aptrepo helper needs (LABEL KEYRING
-# KEY_URL REPO_LINE LIST_PATH PACKAGE). gh's published keyring is already binary, but
-# install_aptrepo's `gpg --dearmor` is a byte-for-byte pass-through on binary OpenPGP
-# input, so the same code path works and gh needs no debsig. 1Password additionally
-# ships a debsig policy + keyring (independent of the apt keyring/list), carried as
-# the `debsig` block and applied by install_debsig before install_aptrepo.
+# ---- third-party apt-repo definitions, keyed by the `aptrepo:` value
+#      above ----
+# GitHub CLI (gh) and 1Password (op) are the native apt-repo installs. Each
+# entry carries the six positional args the install_aptrepo helper needs (LABEL
+# KEYRING KEY_URL REPO_LINE LIST_PATH PACKAGE). gh's published keyring is
+# already binary, but install_aptrepo's `gpg --dearmor` is a byte-for-byte
+# pass-through on binary OpenPGP input, so the same code path works and gh needs
+# no debsig. 1Password additionally ships a debsig policy + keyring
+# (independent of the apt keyring/list), carried as the `debsig` block and
+# applied by install_debsig before install_aptrepo.
 aptrepos:
   gh:
     label: "GitHub CLI"
     keyring: /etc/apt/keyrings/githubcli-archive-keyring.gpg
     key_url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
-    repo_line: "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+    repo_line: >-
+      deb [arch=$(dpkg --print-architecture)
+      signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg]
+      https://cli.github.com/packages stable main
     list_path: /etc/apt/sources.list.d/github-cli.list
     package: gh
   1password-cli:
     label: "1Password CLI"
     keyring: /usr/share/keyrings/1password-archive-keyring.gpg
     key_url: https://downloads.1password.com/linux/keys/1password.asc
-    repo_line: "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main"
+    repo_line: >-
+      deb [arch=$(dpkg --print-architecture)
+      signed-by=/usr/share/keyrings/1password-archive-keyring.gpg]
+      https://downloads.1password.com/linux/debian/$(dpkg
+      --print-architecture) stable main
     list_path: /etc/apt/sources.list.d/1password.list
     package: 1password-cli
     debsig:

@@ -3,7 +3,7 @@
 # Build and activate the single cumulative dotfiles package bundle.
 # A source hash for every flake file makes chezmoi rerun this script when the
 # package graph or lock changes, without letting routine updates mutate the lock.
-# flake hashes: {{ include "nix/flake.nix" | sha256sum }} {{ include "nix/flake.lock" | sha256sum }} {{ include "nix/packages.nix" | sha256sum }} {{ include "nix/bundles.nix" | sha256sum }}
+# flake hashes: {{ include "nix/flake.nix" | sha256sum }} {{ include "nix/flake.lock" | sha256sum }} {{ include "nix/packages.nix" | sha256sum }} {{ include "nix/bundles.nix" | sha256sum }} {{ include "nix/lsp-smoke.py" | sha256sum }}
 # selected bundle: {{ $nixBundle }}
 {{ template "lib-log.sh" . }}
 
@@ -47,13 +47,14 @@ out="$(
         --no-link \
         --print-out-paths
 )"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls fnm uv; do
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
     if [[ ! -x "$out/bin/$bin" ]]; then
         echo "Built bundle is missing executable: $bin" >&2
         exit 1
     fi
     case "$bin" in
         direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
+        pyright-langserver | tsserver) ;;
         tmux) "$out/bin/$bin" -V >/dev/null ;;
         *) "$out/bin/$bin" --version >/dev/null ;;
     esac

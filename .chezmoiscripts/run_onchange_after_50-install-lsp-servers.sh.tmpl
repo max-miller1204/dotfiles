@@ -2,8 +2,8 @@
 {{ $rustToolchain := (get . "rustToolchain" | default "stable") }}
 # Install the language servers the enabled Claude Code LSP plugins expect.
 # The single source of truth for the LSP language set is `lspLanguages` in
-# .chezmoi.toml.tmpl. Servers may come from mise, Nix, rustup, or the OS package
-# manager; run_after_65 installs and enables the matching plugins from the same
+# .chezmoi.toml.tmpl. Servers come from Nix, rustup, or the OS package manager;
+# run_after_65 installs and enables the matching plugins from the same
 # table so the two lists cannot drift.
 {{ template "lib-log.sh" . }}
 
@@ -12,34 +12,6 @@
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
 prepend_path "$profile/bin" "$HOME/.local/bin" "${CARGO_HOME:-$HOME/.cargo}/bin"
 unset RUSTUP_TOOLCHAIN
-
-MISE_BIN="$(resolve_mise)"
-if [[ -z "$MISE_BIN" ]]; then
-    echo "mise not found; cannot install the remaining mise-backed LSP servers" >&2
-    exit 1
-fi
-
-# Initialize the fnm-managed default Node in this non-interactive shell. The
-# TypeScript verification below must not depend on a stale mise Node declaration.
-if [[ ! -x "$profile/bin/fnm" ]]; then
-    echo "fnm is missing from the dedicated Nix profile" >&2
-    exit 1
-fi
-eval "$("$profile/bin/fnm" env --shell bash)"
-
-# ---- transitional mise-managed npm servers -----------------------
-{{- $miseTools := list -}}
-{{- range .lspLanguages -}}
-{{-   if eq .method "mise" -}}
-{{-     range .miseTools -}}
-{{-       $miseTools = append $miseTools . -}}
-{{-     end -}}
-{{-   end -}}
-{{- end }}
-{{- if $miseTools }}
-log "Installing mise-backed LSP servers ({{ $miseTools | join " " }})"
-"$MISE_BIN" use -g {{ $miseTools | join " " }}
-{{- end }}
 
 # ---- rustup component servers (rust-analyzer) --------------------
 {{- range .lspLanguages }}
@@ -78,31 +50,9 @@ fi
 # ---- verify every enabled server resolves and runs ---------------
 log "Verifying language servers"
 fail=0
-{{- $miseVerify := list -}}
-{{- range .lspLanguages -}}
-{{-   if and (eq .method "mise") .verifyBin -}}
-{{-     $miseVerify = append $miseVerify .verifyBin -}}
-{{-   end -}}
-{{- end }}
-for bin in {{ $miseVerify | join " " }}; do
-    if ! "$MISE_BIN" which "$bin" >/dev/null 2>&1; then
-        echo "MISSING (mise): $bin" >&2; fail=1
-    fi
-done
-{{- range .lspLanguages }}
-{{-   if get . "verifyTsResolve" }}
-# {{ .plugin }} resolves TypeScript at runtime across mise's isolated npm
-# prefixes. NODE_PATH remains transitional until the TypeScript tools move.
-TS_MODULES="$HOME/{{ $.tsNodeModulesRel }}"
-NODE_BIN="$(command -v node 2>/dev/null || true)"
-if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
-    echo "MISSING: typescript not resolvable by {{ .verifyBin }}" >&2; fail=1
-fi
-{{-   end }}
-{{- end }}
 {{- range .lspLanguages }}
 {{-   if eq .method "nix" }}
-if [[ ! -x "$profile/bin/{{ .verifyBin }}" ]] || ! "$profile/bin/{{ .verifyBin }}" version >/dev/null 2>&1; then
+if [[ ! -x "$profile/bin/{{ .verifyBin }}" ]]; then
     echo "MISSING (Nix profile): {{ .verifyBin }}" >&2; fail=1
 fi
 {{-   end }}

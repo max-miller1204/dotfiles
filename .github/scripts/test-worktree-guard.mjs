@@ -205,6 +205,15 @@ try {
 		bashGuardReason("rm -rf ../other", context) ?? "",
 		/recursive removal/,
 	);
+	assert.match(
+		bashGuardReason("rm -f -r /tmp/scratch", context) ?? "",
+		/recursive removal/,
+	);
+	assert.match(
+		bashGuardReason("rm -v --recursive /tmp/scratch", context) ?? "",
+		/recursive removal/,
+	);
+	assert.equal(bashGuardReason("rm -f stale.txt", context), undefined);
 
 	const judgePrompt = JSON.parse(
 		buildJudgePrompt("git commit -m test", "git mutation", context),

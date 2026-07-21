@@ -11,8 +11,8 @@ paths:
   The `shellcheck` and `fish-syntax` jobs therefore carry a `strategy.matrix.os` of `[ubuntu-latest, macos-latest]` purely to render and lint the darwin half of every template; that macos leg is the only darwin template coverage, so do not drop it.
   Keep the macOS legs STATIC (render + shellcheck + `fish -n` only, tools via `brew install`) - never let the mac runner perform the real package-manifest installs that the bootstrap scripts do.
   All OS-conditional template logic lives in `.chezmoiscripts/*.sh.tmpl` and `dot_config/fish/*.fish.tmpl`; the TOML/JSON templates have no darwin branch, which is why `config-syntax` and `chezmoi-dry-run` stay ubuntu-only.
-- The `nix-evaluation` CI job evaluates all four supported systems without building.
-  The `nix-build` matrix renders and executes `run_once_before_12-install-nix.sh.tmpl` twice before building, so native x86_64 Linux, aarch64 Darwin, and x86_64 Darwin runners prove the production bootstrap and its idempotency instead of relying on unrelated setup actions.
+- The `nix-evaluation` CI job evaluates all three supported systems (x86_64-linux, aarch64-linux, aarch64-darwin) without building.
+  The `nix-build` matrix (ubuntu-24.04 and Apple Silicon macos-15) renders and executes `run_once_before_12-install-nix.sh.tmpl` twice before building, so native x86_64 Linux and aarch64 Darwin runners prove the production bootstrap and its idempotency instead of relying on unrelated setup actions.
   Linux uses the Determinate shell installer and Apple Silicon uses Determinate's signed macOS package; Intel macOS is unsupported and the bootstrap refuses it.
   The matrix then builds every bundle, runs smoke checks, reports closure size, and tests temporary-profile idempotency and rollback.
   Temporary profile tests canonicalize macOS's `/var` symlink before direnv records allow state, so allow and exec use the same physical fixture path.

@@ -198,20 +198,34 @@ hard "ls aliased to eza" bash -c "fish -l -i -c 'type ls' 2>/dev/null | grep -q 
 direnv_flake_fixture() {
 	(
 		set -euo pipefail
-		local tmp system source
+		local tmp system source managed_direnvrc
 		tmp="$(mktemp -d)"
 		trap 'rm -rf "$tmp"' EXIT
+		managed_direnvrc="$HOME/.config/direnv/direnvrc"
+		test -r "$managed_direnvrc"
+		mkdir -p "$tmp/config/direnv" "$tmp/data"
+		cp "$managed_direnvrc" "$tmp/config/direnv/direnvrc"
 		system="$(nix eval --impure --raw --expr builtins.currentSystem)"
 		source="$(chezmoi source-path)"
 		bash "$source/.github/scripts/create-direnv-flake-fixture.sh" \
 			"$tmp/flake.nix" "$source/nix" "$system"
 		printf 'use flake\n' >"$tmp/.envrc"
-		direnv allow "$tmp" >/dev/null
-		direnv exec "$tmp" bash -c 'test "$DOTFILES_DIRENV_FIXTURE" = 1'
+		local direnv_env=(
+			"XDG_CONFIG_HOME=$tmp/config"
+			"XDG_DATA_HOME=$tmp/data"
+		)
+		env "${direnv_env[@]}" direnv allow "$tmp" >/dev/null
+		env "${direnv_env[@]}" direnv exec "$tmp" \
+			bash -c 'test "$DOTFILES_DIRENV_FIXTURE" = 1'
 	)
 }
 echo "== nix-direnv use flake fixture =="
-hard "direnv loads a project flake" direnv_flake_fixture
+DIRENV_REPORT="$(direnv_flake_fixture 2>&1)"
+DIRENV_RC=$?
+if [[ -n "$DIRENV_REPORT" ]]; then
+	echo "$DIRENV_REPORT"
+fi
+hard "direnv loads a project flake" test "$DIRENV_RC" -eq 0
 
 echo "== agent config end state (not exit codes - the scripts swallow failures) =="
 hard "claude plugins: 7 enabled (5 LSP + agent-sdk-dev + skill-creator)" \

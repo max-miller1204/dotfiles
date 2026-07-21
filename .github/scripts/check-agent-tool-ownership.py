@@ -12,6 +12,7 @@ from typing import NoReturn
 ROOT = Path(__file__).resolve().parents[2]
 HUNK_PREFIX = "~/.local/share/npm-hunkdiff"
 HUNK_SKILL = f"{HUNK_PREFIX}/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+PI_PREFIX = "~/.local/share/npm-pi"
 
 
 def read(relative: str) -> str:
@@ -37,7 +38,7 @@ def package_group(name: str, packages: str) -> set[str]:
 def main() -> None:
     packages = read("nix/packages.nix")
     workstation = package_group("workstation", packages)
-    expected_workstation = {"fnm", "uv", "pi-coding-agent"}
+    expected_workstation = {"fnm", "uv"}
     if workstation != expected_workstation:
         fail(
             f"Nix workstation group is {workstation!r}, "
@@ -45,6 +46,8 @@ def main() -> None:
         )
     if re.search(r"^\s+hunk\s*$", packages, re.MULTILINE):
         fail("Hunk must remain outside the universal Nix bundle")
+    if re.search(r"^\s+pi-coding-agent\s*$", packages, re.MULTILINE):
+        fail("Pi must remain outside the universal Nix bundle")
 
     manifest = read(".chezmoidata/packages.yaml")
     if re.search(r"^\s*- name: mise\s*$", manifest, re.MULTILINE):
@@ -65,6 +68,17 @@ def main() -> None:
     if missing:
         fail(f"native Hunk installer lacks required declarations: {missing!r}")
 
+    pi_installer = read(".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl")
+    required_pi_installer = (
+        'pi_prefix="$HOME/.local/share/npm-pi"',
+        'npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest',
+        '"$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm"',
+        'ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"',
+    )
+    missing = [value for value in required_pi_installer if value not in pi_installer]
+    if missing:
+        fail(f"native Pi installer lacks required declarations: {missing!r}")
+
     try:
         settings = json.loads(read("dot_pi/agent/settings.json"))
     except (OSError, json.JSONDecodeError) as error:
@@ -79,17 +93,19 @@ def main() -> None:
     profile_installer = read(
         ".chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl"
     )
-    if not re.search(r"for bin in .*\bpi\b.*; do", profile_installer):
-        fail("the profile activation smoke does not include Pi")
+    if re.search(r"for bin in .*\bpi\b.*; do", profile_installer):
+        fail("the profile activation smoke still includes Pi")
 
     update_all = read("dot_config/fish/functions/update-all.fish.tmpl")
     required_update = (
         'set -l hunk_prefix "$HOME/.local/share/npm-hunkdiff"',
         'npm install --global --prefix "$hunk_prefix" hunkdiff@latest',
+        'set -l pi_prefix "$HOME/.local/share/npm-pi"',
+        'npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest',
     )
     missing = [value for value in required_update if value not in update_all]
     if missing:
-        fail(f"update-all lacks native Hunk updates: {missing!r}")
+        fail(f"update-all lacks native Hunk and Pi updates: {missing!r}")
 
     active_files = {
         ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl": read(
@@ -117,6 +133,7 @@ def main() -> None:
     migration_files = active_files | {
         ".chezmoidata/packages.yaml": manifest,
         ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl": hunk_installer,
+        ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl": pi_installer,
     }
     destructive = ("mise uninstall", "rm -rf $HOME/.local/share/mise")
     for relative, text in migration_files.items():
@@ -125,7 +142,7 @@ def main() -> None:
             fail(f"{relative} deletes preserved stale mise state: {found!r}")
 
     print(
-        "Agent-tool ownership is exact: Nix owns Pi, native npm owns Hunk, "
+        "Agent-tool ownership is exact: native npm owns Pi and Hunk, "
         "and mise is inactive"
     )
 

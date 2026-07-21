@@ -44,7 +44,7 @@ flake="path:$tmp/nix"
 mkdir -p "$(dirname "$profile")"
 
 out="$(nix build "$flake#workstation" --no-link --print-out-paths)"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi; do
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
 	case "$bin" in
 	direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
 	pyright-langserver | tsserver) ;;
@@ -52,7 +52,10 @@ for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls
 	*) "$out/bin/$bin" --version >/dev/null ;;
 	esac
 done
-bash "$repo_root/.github/scripts/test-pi-nix-runtime.sh" "$out/bin/pi"
+if [[ -e "$out/bin/pi" ]]; then
+	echo "Pi must stay outside the Nix bundle (native npm prefix owns it)" >&2
+	exit 1
+fi
 python3 "$repo_root/nix/lsp-smoke.py" \
 	"$out/bin/pyright-langserver" \
 	"$out/bin/typescript-language-server"

@@ -57,6 +57,12 @@ function update-all --description 'Update every package source this dotfiles rep
             npm install --global --prefix "$hunk_prefix" hunkdiff@latest; or return
         mkdir -p "$HOME/.local/bin"; or return
         ln -sfn "$hunk_prefix/bin/hunk" "$HOME/.local/bin/hunk"; or return
+
+        echo "$section==> native Pi npm package$reset"
+        set -l pi_prefix "$HOME/.local/share/npm-pi"
+        env npm_config_update_notifier=false \
+            npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest; or return
+        ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"; or return
     end
 
     echo "$section==> chezmoi$reset"

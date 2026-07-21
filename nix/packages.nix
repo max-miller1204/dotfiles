@@ -30,11 +30,11 @@
     typescript-language-server
   ];
 
-  # Nix owns the manager executables and Pi. Mutable runtimes stay outside the
-  # store under fnm and uv, and Pi uses fnm's npm for package extensions.
+  # Nix owns the manager executables. Mutable runtimes stay outside the store
+  # under fnm and uv. Pi stays outside Nix with Hunk so npm releases land
+  # immediately instead of trailing the nixpkgs package bump.
   workstation = with pkgs; [
     fnm
     uv
-    pi-coding-agent
   ];
 }

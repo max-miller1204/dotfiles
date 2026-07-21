@@ -15,7 +15,7 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 | `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
 | `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
 | `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
-| `update-all` | Fish function that refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk, and chezmoi. Committed Nix updates, including Pi, arrive through `chezmoi update`. |
+| `update-all` | Fish function that refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi. Committed Nix updates arrive through `chezmoi update`. |
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
@@ -49,7 +49,7 @@ That's it - the install scripts run during `apply` and handle the rest:
 - installs mutable language runtimes through their native managers after the Nix profile is active.
   `fnm` owns Node LTS, `uv` owns Python 3, and `rustup` owns stable Rust, Cargo, targets, and rust-analyzer.
   Bun remains on its official native installer.
-  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, typescript-language-server, and Pi.
+  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, and typescript-language-server.
   Existing stale mise installations are not deleted, but their shims are removed from Fish PATH.
 - installs **Nix** before profile activation.
   Linux uses the Determinate installer with a sanitized root environment.
@@ -60,9 +60,11 @@ That's it - the install scripts run during `apply` and handle the rest:
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
 - installs the **Codex** and **OpenCode** agents via their own official
-  installers and supplies **pi** through the cumulative Nix profile.
-  Pi uses fnm-managed npm for its published extension packages without owning
-  the interactive Node runtime, so all four coding agents (Claude, Codex,
+  installers and installs **pi** through fnm-managed npm into the stable
+  `~/.local/share/npm-pi` prefix, linking its CLI into `~/.local/bin`.
+  Pi stays outside Nix so npm releases land immediately, and it uses
+  fnm-managed npm for its published extension packages without owning the
+  interactive Node runtime, so all four coding agents (Claude, Codex,
   OpenCode, pi) are present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
 - installs **Hunk** through fnm-managed npm into the stable
@@ -281,7 +283,7 @@ Four coding agents are first-class and interchangeable: **Claude Code**, **Codex
 They share one set of global instructions, so you can switch between them with the same rules.
 
 Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
-Pi comes from the pinned cumulative Nix profile and uses fnm-managed npm for its published extension packages.
+Pi comes from its own stable native npm prefix (`~/.local/share/npm-pi`) on the `latest` channel and uses fnm-managed npm for its published extension packages.
 Hunk comes from a stable native npm prefix outside the fnm version directory, so Node upgrades do not orphan its CLI or bundled review skill.
 A fresh apply has all four agents and the Hunk review CLI present without active mise ownership.
 
@@ -336,7 +338,7 @@ Cross-platform:
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
 - `dot_config/fish/config.fish.tmpl` - fish shell aliases, environment, prompt integration, and dedicated Nix profile PATH ordering
 - `dot_config/fish/functions/*.fish` - custom Fish functions.
-  `update-all` refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk, and chezmoi without mutating `flake.lock`.
+  `update-all` refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi without mutating `flake.lock`.
   `lsp-upgrade` reports the flake-pinned servers and upgrades the rustup- and OS-owned Claude Code language servers
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
@@ -583,6 +585,6 @@ the repo and need manual hand-off.
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The native bootstrap script is `run_once`, so it reruns only if its rendered content changes
 - The Nix profile installer is `run_onchange`, so a committed flake, lock, package grouping, or selected bundle change triggers a build-first profile upgrade
-- `update-all` refreshes native package managers, fnm Node, uv Python, rustup, Bun, native Hunk, and chezmoi.
+- `update-all` refreshes native package managers, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi.
   It never updates `flake.lock`; `chezmoi update` receives lock changes committed by Renovate or a maintainer
 - `lsp-upgrade` reports the flake-pinned LSPs and upgrades the rustup- and OS-owned servers

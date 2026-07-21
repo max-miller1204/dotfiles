@@ -2,7 +2,7 @@
 paths:
   - ".chezmoidata/packages.yaml"
   - ".chezmoiscripts/run_once_before_{10-install-packages,12-install-nix}.sh.tmpl"
-  - ".chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes,17-install-hunk}.sh.tmpl"
+  - ".chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes,17-install-hunk,18-install-pi}.sh.tmpl"
   - ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
   - ".github/e2e/verify.sh"
@@ -37,7 +37,7 @@ paths:
   The script first activates an existing daemon or single-user environment, exits idempotently when Nix is usable, and refuses to overwrite or delete existing `/nix` state when it is not.
   Recovery from stale macOS APFS state is always manual and links to Determinate's recovery guide.
 - `run_once_before_10-install-packages.sh.tmpl` must not install Nix.
-  Keeping native prerequisites, Nix bootstrap, profile activation, mutable runtimes, and Hunk in scripts numbered 10, 12, 15, 16, and 17 makes the dependency order explicit.
+  Keeping native prerequisites, Nix bootstrap, profile activation, mutable runtimes, Hunk, and Pi in scripts numbered 10, 12, 15, 16, 17, and 18 makes the dependency order explicit.
   `.github/scripts/check-nix-bootstrap.py` mechanically protects that order and the installer ownership boundary.
 
 ## Checked-in Nix bundle
@@ -84,9 +84,10 @@ paths:
 
 ## Package ownership choices
 
-- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, Pyright, TypeScript, typescript-language-server, fnm, uv, and Pi on every supported system.
+- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, Pyright, TypeScript, typescript-language-server, fnm, and uv on every supported system.
   They are absent from the native manifest.
   Hunk remains outside Nix because the pinned Intel Darwin package set does not provide it; `run_onchange_before_17` installs `hunkdiff@latest` through fnm-managed npm into the stable `~/.local/share/npm-hunkdiff` prefix and links `hunk` into `~/.local/bin`.
+  Pi remains outside Nix so npm releases land immediately; `run_onchange_before_18` installs `@earendil-works/pi-coding-agent@latest` the same way into `~/.local/share/npm-pi` and links `pi` into `~/.local/bin`.
   Existing stale installs are not automatically deleted, and Fish removes stale mise shims from PATH so migrated owners win.
   Nix also gives Linux a tmux release new enough for the `extended-keys-format` option used by `tmux.conf` instead of Ubuntu 24.04's tmux 3.4.
   `jq` and `op` (1Password) deliberately stay native on Linux: `jq` is a `command -v jq || exit 1` bootstrap dependency of the apply-time MCP/plugin scripts (and is used bare in obsidian's installer), and `op` unlocks chezmoi's secret reads before the dedicated Nix profile is active.

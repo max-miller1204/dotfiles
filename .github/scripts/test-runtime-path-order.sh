@@ -41,13 +41,14 @@ fi
 EOF
 chmod +x "$profile/bin/fnm"
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server uv pi node python rustup rustc cargo bun; do
+for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server uv node python rustup rustc cargo bun; do
 	make_command "$profile/bin/$bin"
 	make_command "$home/.local/share/mise/shims/$bin"
 done
 make_command "$home/.local/bin/go"
 make_command "$home/.local/bin/pi"
 make_command "$home/.local/bin/hunk"
+make_command "$home/.local/share/mise/shims/pi"
 make_command "$home/.local/share/mise/shims/hunk"
 for bin in node npm; do make_command "$runtime/fnm_multishells/test/bin/$bin"; done
 for bin in python python3; do make_command "$data/uv/python-bin/$bin"; done
@@ -94,13 +95,14 @@ assert_absent() {
 	fi
 }
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv pi; do
+for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
 	assert_path "$bin" "$profile/bin/$bin"
 done
 for bin in node npm; do assert_path "$bin" "$runtime/fnm_multishells/test/bin/$bin"; done
 for bin in python python3; do assert_path "$bin" "$data/uv/python-bin/$bin"; done
 for bin in rustup rustc cargo; do assert_path "$bin" "$home/.cargo/bin/$bin"; done
 assert_path bun "$home/.bun/bin/bun"
+assert_path pi "$home/.local/bin/pi"
 assert_path hunk "$home/.local/bin/hunk"
 assert_path legacy-only "$tmp/system/bin/legacy-only"
 assert_absent mise-only

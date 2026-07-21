@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Prove the Nix-owned Pi can load the managed local extensions without a model call.
+# Prove the managed Pi install can load the managed local extensions without a
+# model call. Takes the pi binary under test (the native npm-prefix install in
+# production; CI installs @latest into a throwaway prefix).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -56,5 +58,5 @@ commands = {command["name"] for command in responses[0]["data"]["commands"]}
 required = {"handoff", "worktree-guard"}
 if not required <= commands:
     raise SystemExit(f"Pi extension smoke is missing commands: {sorted(required - commands)}")
-print("Nix Pi loaded managed extensions: " + ", ".join(sorted(required)))
+print("Pi loaded managed extensions: " + ", ".join(sorted(required)))
 PY

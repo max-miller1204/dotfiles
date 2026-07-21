@@ -12,9 +12,15 @@ resolve_nix() {
 # Resolve symlink chains without GNU readlink -f, which is unavailable on macOS.
 # Prints the canonical target path. Fails without output when the chain ends in
 # a directory that no longer exists, so callers can diagnose dangling links.
+# Fails with a stderr diagnostic after 40 hops, mirroring the kernel's ELOOP
+# limit, so a cyclic link cannot hang callers.
 resolve_link() {
-	local path="$1" link directory
+	local path="$1" link directory hops=0
 	while [[ -L "$path" ]]; do
+		if ((++hops > 40)); then
+			printf 'Symlink chain exceeded 40 hops (cycle?): %s\n' "$1" >&2
+			return 1
+		fi
 		link="$(readlink "$path")"
 		if [[ "$link" == /* ]]; then
 			path="$link"

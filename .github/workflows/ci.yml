@@ -75,6 +75,15 @@ jobs:
           canonical_real="$(cd "$test_root/real" && pwd -P)"
           test "$(resolve_link "$test_root/second")" = \
             "$canonical_real/target"
+          ln -s cycle-b "$test_root/cycle-a"
+          ln -s cycle-a "$test_root/cycle-b"
+          if resolve_link "$test_root/cycle-a" \
+            >"$test_root/out" 2>"$test_root/err"; then
+            echo 'resolve_link accepted a cyclic symlink' >&2
+            exit 1
+          fi
+          test ! -s "$test_root/out"
+          grep -q "cycle-a" "$test_root/err"
       - name: Shellcheck LSP templates with persisted Phase 3 data
         run: |
           set -euo pipefail

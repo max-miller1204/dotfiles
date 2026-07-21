@@ -13,6 +13,8 @@ paths:
   All OS-conditional template logic lives in `.chezmoiscripts/*.sh.tmpl` and `dot_config/fish/*.fish.tmpl`; the TOML/JSON templates have no darwin branch, which is why `config-syntax` and `chezmoi-dry-run` stay ubuntu-only.
 - The `nix-evaluation` CI job evaluates all four supported systems without building.
   The `nix-build` matrix builds every bundle, runs smoke checks, reports closure size, and tests temporary-profile idempotency and rollback on native x86_64 Linux, aarch64 Darwin, and x86_64 Darwin runners.
+  Linux and Apple Silicon use Determinate Nix, while Intel macOS uses the pinned `cachix/install-nix-action` because Determinate dropped x86_64 Darwin installer support.
+  Temporary profile tests canonicalize macOS's `/var` symlink before direnv records allow state, so allow and exec use the same physical fixture path.
   Standard CI has no native aarch64 Linux runner, so that system remains evaluation-only until a runner is added.
 - The on-demand E2E workflow (`.github/workflows/e2e-native-ubuntu.yml`) runs the real bootstrap (`chezmoi init --apply --promptDefaults`) on a clean GitHub-hosted Ubuntu VM and verifies the installed end state with `.github/e2e/verify.sh`.
   It is dispatch-only ON PURPOSE (it installs multi-GB toolchains and GUI packages and takes about an hour) - never add a push/PR trigger - and it pins `runs-on: ubuntu-24.04`, not `ubuntu-latest`, because the claim it proves is "works on Ubuntu 24.04", the target machine's release.

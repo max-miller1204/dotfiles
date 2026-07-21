@@ -43,8 +43,14 @@ jobs:
         with:
           persist-credentials: false
       # v3
-      - uses: >-
+      - name: Install Determinate Nix
+        if: matrix.os != 'macos-15-intel'
+        uses: >-
           DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88
+      # v31.11.0 - Determinate Nix no longer supports Intel macOS.
+      - name: Install upstream Nix on Intel macOS
+        if: matrix.os == 'macos-15-intel'
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342
       - name: Build every bundle and run checks
         run: |
           set -euo pipefail

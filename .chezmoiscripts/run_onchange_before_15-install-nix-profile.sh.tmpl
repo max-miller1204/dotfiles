@@ -37,6 +37,23 @@ if ! command -v nix >/dev/null 2>&1; then
     exit 1
 fi
 
+# jq stays a native package (brew on macOS, apt on Linux), and Homebrew's bin
+# directory is not on the stock macOS PATH of a non-interactive apply. Probe the
+# brew prefixes directly instead of inheriting an earlier script's shellenv.
+if ! command -v jq >/dev/null 2>&1; then
+    for brew_bin in /opt/homebrew/bin /usr/local/bin; do
+        if [[ -x "$brew_bin/jq" ]]; then
+            export PATH="$brew_bin:$PATH"
+            break
+        fi
+    done
+fi
+if ! command -v jq >/dev/null 2>&1; then
+    echo "jq is required for dedicated profile activation." >&2
+    echo "Resolve the earlier native package bootstrap error, then run chezmoi apply again." >&2
+    exit 1
+fi
+
 mkdir -p "$(dirname "$profile")"
 
 # Build and smoke-test without touching the active profile. Under set -e, any

@@ -24,6 +24,9 @@ paths:
 - Home Manager packages must never appear in this manifest.
 - mise is not an install method or package owner in Phase 5.
 - Existing mise binaries and data are retained for rollback but are never invoked by active bootstrap, shell, or update code.
+- Phase 6 cleanup occurs manually only after every platform and soak gate in `.github/phase-6-acceptance.md` passes.
+- Never add mise uninstall, archive, deletion, or pruning commands to chezmoi scripts, Home Manager activation, Fish functions, or workflows.
+- Keep the retained-mise native E2E fixtures after real machines are cleaned so CI continues proving that applies do not mutate legacy data.
 
 ## Vendor script installers
 

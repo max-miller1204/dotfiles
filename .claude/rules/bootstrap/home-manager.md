@@ -38,7 +38,8 @@ paths:
 - Do not add ad hoc `nix profile install` commands.
 - `update-all` must never update `nix/flake.lock`.
 - The dedicated `hm-update` command introduced in the activation phase owns lock updates and must leave the updated lock file for review and commit.
-- Do not add automatic Nix garbage collection until a generation retention policy and soak period have been approved.
+- Phase 6 retains every generation and profile-history entry throughout the platform soak.
+- Do not add automatic Nix garbage collection, generation expiry, history wiping, or manual store cleanup until the Phase 6 ledger records two successful primary-machine cycles and an approved no-GC attestation.
 
 ## Phase 5 active package bundles
 
@@ -63,3 +64,5 @@ paths:
 - Class profiles are used until a hostname-specific requirement is demonstrated.
 - Keep old mise or Homebrew installations during the rollback window, but never activate or update mise from Phase 5 code.
 - Full Phase 5 rollback requires the previous Home Manager generation and the reverted Phase 5 repository commit because Fish and native runtime ownership change together.
+- Phase 6 changes validation only and must not alter this ownership model, flake structure, activation transaction, or rollback procedure.
+- Native Ubuntu desktop/headless and hosted native macOS evidence may be automated, but real WSL2 and physical Apple Silicon GUI acceptance remain manual release gates recorded in `.github/phase-6-acceptance.md`.

@@ -1,17 +1,10 @@
 ---
-# On-demand native-Ubuntu E2E: run the real bootstrap
-# (chezmoi init --apply) on a clean GitHub-hosted Ubuntu VM with a genuine
-# non-WSL kernel, then verify the installed end state with
-# .github/e2e/verify.sh. Dispatch-only: this installs multi-GB toolchains and
-# GUI packages and takes ~an hour, so it must never run on push/PR.
-#
-# Caveats:
-# - runners are preloaded VMs, so preflight inventories preexisting bins;
-#   their install paths are NOT proven by this job (the clean-rootfs sandbox
-#   pass owns that proof).
-# - --promptDefaults deviates from the README one-liner because there is no TTY;
-#   it resolves the linux-only `headless` prompt to its false default, so this
-#   exercises the full desktop profile.
+# On-demand native-Ubuntu E2E: run the real bootstrap on ephemeral Ubuntu
+# 24.04 runners with fresh chezmoi and Home Manager user state. The matrix
+# proves both desktop and headless profile selection and idempotence. Hosted
+# runners contain preinstalled tools, so the preflight inventory records them
+# instead of claiming that this workflow installed every command from scratch.
+# Dispatch-only: this installs multi-GB toolchains and GUI packages.
 name: e2e-native-ubuntu
 
 "on":
@@ -19,17 +12,27 @@ name: e2e-native-ubuntu
     inputs:
       expected_head:
         description: >-
-          Commit SHA the dispatched ref must resolve to before apply
-        required: false
-        default: ""
+          Immutable commit SHA the dispatched ref must resolve to before apply
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   e2e:
-    # Pinned OS version, not ubuntu-latest: -latest is a moving label and this
-    # job's claim is "works on Ubuntu 24.04", the target machine's release.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: linux-desktop
+            configuration: ci@linux-desktop
+            fault_injection: true
+          - profile: linux-headless
+            configuration: ci@linux-headless
+            fault_injection: false
+    # Pinned OS version, not ubuntu-latest: this job's claim is specifically
+    # native Ubuntu 24.04 behavior.
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
@@ -50,12 +53,20 @@ jobs:
           esac
           HEAD="$(git rev-parse HEAD)"
           echo "tree HEAD: $HEAD"
-          if [ -n "$EXPECTED_HEAD" ]; then
-            [ "$HEAD" = "$EXPECTED_HEAD" ]
-          fi
+          test -n "$EXPECTED_HEAD"
+          test "$HEAD" = "$EXPECTED_HEAD"
+          test ! -e "$HOME/.config/chezmoi/chezmoi.toml"
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          test ! -e "$state_home/nix/profiles/home-manager"
+          test ! -L "$state_home/nix/profiles/home-manager"
+          test ! -e "$state_home/nix/profiles/profile"
+          test ! -L "$state_home/nix/profiles/profile"
 
       - name: Preflight inventory (preexisting bins are not proven by this job)
-        run: bash .github/e2e/verify.sh preflight | tee preflight.txt
+        run: |
+          bash .github/e2e/verify.sh preflight \
+            | tee "$RUNNER_TEMP/preflight.txt"
+          exit "${PIPESTATUS[0]}"
 
       - name: Free disk space
         run: |
@@ -163,17 +174,39 @@ jobs:
           nohup bash "$watcher" >/dev/null 2>&1 &
           echo "watcher pid $!"
 
-      - name: chezmoi init --apply (the real bootstrap)
+      - name: chezmoi init --apply (${{ matrix.profile }})
         env:
-          DOTFILES_HM_CONFIGURATION: ci@linux-desktop
+          DOTFILES_HM_CONFIGURATION: ${{ matrix.configuration }}
+          PROFILE: ${{ matrix.profile }}
         run: |
           set -euo pipefail
           # A real login session on stock Ubuntu exports no XDG_CONFIG_HOME;
           # the runner's worker process injected one (see the sudo-env step).
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
-          chezmoi init --apply --promptDefaults 2>&1 | tee apply.log
-          exit "${PIPESTATUS[0]}"
+          case "$PROFILE" in
+            linux-desktop)
+              init_args=(--promptDefaults)
+              ;;
+            linux-headless)
+              init_args=(--promptBool headless=true)
+              ;;
+            *)
+              echo "Unsupported E2E profile: $PROFILE" >&2
+              exit 1
+              ;;
+          esac
+          chezmoi init --apply "${init_args[@]}" 2>&1 | tee apply.log
+          test "${PIPESTATUS[0]}" -eq 0
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          grep -Fxq '<none>' \
+            "$state_home/dotfiles/home-manager-before-switch"
+          grep -Fxq '${{ matrix.configuration }}' \
+            "$state_home/dotfiles/home-manager-configuration"
+          readlink -f "$state_home/nix/profiles/home-manager" \
+            >first-generation.txt
+          readlink -f "$state_home/nix/profiles/profile" \
+            >first-package-profile.txt
 
       - name: Reapply and verify Home Manager idempotence
         run: |
@@ -183,10 +216,15 @@ jobs:
           state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
           profile="$state_home/nix/profiles/home-manager"
           before=$(readlink -f "$profile")
+          test "$before" = "$(cat first-generation.txt)"
           chezmoi apply --force --no-tty 2>&1 | tee second-apply.log
           test "${PIPESTATUS[0]}" -eq 0
           after=$(readlink -f "$profile")
           test "$before" = "$after"
+          printf '%s\n' "$after" >second-generation.txt
+          readlink -f "$state_home/nix/profiles/profile" \
+            >second-package-profile.txt
+          cmp -s first-package-profile.txt second-package-profile.txt
           grep -q 'Ensuring current Node LTS' apply.log
           grep -q 'Installing current Pi and Hunk' apply.log
           runtime_pattern='Ensuring current Node LTS'
@@ -198,6 +236,7 @@ jobs:
           sed 's/^/SECOND-APPLY: /' second-apply.log >>apply.log
 
       - name: Reject invalid selection and preserve the generation
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -214,6 +253,7 @@ jobs:
           test "$before" = "$(readlink -f "$profile")"
 
       - name: Failed Home Manager build preserves the generation
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -260,6 +300,7 @@ jobs:
           trap - EXIT
 
       - name: Failed Home Manager activation rolls back profiles
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -307,6 +348,7 @@ jobs:
           trap - EXIT
 
       - name: Failed LSP verification rolls back profiles
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -356,6 +398,7 @@ jobs:
           trap - EXIT
 
       - name: Failed first activation removes new profiles
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -417,6 +460,7 @@ jobs:
           trap - EXIT
 
       - name: Failed first LSP verification removes new profiles
+        if: ${{ matrix.fault_injection }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
@@ -459,12 +503,21 @@ jobs:
           trap - EXIT
 
       - name: Verify end state
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_head }}
         run: |
           set -euo pipefail
           unset XDG_CONFIG_HOME
           export PATH="$HOME/.local/bin:$PATH"
           APPLY_LOG="$PWD/apply.log" \
-            bash .github/e2e/verify.sh verify runner | tee verify-report.txt
+          SECOND_APPLY_LOG="$PWD/second-apply.log" \
+          SECOND_APPLY_STATUS=0 \
+          PROFILE_BEFORE_SECOND="$(cat first-generation.txt)" \
+          PROFILE_AFTER_SECOND="$(cat second-generation.txt)" \
+          PACKAGE_BEFORE_SECOND="$(cat first-package-profile.txt)" \
+          PACKAGE_AFTER_SECOND="$(cat second-package-profile.txt)" \
+            bash .github/e2e/verify.sh verify runner \
+              '${{ matrix.configuration }}' | tee verify-report.txt
           exit "${PIPESTATUS[0]}"
 
       - name: Ownership forensics on failure
@@ -479,21 +532,120 @@ jobs:
           cat "$HOME/fishwatch.log" 2>/dev/null || echo "no watcher log"
           sudo sh -c 'echo sudo HOME now: $HOME'
 
+      - name: Build evidence manifest
+        if: always()
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          set -uo pipefail
+          evidence_dir="$PWD/evidence"
+          staged_source="$HOME/.local/share/chezmoi"
+          mkdir -p "$evidence_dir"
+          actual_head=unavailable
+          source_sha_matches=false
+          source_clean=unavailable
+          if candidate_head="$(git -C "$staged_source" rev-parse HEAD \
+            2>/dev/null)"; then
+            actual_head="$candidate_head"
+            if [[ "$actual_head" = "$EXPECTED_HEAD" ]]; then
+              source_sha_matches=true
+            fi
+            source_clean=false
+            if [[ -z "$(git -C "$staged_source" status --porcelain \
+              2>/dev/null)" ]]; then
+              source_clean=true
+            fi
+          fi
+          {
+            printf 'expected_source_sha=%s\n' "$EXPECTED_HEAD"
+            printf 'actual_source_sha=%s\n' "$actual_head"
+            printf 'source_sha_matches=%s\n' "$source_sha_matches"
+            printf 'source_clean=%s\n' "$source_clean"
+            printf 'profile=%s\n' "$PROFILE"
+            printf 'configuration=%s\n' "$CONFIGURATION"
+            printf 'utc=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            . /etc/os-release
+            printf 'os=%s\n' "$PRETTY_NAME"
+            printf 'architecture=%s\n' "$(uname -m)"
+            printf 'kernel=%s\n' "$(uname -r)"
+          } >"$evidence_dir/evidence-summary.txt"
+          for evidence_file in ./*.log ./*.txt; do
+            if [[ -f "$evidence_file" ]]; then
+              cp "$evidence_file" "$evidence_dir/"
+            fi
+          done
+          if [[ -f "$RUNNER_TEMP/preflight.txt" ]]; then
+            cp "$RUNNER_TEMP/preflight.txt" "$evidence_dir/"
+          fi
+          if [[ -f "$HOME/fishwatch.log" ]]; then
+            cp "$HOME/fishwatch.log" "$evidence_dir/"
+          fi
+          config="$HOME/.config/chezmoi/chezmoi.toml"
+          if [[ -f "$config" ]]; then
+            cp "$config" "$evidence_dir/chezmoi.toml"
+          fi
+          checksum_tmp="$RUNNER_TEMP/evidence-sha256.txt"
+          (cd "$evidence_dir" && find . -maxdepth 1 -type f -print0 \
+            | sort -z | xargs -0 -r sha256sum) >"$checksum_tmp"
+          mv "$checksum_tmp" "$evidence_dir/evidence-sha256.txt"
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e2e-native-ubuntu
-          path: |
-            apply.log
-            second-apply.log
-            invalid-selection.log
-            failed-build.log
-            failed-activation.log
-            failed-first-activation.log
-            failed-lsp-probe.log
-            failed-first-lsp-probe.log
-            preflight.txt
-            verify-report.txt
-            ~/fishwatch.log
-            ~/.config/chezmoi/chezmoi.toml
+          name: e2e-native-ubuntu-${{ matrix.profile }}
+          path: evidence/
+
+  prompt-selection:
+    needs: e2e
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-chezmoi
+      - name: Install expect
+        run: sudo apt-get install -y -qq expect
+      - name: Test interactive Linux profile selection
+        env:
+          DOTFILES_BRANCH: ${{ github.ref_name }}
+          DOTFILES_REVISION: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          bash .github/e2e/prompt-test.sh | tee prompt-test.txt
+          exit "${PIPESTATUS[0]}"
+      - name: Build prompt evidence
+        if: always()
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -uo pipefail
+          mkdir -p prompt-evidence
+          actual_head=unavailable
+          source_sha_matches=false
+          if candidate_head="$(git rev-parse HEAD 2>/dev/null)"; then
+            actual_head="$candidate_head"
+            if [[ "$actual_head" = "$EXPECTED_HEAD" ]]; then
+              source_sha_matches=true
+            fi
+          fi
+          {
+            printf 'expected_source_sha=%s\n' "$EXPECTED_HEAD"
+            printf 'actual_source_sha=%s\n' "$actual_head"
+            printf 'source_sha_matches=%s\n' "$source_sha_matches"
+          } >prompt-evidence/evidence-summary.txt
+          if [[ -f prompt-test.txt ]]; then
+            cp prompt-test.txt prompt-evidence/
+          fi
+          checksum_tmp="$RUNNER_TEMP/prompt-evidence-sha256.txt"
+          (cd prompt-evidence && find . -maxdepth 1 -type f -print0 \
+            | sort -z | xargs -0 -r sha256sum) >"$checksum_tmp"
+          mv "$checksum_tmp" prompt-evidence/evidence-sha256.txt
+      - name: Upload prompt transcript
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-linux-profile-prompt
+          path: prompt-evidence/

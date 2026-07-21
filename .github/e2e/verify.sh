@@ -4,15 +4,48 @@
 #   verify.sh preflight        - inventory only: which expected bins already exist
 #                                (used on preloaded GitHub runners BEFORE apply, so
 #                                preexisting tools are excluded from install-proof)
-#   verify.sh verify [sandbox|runner]
-#                              - full post-apply checklist; APPLY_LOG may point at
-#                                the captured apply log for the warning/skip scan
+#   verify.sh verify <sandbox|runner|hardware> <expected-configuration>
+#                              - profile-aware post-apply checklist requiring
+#                                EXPECTED_SOURCE_SHA plus first/second profile
+#                                evidence and APPLY_LOG/SECOND_APPLY_LOG
 # Exit code: number of HARD failures (0 = all hard checks passed).
 set -uo pipefail
 
 MODE="${1:-verify}"
 ENVIRONMENT="${2:-sandbox}"
+EXPECTED_CONFIGURATION="${3:-}"
 APPLY_LOG="${APPLY_LOG:-}"
+EXPECTED_SOURCE_SHA="${EXPECTED_SOURCE_SHA:-}"
+SECOND_APPLY_LOG="${SECOND_APPLY_LOG:-}"
+SECOND_APPLY_STATUS="${SECOND_APPLY_STATUS:-}"
+PROFILE_BEFORE_SECOND="${PROFILE_BEFORE_SECOND:-}"
+PROFILE_AFTER_SECOND="${PROFILE_AFTER_SECOND:-}"
+PACKAGE_BEFORE_SECOND="${PACKAGE_BEFORE_SECOND:-}"
+PACKAGE_AFTER_SECOND="${PACKAGE_AFTER_SECOND:-}"
+PROFILE_CLASS=""
+
+if [[ "$MODE" == verify ]]; then
+	case "$ENVIRONMENT" in
+	sandbox | runner | hardware) ;;
+	*)
+		echo "Invalid verification environment: $ENVIRONMENT" >&2
+		exit 2
+		;;
+	esac
+	case "$EXPECTED_CONFIGURATION" in
+	*@linux-desktop) PROFILE_CLASS=linux-desktop ;;
+	*@linux-headless) PROFILE_CLASS=linux-headless ;;
+	*@wsl) PROFILE_CLASS=wsl ;;
+	*)
+		echo "Expected configuration must select linux-desktop, linux-headless, or wsl" >&2
+		exit 2
+		;;
+	esac
+	if [[ ! "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+		echo "EXPECTED_SOURCE_SHA must be the full candidate commit SHA" >&2
+		exit 2
+	fi
+fi
 
 # Expected command names, split by active owner so this file also verifies the
 # ownership boundary instead of presence alone.
@@ -242,7 +275,7 @@ nix_direnv_flake_works() {
 		global_paths+=("$current_path")
 	done
 	nixpkgs_path="$("$nix_bin" eval --raw \
-		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
+		"path:$source_dir/nix#homeConfigurations.\"$EXPECTED_CONFIGURATION\".pkgs.path")" || {
 		echo 'Could not evaluate the pinned nixpkgs path' >&2
 		rm -rf "$project"
 		return 1
@@ -268,7 +301,7 @@ use flake
 export DOTFILES_NIX_DIRENV_LAYOUT_DIR="$(direnv_layout_dir)"
 EOF
 	if ! PATH="$nix_path" "$direnv_bin" allow "$project" \
-		> /dev/null 2>"$probe_error"; then
+		>/dev/null 2>"$probe_error"; then
 		echo 'direnv allow failed' >&2
 		sed 's/^/  /' "$probe_error" >&2
 		rm -rf "$project"
@@ -320,6 +353,87 @@ EOF
 	done
 	rm -rf "$project"
 }
+selected_configuration_matches() {
+	local selected
+	selected="$(chezmoi data --format=json | jq -r '.homeManagerConfiguration // empty')"
+	[[ "$selected" == "$EXPECTED_CONFIGURATION" ]]
+}
+recorded_configuration_matches() {
+	local state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+	[[ "$(cat "$state_home/dotfiles/home-manager-configuration" 2>/dev/null)" == "$EXPECTED_CONFIGURATION" ]]
+}
+profile_flags_match() {
+	local data
+	data="$(chezmoi data --format=json)" || return 1
+	case "$PROFILE_CLASS" in
+	linux-desktop)
+		jq -e '.headless == false and .isWSL == false' <<<"$data" >/dev/null
+		;;
+	linux-headless)
+		jq -e '.headless == true and .isWSL == false' <<<"$data" >/dev/null
+		;;
+	wsl)
+		jq -e '.isWSL == true and .headless == true' <<<"$data" >/dev/null
+		;;
+	esac
+}
+apply_log_records_gui_omission() {
+	[[ -n "$APPLY_LOG" && -f "$APPLY_LOG" ]] &&
+		grep -Fq 'headless/WSL - skipping GUI desktop apps' "$APPLY_LOG"
+}
+wsl_onepassword_command_is_op_exe() {
+	local config="$HOME/.config/chezmoi/chezmoi.toml"
+	awk '
+		/^\[onepassword\]$/ { in_section = 1; next }
+		/^\[/ { in_section = 0 }
+		in_section && /^[[:space:]]*command[[:space:]]*=[[:space:]]*"op\.exe"/ {
+			found = 1
+		}
+		END { exit(found ? 0 : 1) }
+	' "$config"
+}
+wsl_gui_packages_are_absent() {
+	local package
+	for package in ghostty discord google-chrome-stable 1password \
+		voquill-desktop obsidian; do
+		if dpkg -s "$package" >/dev/null 2>&1; then
+			return 1
+		fi
+	done
+	if command -v flatpak >/dev/null 2>&1; then
+		for package in "${FLATPAK_APPS[@]}"; do
+			if flatpak info "$package" >/dev/null 2>&1; then
+				return 1
+			fi
+		done
+	fi
+}
+wsl_nix_daemon_works() {
+	local nix_bin
+	nix_bin="$(fish_path nix)" || return 1
+	"$nix_bin" store ping --store daemon >/dev/null
+}
+source_matches_expected() {
+	[[ "$source_sha" == "$EXPECTED_SOURCE_SHA" ]]
+}
+source_is_clean() {
+	[[ "$source_state" == clean ]]
+}
+second_apply_evidence_matches() {
+	local active_package active_profile
+	active_profile="$(readlink -f "$state_home/nix/profiles/home-manager")" || \
+		return 1
+	active_package="$(readlink -f "$state_home/nix/profiles/profile")" || \
+		return 1
+	[[ "$SECOND_APPLY_STATUS" == 0 ]] &&
+		[[ -s "$SECOND_APPLY_LOG" ]] &&
+		[[ -n "$PROFILE_BEFORE_SECOND" ]] &&
+		[[ "$PROFILE_BEFORE_SECOND" == "$PROFILE_AFTER_SECOND" ]] &&
+		[[ "$PROFILE_AFTER_SECOND" == "$active_profile" ]] &&
+		[[ -n "$PACKAGE_BEFORE_SECOND" ]] &&
+		[[ "$PACKAGE_BEFORE_SECOND" == "$PACKAGE_AFTER_SECOND" ]] &&
+		[[ "$PACKAGE_AFTER_SECOND" == "$active_package" ]]
+}
 
 if [[ "$MODE" == "preflight" ]]; then
 	echo "== preflight inventory (bins present BEFORE apply; install NOT proven for these) =="
@@ -361,6 +475,43 @@ info() { # info "<desc>" <cmd...>  (recorded, never gates)
 	fi
 }
 
+source_dir="$HOME/.local/share/chezmoi"
+state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+source_sha="$(git -C "$source_dir" rev-parse HEAD 2>/dev/null || printf unknown)"
+source_state=clean
+if [[ -n "$(git -C "$source_dir" status --porcelain 2>/dev/null)" ]]; then
+	source_state=dirty
+fi
+echo "== Phase 6 evidence metadata =="
+echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+echo "source: $source_sha ($source_state)"
+echo "os: $(. /etc/os-release && printf '%s' "$PRETTY_NAME")"
+echo "architecture: $(uname -m)"
+echo "kernel: $(uname -r)"
+echo "expected source: $EXPECTED_SOURCE_SHA"
+echo "expected configuration: $EXPECTED_CONFIGURATION"
+echo "Home Manager profile: $(readlink -f "$state_home/nix/profiles/home-manager" 2>/dev/null || printf absent)"
+echo "package profile: $(readlink -f "$state_home/nix/profiles/profile" 2>/dev/null || printf absent)"
+hard "source commit matches the candidate" source_matches_expected
+hard "source tree is clean" source_is_clean
+hard "second apply succeeded and preserved both profiles" \
+	second_apply_evidence_matches
+hard "chezmoi selected $EXPECTED_CONFIGURATION" selected_configuration_matches
+hard "activation recorded $EXPECTED_CONFIGURATION" recorded_configuration_matches
+hard "$PROFILE_CLASS profile flags match" profile_flags_match
+if [[ "$PROFILE_CLASS" == linux-headless || "$PROFILE_CLASS" == wsl ]]; then
+	hard "$PROFILE_CLASS apply logged GUI omission" apply_log_records_gui_omission
+fi
+if [[ "$PROFILE_CLASS" == wsl ]]; then
+	hard "real WSL2 kernel" grep -qi 'microsoft-standard-WSL2' /proc/sys/kernel/osrelease
+	hard "WSL uses Windows 1Password CLI" wsl_onepassword_command_is_op_exe
+	hard "op.exe responds" op.exe --version
+	hard "op.exe authentication works" bash -c 'op.exe whoami >/dev/null 2>&1'
+	hard "systemd is PID 1" grep -Fxq systemd /proc/1/comm
+	hard "Nix daemon store responds" wsl_nix_daemon_works
+	hard "WSL GUI packages are absent" wsl_gui_packages_are_absent
+fi
+
 echo "== manifest CLI bins (via login+interactive fish PATH) =="
 for b in "${MANIFEST_BINS[@]}"; do hard "bin $b" fish_has "$b"; done
 
@@ -388,10 +539,17 @@ hard "chezmoi direnvrc loads Home Manager nix-direnv" grep -Fxq \
 hard "plain direnv environment loads" plain_direnv_works
 hard "nix-direnv use flake loads and retains a GC root" nix_direnv_flake_works
 
-echo "== GUI desktop apps (desktop profile must install these) =="
-for b in "${GUI_BINS[@]}"; do hard "gui bin $b" fish_has "$b"; done
-hard "voquill-desktop installed (dpkg)" dpkg -s voquill-desktop
-for app in "${FLATPAK_APPS[@]}"; do hard "flatpak $app" flatpak info "$app"; done
+echo "== GUI profile boundary =="
+if [[ "$PROFILE_CLASS" == linux-desktop ]]; then
+	for b in "${GUI_BINS[@]}"; do hard "gui bin $b" fish_has "$b"; done
+	hard "voquill-desktop installed (dpkg)" dpkg -s voquill-desktop
+	for app in "${FLATPAK_APPS[@]}"; do
+		hard "flatpak $app" flatpak info "$app"
+	done
+else
+	hard "Ghostty config omitted for $PROFILE_CLASS" test ! -e \
+		"$HOME/.config/ghostty"
+fi
 
 echo "== native runtime ownership =="
 if [[ "$ENVIRONMENT" == runner ]]; then
@@ -456,7 +614,10 @@ info "login shell already fish (chsh needs TTY; day-1 item if MISS)" \
 	test "$(getent passwd "$USER" | cut -d: -f7)" = "$FISH_PATH"
 
 echo "== materialized configs =="
-hard "ghostty config present (native desktop must NOT ignore it)" test -d "$HOME/.config/ghostty"
+if [[ "$PROFILE_CLASS" == linux-desktop ]]; then
+	hard "ghostty config present (native desktop must NOT ignore it)" test -d \
+		"$HOME/.config/ghostty"
+fi
 hard "nvim seeded with LazyVim starter" test -e "$HOME/.config/nvim/init.lua"
 hard "TPM cloned" test -d "$HOME/.config/tmux/plugins/tpm"
 hard "fish config present" test -f "$HOME/.config/fish/config.fish"
@@ -583,20 +744,25 @@ else
 	echo "INFO-MISS: APPLY_LOG not provided; warning scan skipped"
 fi
 
-echo "== GUI smoke (reduced form; never gates in runner env) =="
-info "ghostty +version" fish -l -i -c 'ghostty +version'
-if [[ "$ENVIRONMENT" == "sandbox" ]]; then
-	info "obsidian --version (WSLg best-effort)" timeout 30 fish -l -i -c 'obsidian --version --no-sandbox'
+echo "== GUI smoke (desktop only; never gates in runner env) =="
+if [[ "$PROFILE_CLASS" == linux-desktop ]]; then
+	info "ghostty +version" fish -l -i -c 'ghostty +version'
+	if [[ "$ENVIRONMENT" == sandbox ]]; then
+		info "obsidian --version" timeout 30 fish -l -i -c \
+			'obsidian --version --no-sandbox'
+	fi
+	# Verification-only dependency installed after the judged apply.
+	sudo apt-get install -y -qq desktop-file-utils >/dev/null 2>&1 || true
+	for d in /usr/share/applications/discord.desktop \
+		/usr/share/applications/obsidian.desktop; do
+		[[ -f "$d" ]] && info "desktop-file-validate $(basename "$d")" \
+			desktop-file-validate "$d"
+	done
+	for app in "${FLATPAK_APPS[@]}"; do
+		info "flatpak run --command=true $app" timeout 60 flatpak \
+			run --command=true "$app"
+	done
 fi
-# desktop-file-utils is a verification-only dependency, installed here AFTER the
-# judged apply, and excluded from install-proof conclusions.
-sudo apt-get install -y -qq desktop-file-utils >/dev/null 2>&1 || true
-for d in /usr/share/applications/discord.desktop /usr/share/applications/obsidian.desktop; do
-	[[ -f "$d" ]] && info "desktop-file-validate $(basename "$d")" desktop-file-validate "$d"
-done
-for app in "${FLATPAK_APPS[@]}"; do
-	info "flatpak run --command=true $app" timeout 60 flatpak run --command=true "$app"
-done
 
 echo "== versions (for the report) =="
 # Resolve each binary's path through interactive fish (whose config prints the

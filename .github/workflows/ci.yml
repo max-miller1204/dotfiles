@@ -39,8 +39,12 @@ jobs:
           set -euo pipefail
           shellcheck --severity=warning -s bash \
             dot_claude/executable_statusline.sh \
+            .github/e2e/prompt-test.sh \
+            .github/e2e/verify.sh \
             .github/scripts/check-pi-model-pins.sh \
-            .github/scripts/check-tool-ownership.sh
+            .github/scripts/check-platform-rendering.sh \
+            .github/scripts/check-tool-ownership.sh \
+            .github/scripts/test-migration-safety.sh
           shellcheck --severity=warning -s sh \
             private_dot_local/bin/executable_zenity-askpass
           # Glob covers future tmux helpers and is a no-op if there are none.
@@ -163,6 +167,12 @@ jobs:
           set -euo pipefail
           bash .github/scripts/check-pi-model-pins.sh \
             dot_pi/agent/agents dot_pi/agent/settings.json
+      - name: Check ownership and Phase 6 migration safety
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-tool-ownership.sh "$GITHUB_WORKSPACE"
+          bash .github/scripts/check-platform-rendering.sh "$GITHUB_WORKSPACE"
+          bash .github/scripts/test-migration-safety.sh "$GITHUB_WORKSPACE"
       - name: Validate rendered TOML/JSON templates
         run: |
           set -euo pipefail
@@ -369,3 +379,61 @@ jobs:
             < .chezmoiscripts/run_after_50-verify-lsp-servers.sh.tmpl \
             > "$legacy_rendered"
           HOME="$test_home" bash "$legacy_rendered"
+      - name: Activate Home Manager twice on native macOS
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64) configuration=ci@macos-aarch64 ;;
+            x86_64) configuration=ci@macos-x86_64 ;;
+            *) echo "Unsupported macOS architecture" >&2; exit 1 ;;
+          esac
+          actual_head="$(git rev-parse HEAD)"
+          test "$actual_head" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+          profile="$state_home/nix/profiles/home-manager"
+          package_profile="$state_home/nix/profiles/profile"
+          test ! -e "$profile"
+          test ! -L "$profile"
+          test ! -e "$package_profile"
+          test ! -L "$package_profile"
+          evidence_dir="$RUNNER_TEMP/macos-activation-evidence"
+          mkdir -p "$evidence_dir"
+          rendered="$RUNNER_TEMP/activate-home-manager.sh"
+          first_log="$evidence_dir/macos-first-activation.log"
+          second_log="$evidence_dir/macos-second-activation.log"
+          DOTFILES_HM_CONFIGURATION="$configuration" \
+            chezmoi execute-template \
+              <.chezmoiscripts/run_before_15-activate-home-manager.sh.tmpl \
+              >"$rendered"
+          bash "$rendered" >"$first_log" 2>&1
+          first_generation="$(readlink "$profile")"
+          first_package="$(readlink "$package_profile")"
+          bash "$rendered" >"$second_log" 2>&1
+          test "$first_generation" = "$(readlink "$profile")"
+          test "$first_package" = "$(readlink "$package_profile")"
+          {
+            printf 'expected_source_sha=%s\n' "$GITHUB_SHA"
+            printf 'actual_source_sha=%s\n' "$actual_head"
+            printf 'source_clean=true\n'
+            printf 'configuration=%s\n' "$configuration"
+            printf 'architecture=%s\n' "$(uname -m)"
+            printf 'generation=%s\n' "$first_generation"
+            printf 'package_profile=%s\n' "$first_package"
+            sw_vers
+          } >"$evidence_dir/evidence-summary.txt"
+          checksum_tmp="$RUNNER_TEMP/macos-activation-sha256.txt"
+          (
+            cd "$evidence_dir"
+            for evidence_file in ./*; do
+              [[ -f "$evidence_file" ]] && shasum -a 256 "$evidence_file"
+            done
+          ) >"$checksum_tmp"
+          mv "$checksum_tmp" "$evidence_dir/evidence-sha256.txt"
+      - name: Upload native macOS activation evidence
+        if: runner.os == 'macOS' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: home-manager-activation-${{ matrix.os }}
+          path: ${{ runner.temp }}/macos-activation-evidence/

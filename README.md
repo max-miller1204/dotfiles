@@ -151,6 +151,14 @@ Set `homeManagerEnabled = false` only if activation cannot run during repository
 Old mise and Homebrew implementations are intentionally not uninstalled during the rollback window.
 Do not garbage-collect Nix generations or delete mise data during the migration soak.
 
+### Phase 6 platform soak
+
+Phase 6 keeps the Phase 5 ownership model unchanged while expanding acceptance coverage to native Ubuntu desktop, headless Linux, real WSL2, and native macOS.
+The authoritative gate ledger is [`.github/phase-6-acceptance.md`](.github/phase-6-acceptance.md).
+Hosted CI can prove Ubuntu profile behavior and native macOS activation, but real WSL2 integration and physical Apple Silicon GUI acceptance remain manual release gates.
+Each primary machine must complete two successful update or apply cycles without Nix garbage collection before cleanup can begin.
+Mise cleanup is a manual post-soak operation and must never be added to a chezmoi script, Home Manager activation, Fish function, or workflow.
+
 ## Secrets (1Password)
 
 Secrets live in 1Password, not in this repo — nothing encrypted is committed

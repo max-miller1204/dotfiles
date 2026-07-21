@@ -7,7 +7,8 @@
 # Overridable via env:
 #   CHEZMOI_BIN      chezmoi binary (default: chezmoi on PATH)
 #   DOTFILES_REPO    repo argument for chezmoi init (default: this repo)
-#   DOTFILES_BRANCH  branch to init from (default: main)
+#   DOTFILES_BRANCH    branch to init from (default: main)
+#   DOTFILES_REVISION  exact source commit expected after init (optional)
 #
 # Determinism notes (hard-won; violating any of these makes the test flaky):
 # - chezmoi's bool prompt is a bubbletea TUI that defers drawing on a 0x0 pty,
@@ -24,14 +25,16 @@ set -uo pipefail
 CHEZMOI_BIN="${CHEZMOI_BIN:-chezmoi}"
 DOTFILES_REPO="${DOTFILES_REPO:-max-miller1204/dotfiles}"
 DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+DOTFILES_REVISION="${DOTFILES_REVISION:-}"
 
 FAILURES=0
 
 run_case() {
-    local answer="$1" expected="$2" tmp expect_rc
-    tmp="$(mktemp -d)"
-    HOME="$tmp" XDG_CONFIG_HOME="$tmp/.config" XDG_DATA_HOME="$tmp/.local/share" \
-    XDG_CACHE_HOME="$tmp/.cache" expect <<EOF >"$tmp/expect.log" 2>&1
+	local answer="$1" expected_headless="$2" expected_configuration="$3"
+	local actual_configuration actual_headless actual_revision expect_rc tmp
+	tmp="$(mktemp -d)"
+	HOME="$tmp" XDG_CONFIG_HOME="$tmp/.config" XDG_DATA_HOME="$tmp/.local/share" \
+		XDG_CACHE_HOME="$tmp/.cache" expect <<EOF >"$tmp/expect.log" 2>&1
 set timeout 180
 set stty_init "rows 40 cols 120"
 spawn env HOME=$tmp XDG_CONFIG_HOME=$tmp/.config XDG_DATA_HOME=$tmp/.local/share XDG_CACHE_HOME=$tmp/.cache TERM=xterm-256color $CHEZMOI_BIN init $DOTFILES_REPO --branch $DOTFILES_BRANCH
@@ -41,21 +44,34 @@ expect {
 }
 expect eof
 EOF
-    expect_rc=$?
-    local got
-    got="$(grep -E '^\s*headless' "$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null | tr -d ' ')"
-    if [ "$got" = "headless=$expected" ]; then
-        echo "PROMPT-TEST PASS: answer '$answer' -> $got"
-    else
-        echo "PROMPT-TEST FAIL: answer '$answer' -> '$got' (expected headless=$expected)"
-        echo "--- config was:"; head -20 "$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null
-        echo "--- expect exited $expect_rc; transcript:"
-        cat "$tmp/expect.log" 2>/dev/null
-        FAILURES=$((FAILURES + 1))
-    fi
-    rm -rf "$tmp"
+	expect_rc=$?
+	actual_headless="$(grep -E '^\s*headless' \
+		"$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null | tr -d ' ')"
+	actual_configuration="$(grep -E '^\s*homeManagerConfiguration' \
+		"$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null |
+		sed -E 's/^[^=]+=[[:space:]]*"([^"]+)"/\1/')"
+	actual_revision="$(git -C "$tmp/.local/share/chezmoi" rev-parse HEAD \
+		2>/dev/null || true)"
+	if [ "$expect_rc" -eq 0 ] &&
+		[ "$actual_headless" = "headless=$expected_headless" ] &&
+		[ "$actual_configuration" = "$expected_configuration" ] &&
+		{ [ -z "$DOTFILES_REVISION" ] ||
+			[ "$actual_revision" = "$DOTFILES_REVISION" ]; }; then
+		echo "PROMPT-TEST PASS: answer '$answer' -> $actual_headless, $actual_configuration, $actual_revision"
+	else
+		echo "PROMPT-TEST FAIL: answer '$answer'" \
+			"-> '$actual_headless', '$actual_configuration', '$actual_revision'"
+		echo "expected: headless=$expected_headless," \
+			"$expected_configuration, ${DOTFILES_REVISION:-any revision}"
+		echo "--- config was:"
+		head -25 "$tmp/.config/chezmoi/chezmoi.toml" 2>/dev/null
+		echo "--- expect exited $expect_rc; transcript:"
+		cat "$tmp/expect.log" 2>/dev/null
+		FAILURES=$((FAILURES + 1))
+	fi
+	rm -rf "$tmp"
 }
 
-run_case "" false
-run_case "y" true
+run_case "" false max@linux-desktop
+run_case "y" true max@linux-headless
 exit "$FAILURES"

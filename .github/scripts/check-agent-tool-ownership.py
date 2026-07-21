@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HUNK_PREFIX = "~/.local/share/npm-hunkdiff"
 HUNK_SKILL = f"{HUNK_PREFIX}/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
 PI_PREFIX = "~/.local/share/npm-pi"
+PI_PREFIX_SHELL = PI_PREFIX.replace("~", "$HOME", 1)
 
 
 def read(relative: str) -> str:
@@ -70,7 +71,7 @@ def main() -> None:
 
     pi_installer = read(".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl")
     required_pi_installer = (
-        'pi_prefix="$HOME/.local/share/npm-pi"',
+        f'pi_prefix="{PI_PREFIX_SHELL}"',
         'npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest',
         '"$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm"',
         'ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"',

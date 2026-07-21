@@ -24,7 +24,7 @@ const SUSPICIOUS_BASH_PATTERNS = [
 		reason: "sudo escapes the worktree's user-level write policy",
 	},
 	{
-		pattern: /\brm\s+(?:-[^\s]*r[^\s]*|--recursive)\b/i,
+		pattern: /\brm\s+(?:-[^\s]+\s+)*(?:-[^\s]*r[^\s]*|--recursive)\b/i,
 		reason: "recursive removal can affect paths outside this worktree",
 	},
 	{

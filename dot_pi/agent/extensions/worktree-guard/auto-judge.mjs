@@ -62,7 +62,10 @@ export function parseJudgeResponse(output) {
 	};
 }
 
-export function autoDecision(judgment, threshold = DEFAULT_CONFIDENCE_THRESHOLD) {
+export function autoDecision(
+	judgment,
+	threshold = DEFAULT_CONFIDENCE_THRESHOLD,
+) {
 	if (!judgment || judgment.confidence < threshold) return "ask";
 	return judgment.verdict;
 }

@@ -19,7 +19,8 @@ APPLY_LOG="${APPLY_LOG:-}"
 # Kept explicit so this file doubles as the ownership checklist specification.
 MANIFEST_BINS=(fish git jq curl wget gpg unzip add-apt-repository zenity mise
 	gh op pfetch brev treehouse no-mistakes herdr)
-NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls fnm uv)
+NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls
+	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 RUNTIME_BINS=(node npm python python3 rustup rustc cargo bun hunk)
@@ -50,13 +51,16 @@ fish_uses_rustup() {
 fish_uses_bun() {
 	[[ "$(fish_path "$1")" == "${BUN_INSTALL:-$HOME/.bun}/bin/$1" ]]
 }
+fish_uses_mise() {
+	[[ "$(fish_path "$1")" == "$HOME/.local/share/mise/shims/$1" ]]
+}
 profile_has_one_workstation() {
 	nix profile list --profile "$DOTFILES_NIX_PROFILE" --json |
 		jq -e '.elements | length == 1 and ([.[] | .storePaths[]? | contains("dotfiles-workstation")] | any)'
 }
-mise_has_no_runtime_declarations() {
+mise_owns_only_pi_and_hunk() {
 	"$HOME/.local/bin/mise" ls --global --json |
-		jq -e '. as $tools | (["node", "python", "rust", "go", "bun", "uv", "go:golang.org/x/tools/gopls"] | any(. as $key | $tools | has($key))) | not'
+		jq -e 'keys | sort == ["npm:@earendil-works/pi-coding-agent", "npm:hunkdiff"]'
 }
 
 if [[ "$MODE" == "preflight" ]]; then
@@ -120,7 +124,9 @@ hard "python resolves through uv" fish_uses_uv_python python
 hard "python3 resolves through uv" fish_uses_uv_python python3
 for b in rustup rustc cargo; do hard "$b resolves through rustup" fish_uses_rustup "$b"; done
 hard "bun resolves through native installer" fish_uses_bun bun
-hard "fresh mise config has no runtime declarations" mise_has_no_runtime_declarations
+hard "fresh mise config owns only Pi and Hunk" mise_owns_only_pi_and_hunk
+hard "pi resolves through mise" fish_uses_mise pi
+hard "hunk resolves through mise" fish_uses_mise hunk
 
 echo "== coding agents + nix =="
 for b in "${AGENT_BINS[@]}"; do hard "agent $b" fish_has "$b"; done
@@ -128,6 +134,21 @@ hard "nix" fish_has nix
 
 echo "== LSP servers =="
 for b in "${LSP_BINS[@]}"; do hard "lsp $b" fish_has "$b"; done
+SOURCE_PATH="$(chezmoi source-path)"
+OWNERSHIP_REPORT="$(python3 "$SOURCE_PATH/.github/scripts/check-lsp-ownership.py" 2>&1)"
+OWNERSHIP_RC=$?
+[[ -n "$OWNERSHIP_REPORT" ]] && echo "$OWNERSHIP_REPORT"
+hard "source declarations assign every LSP tool to exactly one owner" \
+	test "$OWNERSHIP_RC" -eq 0
+LSP_REPORT="$(
+	python3 "$SOURCE_PATH/nix/lsp-smoke.py" \
+		"$DOTFILES_NIX_PROFILE/bin/pyright-langserver" \
+		"$DOTFILES_NIX_PROFILE/bin/typescript-language-server" 2>&1
+)"
+LSP_RC=$?
+[[ -n "$LSP_REPORT" ]] && echo "$LSP_REPORT"
+hard "Nix-owned Pyright and TypeScript servers handle Claude-like LSP requests without NODE_PATH" \
+	test "$LSP_RC" -eq 0
 
 echo "== login shell =="
 FISH_PATH="$(command -v fish || true)"
@@ -231,8 +252,11 @@ fi
 hard "direnv loads a project flake" test "$DIRENV_RC" -eq 0
 
 echo "== agent config end state (not exit codes - the scripts swallow failures) =="
-hard "claude plugins: 7 enabled (5 LSP + agent-sdk-dev + skill-creator)" \
-	bash -c "PATH=\"\$HOME/.local/bin:\$PATH\" claude plugin list --json 2>/dev/null | jq -e 'map(select(.enabled)) | length >= 7'"
+hard "claude plugins: exact LSP set plus agent-sdk-dev and skill-creator enabled" \
+	bash -c "PATH=\"\$HOME/.local/bin:\$PATH\" claude plugin list --json 2>/dev/null | jq -e '
+		map(select(.enabled) | .id) as \$enabled
+		| [\"rust-analyzer-lsp\", \"pyright-lsp\", \"typescript-lsp\", \"gopls-lsp\", \"clangd-lsp\", \"agent-sdk-dev\", \"skill-creator\"]
+		| all(. as \$name | \$enabled | index(\$name + \"@claude-plugins-official\") != null)'"
 hard "claude MCP servers synced into ~/.claude.json" \
 	bash -c "jq -e '.mcpServers | has(\"playwright\") and has(\"playwright-chrome\")' \"\$HOME/.claude.json\""
 hard "codex MCP servers in ~/.codex/config.toml" \
@@ -327,7 +351,7 @@ echo "== versions (for the report) =="
 # pipefail), then invoke the binary directly for its version. pfetch's last
 # escape sequence (ESC[?7h) has no trailing newline and lands on the path's
 # line, so strip ANSI/DEC escapes before picking the line.
-for b in chezmoi nix mise fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim fnm uv go gopls node python rustup rustc cargo bun gh op; do
+for b in chezmoi nix mise fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim fnm uv go gopls pyright typescript-language-server tsc node python rustup rustc cargo bun gh op; do
 	p="$(fish -l -i -c "command -v $b" 2>/dev/null | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1 || true)"
 	if [[ -n "$p" && -x "$p" ]]; then
 		case "$b" in

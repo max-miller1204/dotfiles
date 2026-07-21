@@ -49,7 +49,7 @@ That's it - the install scripts run during `apply` and handle the rest:
 - installs mutable language runtimes through their native managers after the Nix profile is active.
   `fnm` owns Node LTS, `uv` owns Python 3, and `rustup` owns stable Rust, Cargo, targets, and rust-analyzer.
   Bun remains on its official native installer.
-  Nix owns the `fnm` and `uv` executables plus Go and gopls.
+  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, and typescript-language-server.
   Existing stale mise installations are not deleted.
 - installs **Nix** via the Determinate installer on Linux.
   macOS currently requires an existing manual Nix installation before `chezmoi apply`.
@@ -62,10 +62,10 @@ That's it - the install scripts run during `apply` and handle the rest:
   instead of orphaning in the version-pinned runtime dir - so all four coding
   agents (Claude, Codex, OpenCode, pi) are present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
-- installs the **language servers** Claude Code's LSP plugins need: pyright and
-  typescript-language-server (+ typescript) as transitional mise-managed tools,
-  Go and gopls together through Nix, rust-analyzer through rustup, and clangd
-  from apt (Linux) or Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
+- installs the **language servers** Claude Code's LSP plugins need: Pyright,
+  TypeScript, typescript-language-server, Go, and gopls through the cumulative
+  Nix profile, rust-analyzer through rustup, and clangd from apt (Linux) or
+  Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
   when that script changes. The language set (plugin + server install method)
   lives once in the `lspLanguages` table in `.chezmoi.toml.tmpl`, shared by the
   server install and the plugin install so the two can't drift
@@ -96,7 +96,8 @@ Intel macOS follows the separate `nixpkgs-26.05-darwin` input, its final maintai
 The flake exposes cumulative `core`, `headless`, `lsp`, and `workstation` package outputs, plus `default` as an alias of `workstation`.
 The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.
 The cumulative `headless` output adds `gum`, `starship`, `atuin`, `zoxide`, `direnv`, `tmux`, Neovim, and nix-direnv.
-The cumulative `lsp` output adds Go and gopls together.
+The cumulative `lsp` output adds Go, gopls, Pyright, TypeScript, and typescript-language-server together.
+The Nix package gives the language server a pinned TypeScript fallback internally, so no shell-wide `NODE_PATH` is needed.
 The cumulative `workstation` output adds the `fnm` and `uv` manager executables.
 Only `workstation` is installed, so overlapping bundle elements never enter the profile.
 
@@ -273,7 +274,8 @@ Four coding agents are first-class and interchangeable: **Claude Code**, **Codex
 They share one set of global instructions, so you can switch between them with the same rules.
 
 Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
-pi and Hunk are npm-distributed, so they remain transitional mise-managed npm tools (`npm:@earendil-works/pi-coding-agent` and `npm:hunkdiff`) with self-contained backends that do not own the interactive fnm Node runtime.
+pi and Hunk are the only remaining mise-managed tools (`npm:@earendil-works/pi-coding-agent` and `npm:hunkdiff`).
+Their self-contained backends do not own the interactive fnm Node runtime.
 A fresh apply has all four agents and the Hunk review CLI present.
 
 ### Shared instructions (single-source AGENTS.md)
@@ -324,7 +326,7 @@ Cross-platform:
 - `dot_config/fish/config.fish.tmpl` - fish shell aliases, environment, prompt integration, and dedicated Nix profile PATH ordering
 - `dot_config/fish/functions/*.fish` - custom Fish functions.
   `update-all` refreshes native packages, fnm Node, uv Python, rustup, Bun, remaining mise tools, and chezmoi without mutating `flake.lock`.
-  `lsp-upgrade` targets the Claude Code language servers
+  `lsp-upgrade` reports the flake-pinned servers and upgrades the rustup- and OS-owned Claude Code language servers
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -336,7 +338,7 @@ Cross-platform:
   The `direnv hook fish` in `config.fish` runs after the dedicated profile is added, and the integration stays inert if that profile is absent.
 - `.chezmoidata/packages.yaml` - single source of truth for native and mise bootstrap packages.
   It intentionally excludes executables owned by the Nix bundle
-- `nix/flake.nix`, `flake.lock`, `packages.nix`, and `bundles.nix` - the source-only pinned package graph.
+- `nix/flake.nix`, `flake.lock`, `packages.nix`, `bundles.nix`, and `lsp-smoke.py` - the source-only pinned package graph and Claude-like LSP protocol smoke.
   `.chezmoiignore` prevents this directory from materializing as `~/nix`
 - `renovate.json` - separate automated update rules for unstable nixpkgs and the final Intel Darwin nixpkgs line
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
@@ -407,7 +409,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
-- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` - installs or verifies the language servers Claude Code's LSP plugins need (pyright and TypeScript tools via mise, gopls via Nix, rust-analyzer via rustup, and clangd via apt/brew), all derived from the single-source `lspLanguages` table
+- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` - verifies the Nix-owned Pyright, TypeScript, typescript-language-server, and gopls tools, ensures rust-analyzer through rustup, and installs clangd via apt/brew, all derived from the single-source `lspLanguages` table
 - `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (that state lives in the chezmoi-rewritten settings.json, so it must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode) and the shared `~/.agents/skills` tree pi reads; the skill is `.chezmoiignore`d in both locations, so brev owns it with no chezmoi conflict
 - `.chezmoiscripts/run_after_71-sync-no-mistakes-skill.sh.tmpl` - keeps the ignored Claude and shared-agent no-mistakes skills aligned with the installed CLI release, fetching only when its release marker or either skill checksum differs
@@ -551,7 +553,7 @@ the repo and need manual hand-off.
    claude mcp list           # should show playwright + playwright-chrome
    mise list                 # remaining transitional npm-distributed tools
    nix profile list --profile "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-   type -a eza go gopls fnm uv # first result should be the dedicated profile
+   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv # first result should be the dedicated profile
    type -a node python rustc bun # native runtime-manager paths should win
    which brew fish claude codex opencode pi op
    op whoami                 # confirms 1Password sign-in
@@ -569,4 +571,4 @@ the repo and need manual hand-off.
 - The Nix profile installer is `run_onchange`, so a committed flake, lock, package grouping, or selected bundle change triggers a build-first profile upgrade
 - `update-all` refreshes native package managers, fnm Node, uv Python, rustup, Bun, remaining mise tools, and chezmoi.
   It never updates `flake.lock`; `chezmoi update` receives lock changes committed by Renovate or a maintainer
-- `lsp-upgrade` targets the Claude Code language servers that remain outside this milestone's Nix bundle
+- `lsp-upgrade` reports the flake-pinned LSPs and upgrades the rustup- and OS-owned servers

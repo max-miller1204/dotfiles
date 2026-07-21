@@ -2,9 +2,6 @@
 {{- $pythonVersion := (get . "pythonVersion" | default "3") -}}
 {{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
 {{- $miseTools := list "npm:@earendil-works/pi-coding-agent" "npm:hunkdiff" -}}
-{{- range .lspLanguages -}}
-{{-   if eq .method "mise" -}}{{- range .miseTools -}}{{- $miseTools = append $miseTools . -}}{{- end -}}{{- end -}}
-{{- end -}}
 function update-all --description 'Update every package source this dotfiles repo installs'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)

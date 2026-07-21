@@ -17,10 +17,6 @@
     nodeVersion = "lts"
     pythonVersion = "3"
     rustToolchain = "stable"
-    # The mise typescript prefix relative to $HOME, shared by the fish config's
-    # NODE_PATH and the install script's resolution check (each prepends its own
-    # shell's home) so the derived path can't drift between the two.
-    tsNodeModulesRel = ".local/share/mise/installs/npm-typescript/latest/lib/node_modules"
     # Non-LSP Claude Code plugins (marketplace-qualified in the install script).
     # Installed/enabled by run_after_65-setup-claude-plugins.
     extraClaudePlugins = ["agent-sdk-dev", "skill-creator"]
@@ -31,7 +27,6 @@
 # run_onchange_after_50-install-lsp-servers and the lsp-upgrade fish function), so
 # adding or removing an LSP language is a one-place edit here. The plugin list and
 # the server-install list can no longer drift because both derive from this table.
-#   method = "mise"   -> miseTools installed via `mise use -g`
 #   method = "nix"    -> executable supplied by the dedicated Nix profile
 #   method = "rustup" -> rustupComponent added to the selected rust toolchain
 #   method = "os"     -> OS package (aptPackage on Linux, brewFormula on macOS)
@@ -42,15 +37,12 @@
     verifyBin = "rust-analyzer"
 [[data.lspLanguages]]
     plugin = "pyright-lsp"
-    method = "mise"
-    miseTools = ["npm:pyright"]
+    method = "nix"
     verifyBin = "pyright-langserver"
 [[data.lspLanguages]]
     plugin = "typescript-lsp"
-    method = "mise"
-    miseTools = ["npm:typescript-language-server", "npm:typescript"]
+    method = "nix"
     verifyBin = "typescript-language-server"
-    verifyTsResolve = true
 [[data.lspLanguages]]
     plugin = "gopls-lsp"
     method = "nix"

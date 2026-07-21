@@ -2,12 +2,10 @@
        .chezmoi.toml.tmpl, the same table that drives installation and plugin
        setup, so this upgrade helper cannot drift from either. */ -}}
 {{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
-{{- $miseTools := list -}}
 {{- $nixLangs := list -}}
 {{- $rustupLangs := list -}}
 {{- $osLangs := list -}}
 {{- range .lspLanguages -}}
-{{-   if eq .method "mise" -}}{{- range .miseTools -}}{{- $miseTools = append $miseTools . -}}{{- end -}}{{- end -}}
 {{-   if eq .method "nix" -}}{{- $nixLangs = append $nixLangs . -}}{{- end -}}
 {{-   if eq .method "rustup" -}}{{- $rustupLangs = append $rustupLangs . -}}{{- end -}}
 {{-   if eq .method "os" -}}{{- $osLangs = append $osLangs . -}}{{- end -}}
@@ -16,12 +14,6 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
 
-{{- if $miseTools }}
-    if command -q mise
-        echo "$section==> remaining mise LSP servers$reset"
-        mise upgrade {{ $miseTools | join " " }}; or return
-    end
-{{- end }}
 {{- range $rustupLangs }}
 
     if command -q rustup

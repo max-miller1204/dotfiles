@@ -56,9 +56,10 @@ paths:
   Bun remains under `${BUN_INSTALL:-~/.bun}` through its official installer.
   The Bun destination is placed on PATH before invoking the installer so the installer does not append unmanaged lines to Fish config.
   Existing mise declarations and installations are audited but never deleted automatically.
-- Go and gopls are both Nix-owned and live in the cumulative `lsp` bundle.
-  Never split their ownership because gopls invokes Go from PATH.
-  Pyright and TypeScript tooling remain transitional mise packages until the next phase.
+- Go, gopls, Pyright, TypeScript, and typescript-language-server are Nix-owned and live in the cumulative `lsp` bundle.
+  Never split Go from gopls because gopls invokes Go from PATH.
+  Never split TypeScript from typescript-language-server because the server loads that module at runtime.
+  The Nix package supplies its pinned TypeScript fallback internally, so Fish must not export a mise-specific `NODE_PATH`.
 
 ## Vendor script installers
 
@@ -72,7 +73,7 @@ paths:
 
 ## Package ownership choices
 
-- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, fnm, and uv on every supported system.
+- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, Pyright, TypeScript, typescript-language-server, fnm, and uv on every supported system.
   They are absent from both the manifest and the mise toolchain command.
   Existing stale installs are not automatically deleted, so Fish moves mise shims to the end and guarantees the new owners win during migration.
   Nix also gives Linux a tmux release new enough for the `extended-keys-format` option used by `tmux.conf` instead of Ubuntu 24.04's tmux 3.4.

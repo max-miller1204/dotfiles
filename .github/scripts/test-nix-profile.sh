@@ -41,13 +41,17 @@ flake="path:$tmp/nix"
 mkdir -p "$(dirname "$profile")"
 
 out="$(nix build "$flake#workstation" --no-link --print-out-paths)"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls fnm uv; do
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
 	case "$bin" in
 	direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
+	pyright-langserver | tsserver) ;;
 	tmux) "$out/bin/$bin" -V >/dev/null ;;
 	*) "$out/bin/$bin" --version >/dev/null ;;
 	esac
 done
+python3 "$repo_root/nix/lsp-smoke.py" \
+	"$out/bin/pyright-langserver" \
+	"$out/bin/typescript-language-server"
 test -r "$out/share/nix-direnv/direnvrc"
 
 nix profile add --profile "$profile" "$flake#workstation"

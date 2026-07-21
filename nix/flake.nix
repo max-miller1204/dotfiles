@@ -82,11 +82,20 @@
           lsp-smoke =
             pkgs.runCommand "dotfiles-lsp-smoke"
               {
-                nativeBuildInputs = [ bundles.lsp ];
+                nativeBuildInputs = [
+                  bundles.lsp
+                  pkgs.python3
+                ];
               }
               ''
                 go version
                 gopls version
+                pyright --version
+                typescript-language-server --version
+                tsc --version
+                python3 ${./lsp-smoke.py} \
+                  "$(command -v pyright-langserver)" \
+                  "$(command -v typescript-language-server)"
                 touch "$out"
               '';
 

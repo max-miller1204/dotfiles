@@ -213,16 +213,18 @@ plain_direnv_works() {
 	[[ "$result" == loaded ]]
 }
 nix_direnv_flake_works() {
-	local command_name direnv_bin index layout nixpkgs_path project profile
-	local source_dir
+	local command_name direnv_bin index layout nix_bin nix_path
+	local nixpkgs_path project profile source_dir
 	local -a global_paths=()
 	direnv_bin="$(fish_path direnv)" || return 1
+	nix_bin="$(fish_path nix)" || return 1
+	nix_path="$(dirname "$nix_bin"):$PATH"
 	source_dir="$HOME/.local/share/chezmoi"
 	project="$(mktemp -d)" || return 1
 	for command_name in node python cargo go bun; do
 		global_paths+=("$(fish_path "$command_name")")
 	done
-	nixpkgs_path="$(nix eval --raw \
+	nixpkgs_path="$("$nix_bin" eval --raw \
 		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
 		rm -rf "$project"
 		return 1
@@ -247,11 +249,11 @@ EOF
 use flake
 export DOTFILES_NIX_DIRENV_LAYOUT_DIR="$(direnv_layout_dir)"
 EOF
-	if ! "$direnv_bin" allow "$project" >/dev/null 2>&1; then
+	if ! PATH="$nix_path" "$direnv_bin" allow "$project" >/dev/null 2>&1; then
 		rm -rf "$project"
 		return 1
 	fi
-	layout="$("$direnv_bin" exec "$project" sh -c '
+	layout="$(PATH="$nix_path" "$direnv_bin" exec "$project" sh -c '
 		test "$DOTFILES_NIX_DIRENV" = loaded || exit 1
 		for command_name in node python cargo go bun; do
 			test "$("$command_name")" = "project-$command_name" || exit 1
@@ -261,7 +263,7 @@ EOF
 		rm -rf "$project"
 		return 1
 	}
-	if ! "$direnv_bin" exec "$project" fish -l -c '
+	if ! PATH="$nix_path" "$direnv_bin" exec "$project" fish -l -c '
 		for command_name in node python cargo go bun
 			test ($command_name) = project-$command_name; or exit 1
 		end
@@ -300,13 +302,16 @@ fi
 PASS=0
 FAIL=0
 hard() { # hard "<desc>" <cmd...>
-	local desc="$1"
+	local desc="$1" output
 	shift
-	if "$@" >/dev/null 2>&1; then
+	if output="$("$@" 2>&1)"; then
 		echo "PASS: $desc"
 		PASS=$((PASS + 1))
 	else
 		echo "FAIL: $desc"
+		if [[ -n "$output" ]]; then
+			printf '%s\n' "$output" | sed 's/^/    /'
+		fi
 		FAIL=$((FAIL + 1))
 	fi
 }

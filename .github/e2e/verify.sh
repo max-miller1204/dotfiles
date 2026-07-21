@@ -218,19 +218,32 @@ plain_direnv_works() {
 	[[ "$result" == loaded ]]
 }
 nix_direnv_flake_works() {
-	local command_name direnv_bin index layout nix_bin nix_path
-	local nixpkgs_path project profile source_dir
+	local command_name current_path direnv_bin index layout nix_bin nix_path
+	local nixpkgs_path probe_error project profile source_dir
 	local -a global_paths=()
-	direnv_bin="$(fish_path direnv)" || return 1
-	nix_bin="$(fish_path nix)" || return 1
+	direnv_bin="$(fish_path direnv)" || {
+		echo 'Could not resolve direnv through Fish' >&2
+		return 1
+	}
+	nix_bin="$(fish_path nix)" || {
+		echo 'Could not resolve Nix through Fish' >&2
+		return 1
+	}
 	nix_path="$(dirname "$nix_bin"):$PATH"
 	source_dir="$HOME/.local/share/chezmoi"
 	project="$(mktemp -d)" || return 1
+	probe_error="$project/probe-error"
 	for command_name in node python cargo go bun; do
-		global_paths+=("$(canonical_fish_path "$command_name")")
+		current_path="$(canonical_fish_path "$command_name")" || {
+			echo "Could not resolve global $command_name" >&2
+			rm -rf "$project"
+			return 1
+		}
+		global_paths+=("$current_path")
 	done
 	nixpkgs_path="$("$nix_bin" eval --raw \
 		"path:$source_dir/nix#homeConfigurations.\"ci@linux-desktop\".pkgs.path")" || {
+		echo 'Could not evaluate the pinned nixpkgs path' >&2
 		rm -rf "$project"
 		return 1
 	}
@@ -254,41 +267,58 @@ EOF
 use flake
 export DOTFILES_NIX_DIRENV_LAYOUT_DIR="$(direnv_layout_dir)"
 EOF
-	if ! PATH="$nix_path" "$direnv_bin" allow "$project" >/dev/null 2>&1; then
+	if ! PATH="$nix_path" "$direnv_bin" allow "$project" \
+		> /dev/null 2>"$probe_error"; then
+		echo 'direnv allow failed' >&2
+		sed 's/^/  /' "$probe_error" >&2
 		rm -rf "$project"
 		return 1
 	fi
-	layout="$(PATH="$nix_path" "$direnv_bin" exec "$project" sh -c '
+	if ! layout="$(PATH="$nix_path" "$direnv_bin" exec "$project" sh -c '
 		test "$DOTFILES_NIX_DIRENV" = loaded || exit 1
 		for command_name in node python cargo go bun; do
 			test "$("$command_name")" = "project-$command_name" || exit 1
 		done
 		printf %s "$DOTFILES_NIX_DIRENV_LAYOUT_DIR"
-	' 2>/dev/null)" || {
+	' 2>"$probe_error")"; then
+		echo 'direnv project command probe failed' >&2
+		sed 's/^/  /' "$probe_error" >&2
 		rm -rf "$project"
 		return 1
-	}
+	fi
 	if ! PATH="$nix_path" "$direnv_bin" exec "$project" fish -l -c '
 		for command_name in node python cargo go bun
 			test ($command_name) = project-$command_name; or exit 1
 		end
-	' >/dev/null 2>&1; then
+	' >/dev/null 2>"$probe_error"; then
+		echo 'direnv project Fish probe failed' >&2
+		sed 's/^/  /' "$probe_error" >&2
 		rm -rf "$project"
 		return 1
 	fi
 	profile="$(find "$layout" -maxdepth 1 -type l -name 'flake-profile*' \
 		-exec test -e {} \; -print -quit)"
+	if [[ -z "$profile" ]]; then
+		echo "No live flake-profile GC root under $layout" >&2
+		rm -rf "$project"
+		return 1
+	fi
 	index=0
 	for command_name in node python cargo go bun; do
-		[[ "$(canonical_fish_path "$command_name")" \
-			== "${global_paths[$index]}" ]] || {
+		current_path="$(canonical_fish_path "$command_name")" || {
+			echo "Could not re-resolve global $command_name" >&2
 			rm -rf "$project"
 			return 1
 		}
+		if [[ "$current_path" != "${global_paths[$index]}" ]]; then
+			printf 'Global %s target changed: %s != %s\n' \
+				"$command_name" "$current_path" "${global_paths[$index]}" >&2
+			rm -rf "$project"
+			return 1
+		fi
 		index=$((index + 1))
 	done
 	rm -rf "$project"
-	[[ -n "$profile" ]]
 }
 
 if [[ "$MODE" == "preflight" ]]; then

@@ -6,6 +6,20 @@ ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 OWNERSHIP="$ROOT/nix/data/tool-ownership.json"
 PACKAGES="$ROOT/.chezmoidata/packages.yaml"
 
+for required_file in "$OWNERSHIP" "$PACKAGES" "$ROOT/dot_pi/agent/settings.json"; do
+	if [[ ! -f "$required_file" ]]; then
+		echo "Missing ownership policy input file: $required_file" >&2
+		exit 1
+	fi
+done
+for scan_root in "$ROOT/.chezmoiscripts" "$ROOT/.chezmoitemplates" \
+	"$ROOT/dot_config/fish"; do
+	if [[ ! -d "$scan_root" ]]; then
+		echo "Missing forbidden-pattern scan directory: $scan_root" >&2
+		exit 1
+	fi
+done
+
 runtime_policy="$(
 	chezmoi --source "$ROOT" execute-template <<'EOF'
 {
@@ -63,7 +77,7 @@ jq -e '
 
 forbidden_pattern='mise activate|mise use|mise upgrade|resolve_mise|install_mise'
 forbidden_pattern+='|local/share/mise/shims|local/share/mise/installs/npm-hunkdiff'
-forbidden_pattern+='|fnm env[^#]*--use-on-cd'
+forbidden_pattern+='|fnm[^#]*env[^#]*--use-on-cd'
 if grep -R -n -E "$forbidden_pattern" \
 	"$ROOT/.chezmoiscripts" "$ROOT/.chezmoitemplates" \
 	"$ROOT/dot_config/fish" "$ROOT/dot_pi/agent/settings.json"; then

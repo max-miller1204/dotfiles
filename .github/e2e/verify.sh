@@ -102,10 +102,11 @@ fnm_auto_switch_is_disabled() {
 	project="$(mktemp -d)" || return 1
 	printf '%s\n' v0.0.1 >"$project/.node-version"
 	if fish -l -i -c "
-		set before (path resolve (command -v node))
-		cd '$project'
-		set after (path resolve (command -v node))
-		test \"\$before\" = \"\$after\"
+		not functions -q _fnm_autoload_hook
+		and set before (path resolve (command -v node))
+		and cd '$project'
+		and set after (path resolve (command -v node))
+		and test \"\$before\" = \"\$after\"
 	" >/dev/null 2>&1; then
 		status=0
 	else

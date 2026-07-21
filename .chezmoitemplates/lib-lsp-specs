@@ -8,6 +8,9 @@
 {{- end }}
 {{- $probeArg := "--version" }}
 {{- if hasKey . "probeArgs" }}
+{{-   if gt (len (get . "probeArgs")) 1 }}
+{{-     fail (printf "lspLanguages entry %s declares %d probeArgs but the probe protocol carries exactly one" $verifyBin (len (get . "probeArgs"))) }}
+{{-   end }}
 {{-   $probeArg = index (get . "probeArgs") 0 }}
 {{- else if eq $verifyBin "gopls" }}
 {{-   $probeArg = "version" }}

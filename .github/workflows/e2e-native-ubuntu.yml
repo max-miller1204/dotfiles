@@ -187,6 +187,8 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
           after=$(readlink -f "$profile")
           test "$before" = "$after"
+          grep -q 'Ensuring current Node LTS' apply.log
+          grep -q 'Installing current Pi and Hunk' apply.log
           runtime_pattern='Ensuring current Node LTS'
           runtime_pattern+='|Installing current Pi and Hunk'
           if grep -qE "$runtime_pattern" second-apply.log; then

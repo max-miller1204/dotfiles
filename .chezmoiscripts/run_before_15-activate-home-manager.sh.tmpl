@@ -103,7 +103,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 configuration_attr="$FLAKE#homeConfigurations.\"$HOME_MANAGER_CONFIGURATION\".config"
-configured_identity="$($NIX_BIN eval --json --no-write-lock-file \
+configured_identity="$("$NIX_BIN" eval --json --no-write-lock-file \
     "$configuration_attr" --apply 'config: {
         user = config.home.username;
         home = config.home.homeDirectory;

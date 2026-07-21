@@ -27,12 +27,26 @@ else
     set -q RUSTUP_HOME; or set -gx RUSTUP_HOME $HOME/.rustup
 end
 
+# Track every managed global directory separately so project shells can remove
+# startup-time copies and append them only after the devshell paths.
+set -l managed_global_path
+if set -q FNM_MULTISHELL_PATH; and test -d $FNM_MULTISHELL_PATH/bin
+    set -a managed_global_path $FNM_MULTISHELL_PATH/bin
+else
+    set -a managed_global_path $FNM_DIR/aliases/default/bin
+end
+set -a managed_global_path $NPM_CONFIG_PREFIX/bin ~/.nix-profile/bin \
+    $CARGO_HOME/bin ~/.local/bin ~/.opencode/bin
+
 set -l inherited_path
 for dir in $PATH
     if string match -q "$HOME/.local/share/mise/*" -- $dir
         continue
     end
     if test $dir = $HOME/.bun/bin
+        continue
+    end
+    if test $project_environment = true; and contains -- $dir $managed_global_path
         continue
     end
     if not contains -- $dir $inherited_path
@@ -53,12 +67,7 @@ end
 # user-local tools, OpenCode, then native paths. Project shells keep their
 # inherited devshell entries first and append any missing global fallbacks.
 set -l global_path
-if set -q FNM_MULTISHELL_PATH; and test -d $FNM_MULTISHELL_PATH/bin
-    set -a global_path $FNM_MULTISHELL_PATH/bin
-else if test -d $FNM_DIR/aliases/default/bin
-    set -a global_path $FNM_DIR/aliases/default/bin
-end
-for dir in $NPM_CONFIG_PREFIX/bin ~/.nix-profile/bin $CARGO_HOME/bin ~/.local/bin ~/.opencode/bin
+for dir in $managed_global_path
     if test -d $dir; and not contains -- $dir $global_path
         set -a global_path $dir
     end
@@ -66,7 +75,7 @@ end
 
 set -l user_path
 if test $project_environment = true
-    set user_path $PATH
+    set user_path $inherited_path
     for dir in $global_path
         if not contains -- $dir $user_path
             set -a user_path $dir
@@ -74,12 +83,15 @@ if test $project_environment = true
     end
 else
     set user_path $global_path
-    for dir in $PATH
+    for dir in $inherited_path
         if not contains -- $dir $user_path
             set -a user_path $dir
         end
     end
 end
+# A process-local empty value shadows any universal fish_user_paths so Fish
+# cannot silently prepend managed global directories after this assignment.
+set -g fish_user_paths
 set -gx PATH $user_path
 
 if status is-interactive

@@ -68,18 +68,18 @@ packages:
   - name: fish
     gui: false
     bin: fish
-    darwin: { brew: fish }
-    linux: { apt: fish }
+    darwin: {brew: fish}
+    linux: {apt: fish}
   - name: git
     gui: false
     bin: git
-    darwin: { brew: git }
-    linux: { apt: git }
+    darwin: {brew: git}
+    linux: {apt: git}
   - name: jq
     gui: false
     bin: jq
-    darwin: { brew: jq }
-    linux: { apt: jq }
+    darwin: {brew: jq}
+    linux: {apt: jq}
 
   # ---- Ubuntu base apt packages (no macOS counterpart). curl + ca-certificates
   #      come first because later installers use HTTPS; unzip is required by the
@@ -88,33 +88,33 @@ packages:
   - name: curl
     gui: false
     bin: curl
-    linux: { apt: curl }
+    linux: {apt: curl}
   - name: wget
     gui: false
     bin: wget
-    linux: { apt: wget }
+    linux: {apt: wget}
   - name: ca-certificates
     gui: false
-    linux: { apt: ca-certificates }
+    linux: {apt: ca-certificates}
   - name: gnupg
     gui: false
     bin: gpg
-    linux: { apt: gnupg }
+    linux: {apt: gnupg}
   - name: build-essential
     gui: false
-    linux: { apt: build-essential }
+    linux: {apt: build-essential}
   - name: unzip
     gui: false
     bin: unzip
-    linux: { apt: unzip }
+    linux: {apt: unzip}
   - name: software-properties-common
     gui: false
     bin: add-apt-repository
-    linux: { apt: software-properties-common }
+    linux: {apt: software-properties-common}
   - name: zenity
     gui: false
     bin: zenity
-    linux: { apt: zenity }
+    linux: {apt: zenity}
 
   # ---- mise: retained only for the npm-distributed Pi and Hunk tools.
   #      Language runtimes and LSP tooling are no longer declared through
@@ -122,7 +122,7 @@ packages:
   - name: mise
     gui: false
     bin: mise
-    darwin: { brew: mise }
+    darwin: {brew: mise}
     linux:
       script: "curl https://mise.run | sh"
       altpath: "$HOME/.local/bin/mise"
@@ -140,8 +140,8 @@ packages:
   - name: gh
     gui: false
     bin: gh
-    darwin: { brew: gh }
-    linux: { aptrepo: gh }
+    darwin: {brew: gh}
+    linux: {aptrepo: gh}
 
   # ---- op (1Password CLI): deliberately NOT moved to mise. Stays native on
   #      Linux
@@ -151,8 +151,8 @@ packages:
   - name: 1password-cli
     gui: false
     bin: op
-    darwin: { brew: 1password-cli }
-    linux: { aptrepo: 1password-cli }
+    darwin: {brew: 1password-cli}
+    linux: {aptrepo: 1password-cli}
 
   # ---- remaining curl-installed CLI tools. pfetch and brev take brew on
   #      macOS and the vendor installer on Ubuntu; treehouse, no-mistakes and
@@ -163,7 +163,7 @@ packages:
   - name: pfetch
     gui: false
     bin: pfetch
-    darwin: { brew: pfetch }
+    darwin: {brew: pfetch}
     linux:
       script: >-
         curl -fsSL
@@ -172,15 +172,17 @@ packages:
   - name: brev
     gui: false
     bin: brev
-    darwin: { brew: brevdev/homebrew-brev/brev, tolerant: true }
+    darwin: {brew: brevdev/homebrew-brev/brev, tolerant: true}
     # Deliberately NOT sudo: the upstream installer places the binary in
     # $HOME/.local/bin, so running it under sudo strands brev in
     # /root/.local/bin
     # where no user PATH (nor run_once_after_70's probe) can see it.
     linux:
       script: |-
-        bash -c "$(curl -fsSL \
-          https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+        url="$(printf '%s' \
+          'https://raw.githubusercontent.com/brevdev/brev-cli/' \
+          'main/bin/install-latest.sh')"
+        bash -c "$(curl -fsSL "$url")"
   # treehouse, no-mistakes, and herdr (agent multiplexer / terminal workspace
   # manager) are self-contained prebuilt binaries whose official curl installers
   # behave identically on macOS and Linux - curl works in every environment, no
@@ -212,24 +214,24 @@ packages:
   - name: herdr
     gui: false
     bin: herdr
-    any: { script: "curl -fsSL https://herdr.dev/install.sh | sh" }
+    any: {script: "curl -fsSL https://herdr.dev/install.sh | sh"}
 
   # ---- GUI desktop apps (cask on macOS; skipped when headless or on WSL) ----
   - name: ghostty
     gui: true
     bin: ghostty
-    darwin: { cask: ghostty }
-    linux: { apt: ghostty, ppa: "ppa:mkasberg/ghostty-ubuntu" }
+    darwin: {cask: ghostty}
+    linux: {apt: ghostty, ppa: "ppa:mkasberg/ghostty-ubuntu"}
   - name: discord
     gui: true
     bin: discord
-    darwin: { cask: discord }
+    darwin: {cask: discord}
     linux:
-      { deburl: "https://discord.com/api/download?platform=linux&format=deb" }
+      {deburl: "https://discord.com/api/download?platform=linux&format=deb"}
   - name: google-chrome
     gui: true
     bin: google-chrome-stable
-    darwin: { cask: google-chrome }
+    darwin: {cask: google-chrome}
     linux:
       deburl: >-
         $(printf '%s' 'https://dl.google.com/linux/direct/google-chrome-'
@@ -244,73 +246,72 @@ packages:
   - name: 1password
     gui: true
     bin: 1password
-    darwin: { cask: 1password }
+    darwin: {cask: 1password}
     linux:
       deburl: >-
         https://downloads.1password.com/linux/debian/$(dpkg
         --print-architecture)/stable/1password-latest.deb
   - name: voquill
     gui: true
-    darwin: { cask: voquill/voquill/voquill-desktop }
+    darwin: {cask: voquill/voquill/voquill-desktop}
     linux:
       script: "curl -fsSL https://voquill.github.io/apt/install.sh | bash"
       dpkg: voquill-desktop
   - name: obsidian
     gui: true
     bin: obsidian
-    darwin: { cask: obsidian }
+    darwin: {cask: obsidian}
     linux:
-      deburl: |-
-        $(releases_api=$(printf '%s' \
-          'https://api.github.com/repos/obsidianmd/' \
-          'obsidian-releases/releases/latest')
-        curl -fsSL "$releases_api" \
-          | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) | \
-          .browser_download_url' | head -n1)
+      deburl: >-
+        $(releases_api=$(printf '%s'
+        'https://api.github.com/repos/obsidianmd/'
+        'obsidian-releases/releases/latest'); curl -fsSL "$releases_api"
+        | jq -r '.assets[] | select(.name | endswith("_amd64.deb")) |
+        .browser_download_url' | head -n1)
   - name: anki
     gui: true
-    darwin: { cask: anki }
-    linux: { flatpak: net.ankiweb.Anki }
+    darwin: {cask: anki}
+    linux: {flatpak: net.ankiweb.Anki}
   - name: spotify
     gui: true
-    darwin: { cask: spotify }
-    linux: { flatpak: com.spotify.Client }
+    darwin: {cask: spotify}
+    linux: {flatpak: com.spotify.Client}
   - name: zoom
     gui: true
-    darwin: { cask: zoom }
-    linux: { flatpak: us.zoom.Zoom }
+    darwin: {cask: zoom}
+    linux: {flatpak: us.zoom.Zoom}
 
   # ---- macOS-only GUI casks ----
   - name: firefox
     gui: true
-    darwin: { cask: firefox }
+    darwin: {cask: firefox}
   - name: aerospace
     gui: true
-    darwin: { cask: nikitabobko/tap/aerospace }
+    darwin: {cask: nikitabobko/tap/aerospace}
   - name: karabiner-elements
     gui: true
-    darwin: { cask: karabiner-elements }
+    darwin: {cask: karabiner-elements}
   - name: raycast
     gui: true
-    darwin: { cask: raycast }
+    darwin: {cask: raycast}
   - name: zed
     gui: true
-    darwin: { cask: zed }
+    darwin: {cask: zed}
   - name: neovide-app
     gui: true
-    darwin: { cask: neovide-app }
+    darwin: {cask: neovide-app}
   - name: balenaetcher
     gui: true
-    darwin: { cask: balenaetcher }
+    darwin: {cask: balenaetcher}
   - name: macdown-3000
     gui: true
-    darwin: { cask: macdown-3000 }
+    darwin: {cask: macdown-3000}
   - name: pearcleaner
     gui: true
-    darwin: { cask: pearcleaner }
+    darwin: {cask: pearcleaner}
   - name: font-jetbrains-mono-nerd-font
     gui: true
-    darwin: { cask: font-jetbrains-mono-nerd-font }
+    darwin: {cask: font-jetbrains-mono-nerd-font}
 
 # ---- third-party apt-repo definitions, keyed by the `aptrepo:` value
 #      above ----

@@ -198,11 +198,14 @@ hard "ls aliased to eza" bash -c "fish -l -i -c 'type ls' 2>/dev/null | grep -q 
 direnv_flake_fixture() {
 	(
 		set -euo pipefail
-		local tmp system source managed_direnvrc
-		tmp="$(mktemp -d)"
-		trap 'rm -rf "$tmp"' EXIT
+		local tmp system source managed_direnvrc direnv_bin
+		DIRENV_FIXTURE_TMP="$(mktemp -d)"
+		tmp="$DIRENV_FIXTURE_TMP"
+		trap 'rm -rf "$DIRENV_FIXTURE_TMP"' EXIT
 		managed_direnvrc="$HOME/.config/direnv/direnvrc"
+		direnv_bin="$DOTFILES_NIX_PROFILE/bin/direnv"
 		test -r "$managed_direnvrc"
+		test -x "$direnv_bin"
 		mkdir -p "$tmp/config/direnv" "$tmp/data"
 		cp "$managed_direnvrc" "$tmp/config/direnv/direnvrc"
 		system="$(nix eval --impure --raw --expr builtins.currentSystem)"
@@ -214,8 +217,8 @@ direnv_flake_fixture() {
 			"XDG_CONFIG_HOME=$tmp/config"
 			"XDG_DATA_HOME=$tmp/data"
 		)
-		env "${direnv_env[@]}" direnv allow "$tmp" >/dev/null
-		env "${direnv_env[@]}" direnv exec "$tmp" \
+		env "${direnv_env[@]}" "$direnv_bin" allow "$tmp" >/dev/null
+		env "${direnv_env[@]}" "$direnv_bin" exec "$tmp" \
 			bash -c 'test "$DOTFILES_DIRENV_FIXTURE" = 1'
 	)
 }

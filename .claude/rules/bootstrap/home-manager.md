@@ -53,6 +53,7 @@ paths:
 - Package narrowing goes through the shared `nix/lib/command-only.nix` helper, and the CLI module narrows every package it owns, so the built profile's bin listing must equal the recorded command claims.
 - Home Manager still owns no writable configuration or user service.
 - The activation script validates the selected flake output against the current username, home directory, and Nix system.
+- Before evaluation and switching, the script prepends the resolved Nix binary's directory to `PATH` because `nix run` launches Home Manager with the inherited PATH and Home Manager invokes `nix` by name, so a Determinate installation completed earlier in the same apply stays visible.
 - That identity check evaluates one `nix eval --json` attribute set and parses it with the native `jq`, which the script resolves through `prepend_path` and requires before evaluation.
 - WSL selection wins over the Linux headless profile.
 - `DOTFILES_HM_CONFIGURATION` is restricted to declared real or CI outputs.

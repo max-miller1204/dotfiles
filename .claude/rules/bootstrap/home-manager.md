@@ -33,7 +33,7 @@ paths:
 ## Generations and updates
 
 - Home Manager activation must remain atomic, and a failed build must leave the previous generation active.
-- If failure occurs after a profile changes, rollback must restore both the Home Manager generation profile and the package profile; a failed first activation must remove newly created profiles.
+- If failure occurs after a profile changes, rollback must restore the exact captured Home Manager profile version with `nix profile rollback --to`, then restore the package profile through activation; a failed first activation must remove newly created profiles.
 - The activation script creates the XDG Nix profiles directory before recording state and switching, because a fresh machine has no `~/.local/state/nix/profiles` and the first standalone switch fails without it.
 - Do not add ad hoc `nix profile install` commands.
 - `update-all` must never update `nix/flake.lock`.

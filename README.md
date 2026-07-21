@@ -112,9 +112,19 @@ The recorded path is `<none>` on a machine that has never had an earlier generat
 ```sh
 nix run --no-write-lock-file "path:$(chezmoi source-path)/nix#home-manager" -- generations
 state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+profile_dir="$state_home/nix/profiles"
 previous=$(cat "$state_home/dotfiles/home-manager-previous-generation")
 if [ "$previous" != '<none>' ]; then
-  nix profile rollback --profile "$state_home/nix/profiles/home-manager"
+  version=
+  for generation in "$profile_dir"/home-manager-*-link; do
+    [ -L "$generation" ] || continue
+    [ "$(readlink "$generation")" = "$previous" ] || continue
+    version=${generation##*/home-manager-}
+    version=${version%-link}
+    break
+  done
+  [ -n "$version" ] || exit 1
+  nix profile rollback --profile "$profile_dir/home-manager" --to "$version"
   "$previous/activate"
 fi
 ```

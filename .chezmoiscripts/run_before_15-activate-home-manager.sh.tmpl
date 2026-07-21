@@ -140,6 +140,20 @@ remove_new_profile() {
     fi
 }
 
+profile_version() {
+    local active_link="$1" generation_prefix="$2" link_name version
+    [[ -L "$active_link" ]] || return 1
+    link_name="$(basename "$(readlink "$active_link")")"
+    case "$link_name" in
+        "$generation_prefix"-*-link) ;;
+        *) return 1 ;;
+    esac
+    version="${link_name#"$generation_prefix"-}"
+    version="${version%-link}"
+    [[ "$version" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$version"
+}
+
 nix_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
 profile="$nix_state_dir/home-manager"
@@ -150,13 +164,23 @@ umask 077
 mkdir -p "$nix_state_dir" "$state_dir"
 if [[ -e "$profile" || -L "$profile" ]]; then
     before_generation="$(resolve_link "$profile")"
+    if ! before_profile_version="$(profile_version "$profile" home-manager)"; then
+        printf 'Unsupported Home Manager profile link: %s\n' "$profile" >&2
+        exit 1
+    fi
 else
     before_generation='<none>'
+    before_profile_version='<none>'
 fi
 if [[ -e "$package_profile" || -L "$package_profile" ]]; then
     before_package_generation="$(resolve_link "$package_profile")"
+    if ! before_package_profile_version="$(profile_version "$package_profile" profile)"; then
+        printf 'Unsupported Nix package profile link: %s\n' "$package_profile" >&2
+        exit 1
+    fi
 else
     before_package_generation='<none>'
+    before_package_profile_version='<none>'
 fi
 printf '%s\n' "$before_generation" >"$before_switch_file"
 
@@ -177,7 +201,8 @@ if [[ "$switch_status" -ne 0 ]]; then
     if [[ "$before_generation" != '<none>' ]]; then
         log "Restoring Home Manager generation $before_generation"
         if [[ "$(resolve_link "$profile")" != "$before_generation" ]]; then
-            if ! "$NIX_BIN" profile rollback --profile "$profile"; then
+            if ! "$NIX_BIN" profile rollback --profile "$profile" \
+                --to "$before_profile_version"; then
                 rollback_ok=false
             elif [[ "$(resolve_link "$profile")" != "$before_generation" ]]; then
                 rollback_ok=false
@@ -185,6 +210,12 @@ if [[ "$switch_status" -ne 0 ]]; then
         fi
         if [[ "$rollback_ok" == true ]] \
             && ! "$before_generation/activate"; then
+            rollback_ok=false
+        fi
+        if [[ "$rollback_ok" == true ]] \
+            && [[ "$before_package_generation" != '<none>' ]] \
+            && [[ "$(resolve_link "$package_profile")" \
+                != "$before_package_generation" ]]; then
             rollback_ok=false
         fi
     else
@@ -195,7 +226,8 @@ if [[ "$switch_status" -ne 0 ]]; then
         elif [[ -e "$package_profile" || -L "$package_profile" ]] \
             && [[ "$(resolve_link "$package_profile")" \
                 != "$before_package_generation" ]]; then
-            if ! "$NIX_BIN" profile rollback --profile "$package_profile"; then
+            if ! "$NIX_BIN" profile rollback --profile "$package_profile" \
+                --to "$before_package_profile_version"; then
                 rollback_ok=false
             elif [[ "$(resolve_link "$package_profile")" \
                 != "$before_package_generation" ]]; then

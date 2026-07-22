@@ -12,6 +12,20 @@
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
 prepend_path "$profile/bin" "$HOME/.local/bin" "${CARGO_HOME:-$HOME/.cargo}/bin"
 unset RUSTUP_TOOLCHAIN
+{{- if eq .chezmoi.os "darwin" }}
+
+# Homebrew's prefix is not on the stock macOS PATH of a non-interactive apply,
+# and each chezmoi script starts a fresh process that never inherits script 10's
+# shellenv. Append both prefixes so the OS-package branch below reports its own
+# diagnostics instead of failing with "brew: command not found", while the
+# dedicated Nix profile keeps ownership of every executable it provides.
+for brew_bin in /opt/homebrew/bin /usr/local/bin; do
+    if [[ -x "$brew_bin/brew" ]]; then
+        export PATH="$PATH:$brew_bin"
+        break
+    fi
+done
+{{- end }}
 
 # ---- rustup component servers (rust-analyzer) --------------------
 {{- range .lspLanguages }}

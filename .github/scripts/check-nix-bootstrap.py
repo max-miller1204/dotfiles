@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check fresh-machine Nix bootstrap ownership, routing, and ordering."""
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +14,26 @@ HUNK = SCRIPTS / "run_onchange_before_17-install-hunk.sh.tmpl"
 PI = SCRIPTS / "run_onchange_before_18-install-pi.sh.tmpl"
 LSP = SCRIPTS / "run_onchange_after_50-install-lsp-servers.sh.tmpl"
 PACKAGES = REPO_ROOT / ".chezmoidata/packages.yaml"
+
+ORDERED_SCRIPTS = (NATIVE, NIX, PROFILE, RUNTIMES, HUNK, PI, LSP)
+# Native prerequisites, Nix, the dedicated profile, mutable runtimes, Hunk, Pi,
+# and the language servers, in the order each stage's dependencies require.
+ROLE_ORDER = (
+    "install-packages",
+    "install-nix",
+    "install-nix-profile",
+    "install-language-runtimes",
+    "install-hunk",
+    "install-pi",
+    "install-lsp-servers",
+)
+STAGE_PATTERN = re.compile(
+    r"^run_(?:once|onchange)_(?P<phase>before|after)_(?P<stage>\d+)"
+    r"-(?P<role>.+)\.sh\.tmpl$"
+)
+# chezmoi runs every `before` script ahead of every `after` script, and sorts
+# within each phase by name.
+PHASE_ORDER = {"before": 0, "after": 1}
 
 
 def require(text: str, needle: str, source: Path) -> None:
@@ -34,17 +55,48 @@ def assert_before(text: str, first: str, second: str, source: Path) -> None:
         )
 
 
-def main() -> None:
-    ordered_scripts = [NATIVE, NIX, PROFILE, RUNTIMES, HUNK, PI, LSP]
-    missing = [path for path in ordered_scripts if not path.is_file()]
+def check_stage_order() -> None:
+    """Read the real chezmoi execution order off disk, not off these constants."""
+    discovered: dict[str, list[tuple[tuple[int, int], Path]]] = {}
+    for path in sorted(SCRIPTS.iterdir()):
+        match = STAGE_PATTERN.match(path.name)
+        if not match or match.group("role") not in ROLE_ORDER:
+            continue
+        key = (PHASE_ORDER[match.group("phase")], int(match.group("stage")))
+        discovered.setdefault(match.group("role"), []).append((key, path))
+
+    duplicated = {
+        role: [path.name for _, path in found]
+        for role, found in discovered.items()
+        if len(found) > 1
+    }
+    if duplicated:
+        raise SystemExit(f"bootstrap stages are declared more than once: {duplicated}")
+    missing = [role for role in ROLE_ORDER if role not in discovered]
     if missing:
-        raise SystemExit(f"missing bootstrap scripts: {missing}")
-    expected_stages = ("_10-", "_12-", "_15-", "_16-", "_17-", "_18-", "_50-")
-    for path, stage in zip(ordered_scripts, expected_stages, strict=True):
-        if stage not in path.name:
-            raise SystemExit(
-                f"{path.name} no longer enforces its required bootstrap stage {stage}"
-            )
+        raise SystemExit(f"missing bootstrap stages: {missing}")
+
+    renamed = [
+        discovered[role][0][1].name
+        for role, expected in zip(ROLE_ORDER, ORDERED_SCRIPTS, strict=True)
+        if discovered[role][0][1] != expected
+    ]
+    if renamed:
+        raise SystemExit(
+            "bootstrap stages were renamed, so the ownership checks below still "
+            f"read the old file names: {renamed}"
+        )
+
+    keys = [discovered[role][0][0] for role in ROLE_ORDER]
+    if keys != sorted(keys):
+        raise SystemExit(
+            "bootstrap scripts no longer run in their required order: "
+            f"{[discovered[role][0][1].name for role in ROLE_ORDER]}"
+        )
+
+
+def main() -> None:
+    check_stage_order()
 
     native = NATIVE.read_text()
     nix = NIX.read_text()

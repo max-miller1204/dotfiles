@@ -6,6 +6,7 @@ paths:
   - ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
   - ".chezmoitemplates/{lib-install.sh,lib-apt.sh,lib-resolve.sh}"
   - ".github/e2e/verify.sh"
+  - "dot_config/direnv/direnvrc"
   - "dot_config/fish/{config.fish.tmpl,functions/update-all.fish.tmpl,functions/lsp-upgrade.fish.tmpl}"
   - "dot_config/tmux/{tmux.conf,executable_agent-switch.sh}"
   - "nix/**/*"
@@ -49,13 +50,18 @@ paths:
   Unstable nixpkgs serves Linux and Apple Silicon Darwin; Intel Darwin is unsupported (nixpkgs-unstable dropped the platform), and the bootstrap refuses it.
 - Every bundle uses `pkgs.buildEnv` with `/bin` and `/share`, and `ignoreCollisions = false`.
   Do not hide duplicate ownership with priorities or ignored collisions.
-- `run_onchange_before_15-install-nix-profile.sh.tmpl` hashes every flake file plus machine bundle data, builds and smoke-tests before activation, and manages one `dotfiles-workstation` element in `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles`.
-  A failed build must leave the prior profile generation active.
+- `run_onchange_before_15-install-nix-profile.sh.tmpl` hashes every flake file, builds and smoke-tests before activation, and manages one `dotfiles-workstation` element in `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles`.
+  The bundle is hardcoded, not machine data: the pre-activation smoke requires workstation's `fnm` and `uv`, and the ownership guard requires its `attrPath`, so a configurable key would only promise a selection the script cannot honor.
+  That guard identifies the element by `attrPath` and an element count of one, NOT by the recorded `originalUrl`, because a relocated chezmoi source directory or an apply from a worktree changes the flake reference without making the profile foreign; when the reference differs the script re-points the managed element at the current source instead of upgrading through a path that may no longer exist.
+  A failed build must leave the prior profile generation active, which `.github/scripts/test-nix-profile.sh` proves by running the rendered installer itself against an intentionally invalid flake.
   Never add other packages to this profile and never install overlapping bundle outputs separately.
 - The profile PATH is explicit in bootstrap and Fish.
   Fish puts the dedicated profile above native package-manager paths, prepends uv Python, rustup, Bun, and fnm runtime paths, and removes any stale mise shim path inherited from an older shell.
+  That scrub matches ANY PATH entry ending in `/mise/shims` rather than enumerating data homes, because mise resolves its shim directory from `MISE_DATA_DIR` or either data home; when it has to rewrite `fish_user_paths` it writes in that variable's own scope, since a session global would shadow a universal one and silently de-persist later interactive `fish_add_path` calls.
   Do not restore mise activation or dynamic project hooks; project-specific environments belong to direnv and flakes.
   Project direnv environments remain highest priority.
+- `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles` is hardcoded in more than the bootstrap scripts: `dot_config/direnv/direnvrc` sources the profile's `share/nix-direnv/direnvrc`, `dot_config/fish/config.fish.tmpl` prepends its `bin`, `dot_config/tmux/executable_agent-switch.sh` resolves through it, and `nix/flake.nix`'s headless smoke asserts it.
+  Changing that path is an edit to every one of those consumers.
 
 ## Mutable language runtimes
 

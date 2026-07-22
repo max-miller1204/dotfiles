@@ -30,7 +30,14 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
 
     echo "$section==> {{ .verifyBin }}$reset"
     {{- if eq $.chezmoi.os "darwin" }}
-    brew upgrade {{ .brewFormula }}; or return
+    # run_onchange_after_50 brew-installs {{ .brewFormula }} only when
+    # {{ .verifyBin }} does not already resolve, so an unconditional upgrade
+    # would abort this function with "Error: {{ .brewFormula }} not installed".
+    if brew list --formula {{ .brewFormula }} >/dev/null 2>&1
+        brew upgrade {{ .brewFormula }}; or return
+    else
+        echo "    {{ .brewFormula }} is not Homebrew-managed here; skipping"
+    end
     {{- else }}
     sudo apt-get install --only-upgrade -y {{ .aptPackage }}; or return
     {{- end }}

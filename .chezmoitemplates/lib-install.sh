@@ -70,12 +70,15 @@ install_deburl() {
     log "Installing $bin from a downloaded .deb"
     # apt-get needs a path ending in .deb; a fixed name inside a temp directory
     # stays portable (BSD mktemp has no --suffix), should this ever run on macOS.
-    local deb_dir deb
+    local deb_dir deb status=0
     deb_dir="$(mktemp -d)"
     deb="$deb_dir/$bin.deb"
-    curl -fsSL -o "$deb" "$url"
-    sudo apt-get install -y "$deb"
+    # Every call site is guarded on `command -v`, so under set -e a failed
+    # download would abort the apply before any trailing cleanup ran and leak the
+    # partial .deb; clean up unconditionally, then re-raise the failure.
+    { curl -fsSL -o "$deb" "$url" && sudo apt-get install -y "$deb"; } || status=$?
     rm -rf "$deb_dir"
+    return "$status"
 }
 
 # debsig verification policy + keyring, independent of the apt keyring/list. Only

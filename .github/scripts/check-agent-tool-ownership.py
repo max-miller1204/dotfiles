@@ -45,7 +45,8 @@ def main() -> None:
             f"Nix workstation group is {workstation!r}, "
             f"expected {expected_workstation!r}"
         )
-    if re.search(r"^\s+hunk\s*$", packages, re.MULTILINE):
+    # The nixpkgs attribute would carry the npm package's name, hunkdiff.
+    if re.search(r"^\s+hunk(?:diff)?\s*$", packages, re.MULTILINE):
         fail("Hunk must remain outside the universal Nix bundle")
     if re.search(r"^\s+pi-coding-agent\s*$", packages, re.MULTILINE):
         fail("Pi must remain outside the universal Nix bundle")
@@ -136,9 +137,15 @@ def main() -> None:
         ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl": hunk_installer,
         ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl": pi_installer,
     }
-    destructive = ("mise uninstall", "rm -rf $HOME/.local/share/mise")
+    # Match the command shape, not one unquoted spelling: every real `rm -rf`
+    # in this repository quotes its target, and the data directory can be
+    # written as $HOME/.local/share, $XDG_DATA_HOME, or $MISE_DATA_DIR.
+    destructive = (
+        (re.compile(r"\bmise\s+uninstall\b"), "mise uninstall"),
+        (re.compile(r"\brm\b[^\n;&|]*/mise\b"), "rm of preserved mise state"),
+    )
     for relative, text in migration_files.items():
-        found = [value for value in destructive if value in text]
+        found = [label for pattern, label in destructive if pattern.search(text)]
         if found:
             fail(f"{relative} deletes preserved stale mise state: {found!r}")
 

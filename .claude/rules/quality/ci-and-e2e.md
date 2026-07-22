@@ -16,6 +16,7 @@ paths:
   Linux uses the Determinate shell installer and Apple Silicon uses Determinate's signed macOS package; Intel macOS is unsupported and the bootstrap refuses it.
   The matrix then builds every bundle, runs smoke checks, reports closure size, and tests temporary-profile idempotency and rollback.
   Temporary profile tests canonicalize macOS's `/var` symlink before direnv records allow state, so allow and exec use the same physical fixture path.
+  `test-nix-profile.sh` mirrors a throwaway chezmoi source directory and renders and RUNS `run_onchange_before_15` against it for the failed-build assertion: a standalone `nix build` never writes to the dedicated profile, so it cannot detect the installer falling through to `nix profile upgrade`.
   Standard CI has no native aarch64 Linux runner, so that system remains evaluation-only until a runner is added.
 - The on-demand E2E workflow (`.github/workflows/e2e-native-ubuntu.yml`) runs the real bootstrap (`chezmoi init --apply --promptDefaults`) on a clean GitHub-hosted Ubuntu VM and verifies the installed end state with `.github/e2e/verify.sh`.
   It is dispatch-only ON PURPOSE (it installs multi-GB toolchains and GUI packages and takes about an hour) - never add a push/PR trigger - and it pins `runs-on: ubuntu-24.04`, not `ubuntu-latest`, because the claim it proves is "works on Ubuntu 24.04", the target machine's release.
@@ -33,6 +34,7 @@ paths:
   `check-lsp-ownership.py` statically proves exact language-server ownership in CI and E2E.
   `check-agent-tool-ownership.py` separately proves that stable native npm prefixes own Pi and Hunk, that neither ships in the Nix bundle, and that no active source declaration owns tools through mise.
   `test-pi-nix-runtime.sh` uses RPC `get_commands` without a model call to prove Pi loads the managed local extensions; CI runs it against a throwaway `@latest` npm-prefix install, and E2E additionally installs Pi's npm packages through fnm npm and repeats that RPC smoke against the applied configuration.
+  It sets `PI_OFFLINE=1` and bounds the invocation with a portable background watchdog rather than GNU `timeout`, because it also runs on the macOS leg where `timeout` is absent; an `@latest` build that blocks on a network or auth path must fail in minutes, not at the Actions job timeout.
   `.github/scripts/test-runtime-path-order.sh` supplies isolated fake commands to prove the precedence chain on every Linux CI run without downloading mutable runtimes.
   Every ownership change needs the matching verification edit.
   Invariants that hold over plain, non-templated source files belong in a script under `.github/scripts/` that BOTH `ci.yml` and the native E2E call, not inline in `verify.sh` alone: the E2E is dispatch-only, so a check that lives only there never runs on a PR.

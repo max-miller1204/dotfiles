@@ -37,10 +37,15 @@ tmp="$(mktemp -d)"
 # records its allow key so the later process cwd resolves to the same path.
 tmp="$(cd "$tmp" && pwd -P)"
 trap 'rm -rf "$tmp"' EXIT
-cp -a "$repo_root/nix" "$tmp/nix"
+# Mirror a chezmoi source directory so the real profile installer can be
+# rendered against this fixture instead of against the live source tree.
+source_dir="$tmp/source"
+mkdir -p "$source_dir"
+cp -a "$repo_root/nix" "$source_dir/nix"
+cp -a "$repo_root/.chezmoitemplates" "$source_dir/.chezmoitemplates"
 
 profile="$tmp/state/nix/profiles/dotfiles"
-flake="path:$tmp/nix"
+flake="path:$source_dir/nix"
 mkdir -p "$(dirname "$profile")"
 
 out="$(nix build "$flake#workstation" --no-link --print-out-paths)"
@@ -85,7 +90,7 @@ fixture="$tmp/direnv-fixture"
 mkdir -p "$fixture"
 system="$(nix eval --impure --raw --expr builtins.currentSystem)"
 bash "$repo_root/.github/scripts/create-direnv-flake-fixture.sh" \
-	"$fixture/flake.nix" "$tmp/nix" "$system"
+	"$fixture/flake.nix" "$source_dir/nix" "$system"
 printf 'use flake\n' >"$fixture/.envrc"
 direnv_env=(
 	"XDG_CONFIG_HOME=$tmp/config"
@@ -98,15 +103,32 @@ env "${direnv_env[@]}" "$out/bin/direnv" allow "$fixture"
 env "${direnv_env[@]}" "$out/bin/direnv" exec "$fixture" \
 	bash -c 'test "$DOTFILES_DIRENV_FIXTURE" = 1'
 
-# A failed build must not reach profile activation.
-cp "$tmp/nix/flake.nix" "$tmp/flake.nix.valid"
-printf '\nnot valid Nix\n' >>"$tmp/nix/flake.nix"
-if nix build "$flake#workstation" --no-link >/dev/null 2>&1; then
-	echo "Intentionally invalid flake unexpectedly built" >&2
+# A failed build must not reach profile activation. Exercise the installer
+# itself: a standalone `nix build` never writes to the dedicated profile, so it
+# cannot detect the installer falling through to `nix profile upgrade`.
+render_installer() {
+	chezmoi --source "$source_dir" execute-template \
+		<"$profile_template" >"$tmp/install-profile.sh"
+	grep -Fq "flake=\"path:$source_dir/nix\"" "$tmp/install-profile.sh"
+}
+
+cp "$source_dir/nix/flake.nix" "$tmp/flake.nix.valid"
+printf '\nnot valid Nix\n' >>"$source_dir/nix/flake.nix"
+render_installer
+if XDG_STATE_HOME="$tmp/state" bash "$tmp/install-profile.sh" \
+	>"$tmp/failed-build.log" 2>&1; then
+	echo "The installer accepted an intentionally invalid flake" >&2
+	cat "$tmp/failed-build.log" >&2
 	exit 1
 fi
 [[ "$(readlink "$profile")" == "$initial_link" ]]
-mv "$tmp/flake.nix.valid" "$tmp/nix/flake.nix"
+
+# The same installer must succeed once the flake is valid again, proving the
+# failure above came from the build and not from the fixture itself.
+cp "$tmp/flake.nix.valid" "$source_dir/nix/flake.nix"
+render_installer
+XDG_STATE_HOME="$tmp/state" bash "$tmp/install-profile.sh"
+[[ "$(readlink "$profile")" == "$initial_link" ]]
 
 # An unchanged upgrade must not create a generation.
 nix profile upgrade --profile "$profile" --all
@@ -114,7 +136,7 @@ unchanged_link="$(readlink "$profile")"
 [[ "$unchanged_link" == "$initial_link" ]]
 
 # Change only the aggregate derivation name to force a safe test generation.
-python3 - "$tmp/nix/bundles.nix" <<'PY'
+python3 - "$source_dir/nix/bundles.nix" <<'PY'
 from pathlib import Path
 import sys
 

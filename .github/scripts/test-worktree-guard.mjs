@@ -62,7 +62,11 @@ assert.doesNotMatch(
 	"extension must not depend on policy exports added after initial load",
 );
 
-const fixture = mkdtempSync(join(tmpdir(), "worktree-guard-"));
+// macOS resolves the per-user temporary directory through the /var symlink, so
+// keep a raw and a canonical spelling of the same fixture. Assertions that
+// compare against canonical paths must hold for commands written either way.
+const rawFixture = mkdtempSync(join(tmpdir(), "worktree-guard-"));
+const fixture = canonicalizePath(rawFixture);
 
 try {
 	const mainSource = join(fixture, "main");
@@ -71,6 +75,13 @@ try {
 	const pool = join(fixture, "custom-treehouse-root", "repo-abcd12");
 	const workspace = join(pool, "1", "repo");
 	const sibling = join(pool, "2", "repo");
+	const rawSibling = join(
+		rawFixture,
+		"custom-treehouse-root",
+		"repo-abcd12",
+		"2",
+		"repo",
+	);
 	const nested = join(workspace, "src", "nested");
 
 	for (const path of [adminDir, workspace, sibling, nested]) {
@@ -94,6 +105,7 @@ try {
 		"state-file detection should activate inside a managed worktree",
 	);
 	assert.equal(context.workspace, canonicalizePath(workspace));
+	assert.equal(context.cwd, canonicalizePath(nested));
 	assert.equal(context.temporaryDirectory, canonicalizePath(tmpdir()));
 	assert.equal(context.detectedBy, "state");
 	assert.deepEqual(
@@ -130,6 +142,50 @@ try {
 		new Set([canonicalizePath(bareSibling), canonicalizePath(bareRepo)]),
 		"a bare repository common dir must be protected itself, not its parent",
 	);
+
+	// Treehouse supports a repository-relative root, which places the linked
+	// live source ABOVE the worktree. Protecting an ancestor would block every
+	// write and every command in the assigned worktree.
+	const relativeMain = join(fixture, "relative-root");
+	const relativeAdminDir = join(relativeMain, ".git", "worktrees", "one");
+	const relativePool = join(relativeMain, ".treehouse", "repo-abcd56");
+	const relativeWorkspace = join(relativePool, "1", "repo");
+	const relativeSibling = join(relativePool, "2", "repo");
+	for (const path of [relativeAdminDir, relativeWorkspace, relativeSibling]) {
+		mkdirSync(path, { recursive: true });
+	}
+	writeFileSync(
+		join(relativeWorkspace, ".git"),
+		`gitdir: ${relativeAdminDir}\n`,
+	);
+	writeFileSync(join(relativeAdminDir, "commondir"), "../..\n");
+	writeFileSync(
+		join(relativePool, "treehouse-state.json"),
+		JSON.stringify({
+			worktrees: [
+				{ name: "1", path: relativeWorkspace },
+				{ name: "2", path: relativeSibling },
+			],
+		}),
+	);
+	const relativeContext = detectTreehouseContext(relativeWorkspace, undefined);
+	assert.ok(relativeContext, "repository-relative worktree should activate");
+	assert.deepEqual(
+		new Set(relativeContext.protectedPaths),
+		new Set([canonicalizePath(relativeSibling)]),
+		"a live source that contains the workspace must not be protected",
+	);
+	assert.equal(
+		isWritablePath(
+			relativeContext,
+			resolveToolPath(relativeWorkspace, "src/main.rs"),
+		),
+		true,
+		"a repository-relative worktree must stay writable",
+	);
+	assert.deepEqual(assessBashCommand("npm test", relativeContext), {
+		action: "allow",
+	});
 
 	const ordinaryRepo = join(fixture, "ordinary", "repo");
 	mkdirSync(ordinaryRepo, { recursive: true });
@@ -179,6 +235,30 @@ try {
 		"arbitrary paths outside the worktree and temporary directory stay blocked",
 	);
 
+	// pi resolves a file:// URL through fileURLToPath before writing, so the
+	// guard must resolve it the same way instead of joining it under the tree.
+	assert.equal(
+		resolveToolPath(workspace, `file://${sibling}/planted.txt`),
+		join(canonicalizePath(sibling), "planted.txt"),
+		"file:// paths must resolve exactly as pi resolves them",
+	);
+	assert.equal(
+		isWritablePath(
+			policyContext,
+			resolveToolPath(workspace, `file://${sibling}/planted.txt`),
+		),
+		false,
+		"a file:// URL must not bypass the write boundary",
+	);
+	assert.equal(
+		isWritablePath(
+			policyContext,
+			resolveToolPath(workspace, `file://${workspace}/allowed.txt`),
+		),
+		true,
+		"an in-tree file:// URL stays writable",
+	);
+
 	const workspaceEscapeLink = join(workspace, "escape");
 	symlinkSync(sibling, workspaceEscapeLink, "dir");
 	assert.equal(
@@ -188,6 +268,21 @@ try {
 		),
 		false,
 		"worktree symlinks must not escape into a protected path",
+	);
+
+	// A symlink whose target does not exist yet still decides where the write
+	// lands, so canonicalization must follow it rather than stop at the link.
+	const danglingEscapeLink = join(workspace, "pending");
+	symlinkSync(join(sibling, "not-created-yet.txt"), danglingEscapeLink, "file");
+	assert.equal(
+		resolveToolPath(workspace, "pending"),
+		join(canonicalizePath(sibling), "not-created-yet.txt"),
+		"a dangling symlink must canonicalize to its target",
+	);
+	assert.equal(
+		isWritablePath(policyContext, resolveToolPath(workspace, "pending")),
+		false,
+		"a dangling symlink must not escape into a protected path",
 	);
 
 	const temporaryEscapeLink = join(isolatedTemporaryDirectory, "escape");
@@ -215,6 +310,18 @@ try {
 		reason:
 			"this Git operation can mutate shared worktree metadata or repository state",
 	});
+	for (const command of [
+		"git pull --rebase",
+		"git revert HEAD",
+		"git restore --staged .",
+		"git config user.email x@example.com",
+	]) {
+		assert.match(
+			bashGuardReason(command, context) ?? "",
+			/Git operation/,
+			`shared-metadata mutation must be reviewed: ${command}`,
+		);
+	}
 	assert.match(
 		bashGuardReason(`git -C ${mainSource} status`, context) ?? "",
 		/protected path/,
@@ -224,6 +331,34 @@ try {
 		{
 			action: "block",
 			reason: `command references protected path ${canonicalizePath(sibling)}`,
+		},
+	);
+	// The same reference written through the platform's non-canonical spelling
+	// (macOS /var vs /private/var) must be blocked identically.
+	assert.deepEqual(
+		assessBashCommand(`printf data > ${rawSibling}/file`, context),
+		{
+			action: "block",
+			reason: `command references protected path ${canonicalizePath(sibling)}`,
+		},
+	);
+	// Traversal spellings that never contain the canonical protected path.
+	assert.deepEqual(
+		assessBashCommand(`cat ${workspace}/../../2/repo/secret`, context),
+		{
+			action: "block",
+			reason: `command references protected path ${canonicalizePath(sibling)}`,
+		},
+	);
+	assert.deepEqual(assessBashCommand("cat ../../2/repo/secret", context), {
+		action: "block",
+		reason: `command references protected path ${canonicalizePath(sibling)}`,
+	});
+	assert.deepEqual(
+		assessBashCommand(`chezmoi apply --source=${mainSource}`, context),
+		{
+			action: "block",
+			reason: `command references protected path ${canonicalizePath(mainSource)}`,
 		},
 	);
 	assert.match(bashGuardReason("chezmoi apply", context) ?? "", /chezmoi/);
@@ -243,13 +378,34 @@ try {
 		bashGuardReason("rm -v --recursive /tmp/scratch", context) ?? "",
 		/recursive removal/,
 	);
+	assert.match(
+		bashGuardReason("rm /tmp/scratch -rf", context) ?? "",
+		/recursive removal/,
+	);
 	assert.equal(bashGuardReason("rm -f stale.txt", context), undefined);
+	assert.equal(
+		bashGuardReason("rm stale.txt && npm run build", context),
+		undefined,
+	);
+	const traversals = ["cd ..; make install", "cd .. && npm publish", "cd .."];
+	for (const command of traversals) {
+		assert.match(
+			bashGuardReason(command, context) ?? "",
+			/traversal/,
+			`parent-directory escape must be reviewed: ${command}`,
+		);
+	}
 
 	const judgePrompt = JSON.parse(
 		buildJudgePrompt("git commit -m test", "git mutation", context),
 	);
 	assert.equal(judgePrompt.command, "git commit -m test");
 	assert.equal(judgePrompt.workspace, canonicalizePath(workspace));
+	assert.equal(
+		judgePrompt.cwd,
+		canonicalizePath(nested),
+		"the judge must see the real session cwd, not the workspace root",
+	);
 	assert.deepEqual(
 		new Set(judgePrompt.protectedPaths),
 		new Set([canonicalizePath(sibling), canonicalizePath(mainSource)]),
@@ -265,7 +421,25 @@ try {
 	);
 	assert.ok(allowJudgment);
 	assert.equal(autoDecision(allowJudgment), "allow");
+	assert.equal(autoDecision(allowJudgment, undefined, context), "allow");
 	assert.equal(autoDecision({ ...allowJudgment, confidence: 0.8 }), "ask");
+
+	// A confident allow whose own affectedPaths name a protected path must not
+	// run: that one field can be checked against the boundary mechanically.
+	const selfContradictingJudgment = parseJudgeResponse(
+		JSON.stringify({
+			verdict: "allow",
+			confidence: 0.99,
+			reason: "claims to stay inside the worktree",
+			affectedPaths: [join(sibling, "file.txt")],
+		}),
+	);
+	assert.ok(selfContradictingJudgment);
+	assert.equal(
+		autoDecision(selfContradictingJudgment, undefined, context),
+		"ask",
+	);
+
 	assert.equal(
 		parseJudgeResponse('```json\n{"verdict":"allow"}\n```'),
 		undefined,
@@ -286,5 +460,5 @@ try {
 		"Treehouse worktree guard policy and auto-judge tests passed\n",
 	);
 } finally {
-	rmSync(fixture, { recursive: true, force: true });
+	rmSync(rawFixture, { recursive: true, force: true });
 }

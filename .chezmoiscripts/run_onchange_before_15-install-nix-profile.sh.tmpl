@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
-{{- $nixBundle := (get . "nixBundle" | default "workstation") }}
 # Build and activate the single cumulative dotfiles package bundle.
+# The workstation bundle is the only supported selection - the pre-activation
+# smoke below requires its fnm and uv, and the ownership guard requires its
+# attrPath - so it is hardcoded here rather than offered as machine data.
 # A source hash for every flake file makes chezmoi rerun this script when the
 # package graph or lock changes, without letting routine updates mutate the lock.
 # flake hashes: {{ include "nix/flake.nix" | sha256sum }} {{ include "nix/flake.lock" | sha256sum }} {{ include "nix/packages.nix" | sha256sum }} {{ include "nix/bundles.nix" | sha256sum }} {{ include "nix/lsp-smoke.py" | sha256sum }}
-# selected bundle: {{ $nixBundle }}
 {{ template "lib-log.sh" . }}
 
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
 # Resolve the source path while chezmoi renders the script. Starting a nested
 # chezmoi process during apply deadlocks on the parent's persistent state lock.
 flake={{ printf "path:%s" (joinPath .chezmoi.sourceDir "nix") | quote }}
-bundle="{{ $nixBundle }}"
-
-if [[ "$bundle" != "workstation" ]]; then
-    echo "Unsupported dotfiles Nix bundle: $bundle (expected workstation)" >&2
-    exit 1
-fi
+bundle="workstation"
 
 # A fresh Determinate install cannot update the parent bootstrap shell, and
 # non-interactive chezmoi scripts do not read Fish startup files. Source the
@@ -97,18 +93,31 @@ if [[ -L "$profile" ]]; then
         fi
         exit 1
     fi
-    if ! jq -e --arg flake "$flake" \
-        '(.elements | to_entries[0].value) as $element
-         | $element.originalUrl == $flake
-           and ($element.attrPath | endswith(".workstation"))' \
-        <<<"$profile_json" >/dev/null
-    then
+    # Identify the element by what it IS, not by where it was installed from: a
+    # relocated chezmoi source directory, an apply from a worktree, or a
+    # `--source` override changes the flake reference without making the profile
+    # foreign or hand-modified.
+    element_name="$(jq -r '.elements | to_entries[0].key' <<<"$profile_json")"
+    element_attr="$(jq -r '(.elements | to_entries[0].value).attrPath // ""' <<<"$profile_json")"
+    element_url="$(jq -r '(.elements | to_entries[0].value).originalUrl // ""' <<<"$profile_json")"
+    if [[ "$element_attr" != *.workstation ]]; then
         echo "Dedicated profile element is not the managed workstation bundle." >&2
+        echo "Found attrPath '${element_attr:-unknown}' installed from '${element_url:-unknown}'." >&2
         echo "Refusing to modify a manually changed profile: $profile" >&2
+        echo "Move it aside explicitly to rebuild it from this source:" >&2
+        echo "  mv '$profile' '${profile}.backup'" >&2
         exit 1
     fi
-    log "Upgrading the dedicated dotfiles Nix profile"
-    nix profile upgrade --profile "$profile" --all
+    if [[ "$element_url" == "$flake" ]]; then
+        log "Upgrading the dedicated dotfiles Nix profile"
+        nix profile upgrade --profile "$profile" --all
+    else
+        # `nix profile upgrade` re-evaluates the RECORDED flake reference, which
+        # may no longer exist. Re-point the managed element at this source.
+        log "Re-pointing the dedicated dotfiles Nix profile at $flake"
+        nix profile remove --profile "$profile" "$element_name"
+        nix profile add --profile "$profile" "$flake#$bundle"
+    fi
 else
     if [[ -e "$profile" ]]; then
         echo "Dedicated profile path exists but is not a symlink: $profile" >&2

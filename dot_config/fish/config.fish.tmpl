@@ -71,21 +71,23 @@ if status is-interactive
 
     # Never delete stale mise installations automatically, but retire any shim
     # path inherited from an older shell so migrated commands cannot regain
-    # ownership. An old mise setup may have used a relocated XDG_DATA_HOME, so
-    # scrub the shim directory under both data homes.
-    set -l stale_shim_dirs "$HOME/.local/share/mise/shims"
-    if set -q XDG_DATA_HOME; and test -n "$XDG_DATA_HOME"
-        set -a stale_shim_dirs "$XDG_DATA_HOME/mise/shims"
-    end
-    for stale_mise_shims in $stale_shim_dirs
-        if set -q fish_user_paths
-            set -g fish_user_paths (string match -v -- "$stale_mise_shims" $fish_user_paths)
+    # ownership. mise resolves its shim directory from MISE_DATA_DIR or either
+    # data home, so match every PATH entry that ends in /mise/shims instead of
+    # enumerating the locations it might have been relocated to.
+    if set -q fish_user_paths
+        set -l kept_user_paths (string match -v -r -- '/mise/shims/?$' $fish_user_paths)
+        if test (count $kept_user_paths) -ne (count $fish_user_paths)
+            # Rewrite in the variable's own scope: a session global would shadow
+            # a universal fish_user_paths, silently de-persisting every later
+            # interactive fish_add_path call.
+            if set -q -g fish_user_paths
+                set -g fish_user_paths $kept_user_paths
+            else
+                set -U fish_user_paths $kept_user_paths
+            end
         end
-        while contains -- "$stale_mise_shims" $PATH
-            set -l mise_index (contains -i -- "$stale_mise_shims" $PATH)
-            set -e PATH[$mise_index]
-        end
     end
+    set -gx PATH (string match -v -r -- '/mise/shims/?$' $PATH)
 
     # Mutable runtime paths intentionally sit above the Nix profile. uv-managed
     # project virtual environments and direnv dev shells can still override them.

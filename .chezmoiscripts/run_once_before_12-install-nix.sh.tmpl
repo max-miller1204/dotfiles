@@ -61,11 +61,20 @@ case "$(uname -m)" in
         curl --proto '=https' --tlsv1.2 -fsSL \
             https://install.determinate.systems/determinate-pkg/stable/Universal \
             -o "$pkg"
+        # Gatekeeper reports the signing origin even when it REJECTS the package
+        # (revoked certificate, failed notarization), so the accept/reject
+        # verdict has to gate the install alongside the Apple team ID.
+        spctl_status=0
+        spctl_output="$(spctl -a -vv -t install "$pkg" 2>&1)" || spctl_status=$?
+        if [[ "$spctl_status" -ne 0 ]] \
+            || ! grep -Fq ': accepted' <<<"$spctl_output"
+        then
+            echo "Gatekeeper rejected the Determinate package." >&2
+            echo "$spctl_output" >&2
+            exit 1
+        fi
         actual_team_id="$(
-            spctl -a -vv -t install "$pkg" 2>&1 \
-                | awk -F '(' '/origin=/ {print $2}' \
-                | tr -d '()' \
-                || true
+            awk -F '(' '/origin=/ {print $2}' <<<"$spctl_output" | tr -d '()'
         )"
         if [[ "$actual_team_id" != "X3JQ4VPJZ6" ]]; then
             echo "Determinate package signature mismatch." >&2

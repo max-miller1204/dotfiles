@@ -29,9 +29,13 @@ import {
 import {
 	bashGuardReason,
 	detectTreehouseContext,
+	isPathInside,
 	isWritablePath,
 	resolveToolPath,
 } from "./policy.mjs";
+
+// Shell word boundaries, so `--source=/x` and `a,b` yield their path operands.
+const COMMAND_TOKEN_PATTERN = /[^\s"'`;|&<>()=,]+/g;
 
 type TreehouseContext = NonNullable<ReturnType<typeof detectTreehouseContext>>;
 type GuardMode = "auto" | "prompt";
@@ -73,6 +77,26 @@ type BashGuardRequest = {
 
 function shortToolName(toolName: string): string {
 	return toolName.split(".").at(-1) ?? toolName;
+}
+
+// Canonicalize every path-shaped operand so a non-canonical spelling of a
+// protected path - `../2/repo`, or /var vs /private/var on macOS - cannot slip
+// past a raw substring comparison.
+function referencedProtectedPath(
+	command: string,
+	treehouse: TreehouseContext,
+): string | undefined {
+	for (const token of command.match(COMMAND_TOKEN_PATTERN) ?? []) {
+		if (!token.includes("/")) continue;
+		const target = resolveToolPath(treehouse.workspace, token);
+		const referenced = treehouse.protectedPaths.find((path: string) =>
+			isPathInside(path, target),
+		);
+		if (referenced) return referenced;
+	}
+	return treehouse.protectedPaths.find((path: string) =>
+		command.includes(path),
+	);
 }
 
 function block(reason: string): BlockResult {
@@ -198,9 +222,7 @@ async function guardBashTool({
 		);
 	}
 
-	const protectedPath = treehouse.protectedPaths.find((path) =>
-		command.includes(path),
-	);
+	const protectedPath = referencedProtectedPath(command, treehouse);
 	if (protectedPath) {
 		const reason = `command references protected path ${protectedPath}`;
 		ctx.ui.notify(`Blocked: ${reason}`, "warning");
@@ -232,7 +254,11 @@ async function guardBashTool({
 		}
 	}
 
-	const decision = autoDecision(judgment, runtime.confidenceThreshold);
+	const decision = autoDecision(
+		judgment,
+		runtime.confidenceThreshold,
+		treehouse,
+	);
 	if (decision === "allow") return undefined;
 	if (decision === "deny") {
 		const reason = judgment?.reason ?? reviewReason;

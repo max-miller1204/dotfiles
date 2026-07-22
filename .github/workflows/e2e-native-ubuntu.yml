@@ -57,7 +57,9 @@ jobs:
           fi
 
       - name: Preflight inventory (preexisting bins are not proven by this job)
-        run: bash .github/e2e/verify.sh preflight | tee preflight.txt
+        run: |
+          set -euo pipefail
+          bash .github/e2e/verify.sh preflight | tee preflight.txt
 
       - name: Free disk space
         run: |

@@ -24,11 +24,16 @@ class LspClient:
         environment = os.environ.copy()
         environment.pop("NODE_PATH", None)
         self.command = command
+        # A stderr PIPE is inherited by grandchildren (typescript-language-server
+        # forks tsserver), so its write end can outlive the server and a read on
+        # it never returns, while a full 64 KiB pipe buffer would deadlock the
+        # server itself. A temporary file has neither failure mode.
+        self.stderr_file = tempfile.TemporaryFile()
         self.process = subprocess.Popen(
             [command, "--stdio"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=self.stderr_file,
             env=environment,
         )
         if self.process.stdin is None or self.process.stdout is None:
@@ -36,6 +41,16 @@ class LspClient:
         self.stdin = self.process.stdin
         self.stdout = self.process.stdout
         self.buffer = bytearray()
+
+    def __enter__(self) -> LspClient:
+        return self
+
+    def __exit__(self, *_exception: object) -> None:
+        self.terminate()
+
+    def stderr_text(self) -> str:
+        self.stderr_file.seek(0)
+        return self.stderr_file.read().decode(errors="replace")
 
     def send(self, payload: dict[str, Any]) -> None:
         self.stdin.write(message(payload))
@@ -47,8 +62,7 @@ class LspClient:
             raise TimeoutError(f"timed out waiting for {self.command}")
         chunk = os.read(self.stdout.fileno(), 65536)
         if not chunk:
-            stderr = self.process.stderr.read().decode() if self.process.stderr else ""
-            raise RuntimeError(f"{self.command} closed stdout: {stderr}")
+            raise RuntimeError(f"{self.command} closed stdout: {self.stderr_text()}")
         self.buffer.extend(chunk)
 
     def read_message(self, deadline: float) -> dict[str, Any]:
@@ -108,8 +122,19 @@ class LspClient:
             self.process.kill()
             raise RuntimeError(f"{self.command} did not exit after shutdown") from error
         if return_code != 0:
-            stderr = self.process.stderr.read().decode() if self.process.stderr else ""
-            raise RuntimeError(f"{self.command} exited {return_code}: {stderr}")
+            raise RuntimeError(
+                f"{self.command} exited {return_code}: {self.stderr_text()}"
+            )
+
+    def terminate(self) -> None:
+        """Release the server and its pipes on every path, including failures."""
+        if self.process.poll() is None:
+            self.process.kill()
+            self.process.wait(timeout=10)
+        for stream in (self.process.stdin, self.process.stdout):
+            if stream is not None and not stream.closed:
+                stream.close()
+        self.stderr_file.close()
 
 
 def run_server(command: str, language: str, filename: str, source: str) -> None:
@@ -119,46 +144,50 @@ def run_server(command: str, language: str, filename: str, source: str) -> None:
         document.write_text(source)
         root_uri = root.as_uri()
         document_uri = document.as_uri()
-        client = LspClient(command)
-        initialize = client.request(
-            1,
-            "initialize",
-            {
-                "processId": None,
-                "clientInfo": {"name": "Claude Code", "version": "smoke"},
-                "rootUri": root_uri,
-                "capabilities": {},
-                "workspaceFolders": [{"uri": root_uri, "name": root.name}],
-            },
-        )
-        if "error" in initialize or "capabilities" not in initialize.get("result", {}):
-            raise RuntimeError(f"{command} initialization failed: {initialize!r}")
-        client.notify("initialized", {})
-        client.notify(
-            "textDocument/didOpen",
-            {
-                "textDocument": {
-                    "uri": document_uri,
-                    "languageId": language,
-                    "version": 1,
-                    "text": source,
-                }
-            },
-        )
-        hover = client.request(
-            2,
-            "textDocument/hover",
-            {
-                "textDocument": {"uri": document_uri},
-                "position": {"line": 0, "character": 6},
-            },
-        )
-        if "error" in hover or hover.get("result") is None:
-            raise RuntimeError(f"{command} hover failed: {hover!r}")
-        shutdown = client.request(3, "shutdown", None)
-        if "error" in shutdown or shutdown.get("result", "missing") is not None:
-            raise RuntimeError(f"{command} shutdown failed: {shutdown!r}")
-        client.close()
+        # Every assertion and timeout below must still release the server, or a
+        # failed unsandboxed run leaves an orphaned process holding the pipes.
+        with LspClient(command) as client:
+            initialize = client.request(
+                1,
+                "initialize",
+                {
+                    "processId": None,
+                    "clientInfo": {"name": "Claude Code", "version": "smoke"},
+                    "rootUri": root_uri,
+                    "capabilities": {},
+                    "workspaceFolders": [{"uri": root_uri, "name": root.name}],
+                },
+            )
+            if "error" in initialize or "capabilities" not in initialize.get(
+                "result", {}
+            ):
+                raise RuntimeError(f"{command} initialization failed: {initialize!r}")
+            client.notify("initialized", {})
+            client.notify(
+                "textDocument/didOpen",
+                {
+                    "textDocument": {
+                        "uri": document_uri,
+                        "languageId": language,
+                        "version": 1,
+                        "text": source,
+                    }
+                },
+            )
+            hover = client.request(
+                2,
+                "textDocument/hover",
+                {
+                    "textDocument": {"uri": document_uri},
+                    "position": {"line": 0, "character": 6},
+                },
+            )
+            if "error" in hover or hover.get("result") is None:
+                raise RuntimeError(f"{command} hover failed: {hover!r}")
+            shutdown = client.request(3, "shutdown", None)
+            if "error" in shutdown or shutdown.get("result", "missing") is not None:
+                raise RuntimeError(f"{command} shutdown failed: {shutdown!r}")
+            client.close()
 
 
 def main() -> None:

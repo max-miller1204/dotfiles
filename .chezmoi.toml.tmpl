@@ -9,9 +9,9 @@
     # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
     # its own question mark, so a literal one would double up.
     headless = {{ if eq .chezmoi.os "linux" }}{{ promptBoolOnce . "headless" "Is this machine headless/server-only (skip GUI desktop apps)" false }}{{ else }}false{{ end }}
-    # Install one cumulative bundle into the dedicated dotfiles Nix profile.
-    # Kept in machine data so changing the selection invalidates run_onchange.
-    nixBundle = "workstation"
+    # The dedicated Nix profile is not configurable here: run_onchange_before_15
+    # hardcodes the cumulative workstation bundle, whose fnm and uv its
+    # pre-activation smoke and its profile ownership guard both require.
     # Mutable runtime policies. Existing machine configs may predate these keys,
     # so consumers apply the same defaults defensively.
     nodeVersion = "lts"

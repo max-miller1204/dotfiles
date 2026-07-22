@@ -18,12 +18,29 @@ cp -R "$repo_root/dot_pi/agent/extensions/." "$tmp/agent/extensions/"
 printf '%s\n' '{"packages":[],"skills":[],"enabledModels":[]}' \
     >"$tmp/agent/settings.json"
 
-if ! printf '%s\n' '{"id":"commands","type":"get_commands"}' \
-    | PI_CODING_AGENT_DIR="$tmp/agent" \
-        PI_WORKTREE_GUARD_MODE=prompt \
-        "$pi_bin" --mode rpc --no-session \
-        >"$tmp/rpc.jsonl" 2>"$tmp/stderr"; then
+# Bound the smoke so an @latest Pi that blocks on a network or auth path fails
+# in minutes instead of hanging until the job timeout. GNU `timeout` is not on a
+# stock macOS runner, so use a portable watchdog. PI_OFFLINE mirrors verify.sh.
+rpc_timeout="${PI_RPC_TIMEOUT_SECONDS:-120}"
+printf '%s\n' '{"id":"commands","type":"get_commands"}' >"$tmp/request.jsonl"
+
+PI_OFFLINE=1 \
+    PI_CODING_AGENT_DIR="$tmp/agent" \
+    PI_WORKTREE_GUARD_MODE=prompt \
+    "$pi_bin" --mode rpc --no-session \
+    <"$tmp/request.jsonl" >"$tmp/rpc.jsonl" 2>"$tmp/stderr" &
+pi_pid=$!
+{ sleep "$rpc_timeout" && kill -9 "$pi_pid"; } >/dev/null 2>&1 &
+watchdog_pid=$!
+
+rpc_status=0
+wait "$pi_pid" || rpc_status=$?
+kill "$watchdog_pid" >/dev/null 2>&1 || true
+wait "$watchdog_pid" >/dev/null 2>&1 || true
+
+if [[ "$rpc_status" -ne 0 ]]; then
     cat "$tmp/stderr" >&2
+    echo "Pi RPC smoke exited $rpc_status (watchdog: ${rpc_timeout}s)" >&2
     exit 1
 fi
 

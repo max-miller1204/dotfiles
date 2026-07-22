@@ -36,6 +36,18 @@ if ! command -v claude >/dev/null 2>&1; then
     log "skip: claude not on PATH yet (will set up plugins on next apply)"
     exit 0
 fi
+# jq stays a native package. On macOS brew installs it into a prefix that is not
+# on the stock PATH of a non-interactive apply, and this script runs in a fresh
+# process that never inherits script 10's shellenv, so probe both prefixes
+# before treating a missing jq as a hard bootstrap failure.
+if ! command -v jq >/dev/null 2>&1; then
+    for brew_bin in /opt/homebrew/bin /usr/local/bin; do
+        if [[ -x "$brew_bin/jq" ]]; then
+            prepend_path "$brew_bin"
+            break
+        fi
+    done
+fi
 command -v jq >/dev/null 2>&1 || { echo "jq required on PATH" >&2; exit 1; }
 
 # Register the marketplace. Idempotent and cheap: when it is already on disk this

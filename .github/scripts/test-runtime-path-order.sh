@@ -60,6 +60,9 @@ make_command "$home/.local/share/mise/shims/mise-only"
 # A relocated XDG_DATA_HOME shim dir must be scrubbed from PATH as well.
 mkdir -p "$data/mise/shims"
 make_command "$data/mise/shims/mise-xdg-only"
+# So must a MISE_DATA_DIR relocation, which follows neither data home.
+mkdir -p "$tmp/mise-data-dir/mise/shims"
+make_command "$tmp/mise-data-dir/mise/shims/mise-relocated-only"
 
 chezmoi --source "$repo_root" execute-template \
 	<"$repo_root/dot_config/fish/config.fish.tmpl" \
@@ -76,7 +79,7 @@ fish_path() {
 		BUN_INSTALL="$home/.bun" \
 		RUSTUP_TOOLCHAIN=stale-mise-toolchain \
 		NODE_PATH="$tmp/existing-node-modules" \
-		PATH="$home/.local/share/mise/shims:$data/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		PATH="$home/.local/share/mise/shims:$data/mise/shims:$tmp/mise-data-dir/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
 		fish -l -i -c "command -v $1" 2>/dev/null | tail -1
 }
 
@@ -110,6 +113,7 @@ assert_path hunk "$home/.local/bin/hunk"
 assert_path legacy-only "$tmp/system/bin/legacy-only"
 assert_absent mise-only
 assert_absent mise-xdg-only
+assert_absent mise-relocated-only
 
 node_path="$(
 	env \

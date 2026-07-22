@@ -121,6 +121,8 @@ The `run_onchange_before_15` script builds first, verifies the expected executab
 A failed build cannot replace the active generation.
 Do not manually add packages to this profile.
 If the path still points at the retired Home Manager prototype, the script refuses to overwrite it and prints an explicit `mv` command that preserves the old profile as a backup before the next apply.
+Ownership is decided by what the single profile element IS - a `dotfiles-workstation` attribute path - not by where it was installed from, so relocating the chezmoi source directory or applying from a worktree re-points the managed element instead of failing.
+Anything else in that profile is refused with the mismatching attribute path named and the same `mv` recovery printed.
 
 ```sh
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"

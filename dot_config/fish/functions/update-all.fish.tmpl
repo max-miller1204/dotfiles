@@ -51,10 +51,26 @@ function update-all --description 'Update every package source this dotfiles rep
     end
 
     if command -q npm
+        # run_onchange_before_17 and _18 install both tools with fnm-managed npm
+        # and verify the result; a refresh here must assert exactly the same
+        # things or it can silently break what the installers guarantee.
+        set -l npm_bin (command -v npm)
+        if test -z "$FNM_MULTISHELL_PATH"; or test "$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm"
+            echo "Hunk and Pi must be updated with fnm-managed npm; resolved: $npm_bin" >&2
+            return 1
+        end
+
         echo "$section==> native Hunk npm package$reset"
         set -l hunk_prefix "$HOME/.local/share/npm-hunkdiff"
+        set -l hunk_skill "$hunk_prefix/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
         env npm_config_update_notifier=false \
             npm install --global --prefix "$hunk_prefix" hunkdiff@latest; or return
+        # Pi's settings.json declares this exact skill path, so a release that
+        # moves or drops it must fail here, not leave that entry dangling.
+        if not test -x "$hunk_prefix/bin/hunk"; or not test -f "$hunk_skill"
+            echo "The native Hunk installation is incomplete under: $hunk_prefix" >&2
+            return 1
+        end
         mkdir -p "$HOME/.local/bin"; or return
         ln -sfn "$hunk_prefix/bin/hunk" "$HOME/.local/bin/hunk"; or return
 
@@ -62,6 +78,10 @@ function update-all --description 'Update every package source this dotfiles rep
         set -l pi_prefix "$HOME/.local/share/npm-pi"
         env npm_config_update_notifier=false \
             npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest; or return
+        if not test -x "$pi_prefix/bin/pi"
+            echo "The native Pi installation is incomplete under: $pi_prefix" >&2
+            return 1
+        end
         ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"; or return
     end
 

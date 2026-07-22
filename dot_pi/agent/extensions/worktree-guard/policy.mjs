@@ -1,4 +1,10 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	readFileSync,
+	readlinkSync,
+	realpathSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import {
 	basename,
@@ -9,8 +15,13 @@ import {
 	resolve,
 	sep,
 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const TREEHOUSE_STATE_FILE = "treehouse-state.json";
+const MAX_SYMLINK_DEPTH = 32;
+const FILE_URL_PATTERN = /^file:\/\//;
+// Split on shell word boundaries, so `--source=/x` yields its operand.
+const COMMAND_TOKEN_PATTERN = /[^\s"'`;|&<>()=,]+/g;
 
 const SUSPICIOUS_BASH_PATTERNS = [
 	{
@@ -23,7 +34,7 @@ const SUSPICIOUS_BASH_PATTERNS = [
 	},
 	{
 		pattern:
-			/\bgit\s+(?:add|commit|switch|checkout|reset|clean|worktree|branch|merge|rebase|cherry-pick|stash|tag|push)\b/i,
+			/\bgit\s+(?:add|commit|switch|checkout|restore|reset|clean|worktree|branch|merge|rebase|cherry-pick|revert|stash|tag|push|pull|config)\b/i,
 		reason:
 			"this Git operation can mutate shared worktree metadata or repository state",
 	},
@@ -32,20 +43,32 @@ const SUSPICIOUS_BASH_PATTERNS = [
 		reason: "sudo escapes the worktree's user-level write policy",
 	},
 	{
-		pattern: /\brm\s+(?:-[^\s]+\s+)*(?:-[^\s]*r[^\s]*|--recursive)\b/i,
+		pattern:
+			/\brm\s+(?:[^\s;&|<>()]+\s+)*(?:-[^\s]*r[^\s]*|--recursive)(?:\s|$)/i,
 		reason: "recursive removal can affect paths outside this worktree",
 	},
 	{
-		pattern: /(?:^|[\s"'=])\.\.(?:\/|$)/,
+		pattern: /(?:^|[\s"'=(])\.\.(?=$|[\s/;&|)"'`])/,
 		reason: "parent-directory traversal can escape this worktree",
 	},
 ];
 
-export function canonicalizePath(path) {
+function pathEntryExists(path) {
+	try {
+		lstatSync(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export function canonicalizePath(path, depth = 0) {
 	const absolute = resolve(path);
 	let existing = absolute;
 
-	while (!existsSync(existing)) {
+	// lstat rather than exists: a dangling symlink is a real directory entry
+	// whose own target still decides where a write lands.
+	while (!pathEntryExists(existing)) {
 		const parent = dirname(existing);
 		if (parent === existing) {
 			return absolute;
@@ -54,7 +77,17 @@ export function canonicalizePath(path) {
 	}
 
 	const suffix = relative(existing, absolute);
-	return resolve(realpathSync(existing), suffix);
+	try {
+		return resolve(realpathSync(existing), suffix);
+	} catch {
+		if (depth >= MAX_SYMLINK_DEPTH) return absolute;
+		try {
+			const target = resolve(dirname(existing), readlinkSync(existing));
+			return resolve(canonicalizePath(target, depth + 1), suffix);
+		} catch {
+			return absolute;
+		}
+	}
 }
 
 export function isPathInside(root, target) {
@@ -82,13 +115,43 @@ export function isWritablePath(context, target) {
 	);
 }
 
+// Mirrors pi's own tool path normalization: strip an `@` mention prefix, honor
+// a file:// URL, then expand `~/`. A branch missing here checks a different
+// path than the one pi writes.
+function expandToolPath(workspace, inputPath, home) {
+	if (FILE_URL_PATTERN.test(inputPath)) {
+		try {
+			return fileURLToPath(inputPath);
+		} catch {
+			return resolve(workspace, inputPath);
+		}
+	}
+	if (inputPath.startsWith("~/") && home) {
+		return resolve(home, inputPath.slice(2));
+	}
+	return resolve(workspace, inputPath);
+}
+
 export function resolveToolPath(workspace, inputPath, home = process.env.HOME) {
 	const stripped = inputPath.startsWith("@") ? inputPath.slice(1) : inputPath;
-	const expanded =
-		stripped.startsWith("~/") && home
-			? resolve(home, stripped.slice(2))
-			: resolve(workspace, stripped);
-	return canonicalizePath(expanded);
+	return canonicalizePath(expandToolPath(workspace, stripped, home));
+}
+
+// Canonicalize every path-shaped operand so a non-canonical spelling of a
+// protected path - `../2/repo`, or /var vs /private/var on macOS - cannot slip
+// past a raw substring comparison.
+export function protectedPathReference(command, context) {
+	for (const token of command.match(COMMAND_TOKEN_PATTERN) ?? []) {
+		if (!token.includes("/")) continue;
+		const target = resolveToolPath(context.workspace, token);
+		const referenced = context.protectedPaths.find((protectedPath) =>
+			isPathInside(protectedPath, target),
+		);
+		if (referenced) return referenced;
+	}
+	return context.protectedPaths.find((protectedPath) =>
+		command.includes(protectedPath),
+	);
 }
 
 function readTreehouseState(statePath) {
@@ -170,16 +233,25 @@ export function detectTreehouseContext(
 
 	if (!workspace) return undefined;
 
-	const protectedPaths = entries
+	const candidates = entries
 		.map((entry) => canonicalizePath(entry.path))
 		.filter((entryPath) => entryPath !== workspace);
 	const mainSource = linkedMainSource(workspace);
-	if (mainSource && !isPathInside(workspace, mainSource)) {
-		protectedPaths.push(mainSource);
-	}
+	if (mainSource) candidates.push(mainSource);
+
+	// A candidate that contains the workspace would block every write and every
+	// command in the assigned worktree, and one inside it would carve a hole out
+	// of the writable tree. Treehouse supports a repository-relative root, which
+	// puts the linked live source directly above the worktree.
+	const protectedPaths = candidates.filter(
+		(candidate) =>
+			!isPathInside(workspace, candidate) &&
+			!isPathInside(candidate, workspace),
+	);
 
 	return {
 		workspace,
+		cwd: canonicalCwd,
 		temporaryDirectory: canonicalizePath(temporaryDirectory),
 		protectedPaths: [...new Set(protectedPaths)],
 		detectedBy,
@@ -187,13 +259,12 @@ export function detectTreehouseContext(
 }
 
 export function assessBashCommand(command, context) {
-	for (const protectedPath of context.protectedPaths) {
-		if (command.includes(protectedPath)) {
-			return {
-				action: "block",
-				reason: `command references protected path ${protectedPath}`,
-			};
-		}
+	const protectedPath = protectedPathReference(command, context);
+	if (protectedPath) {
+		return {
+			action: "block",
+			reason: `command references protected path ${protectedPath}`,
+		};
 	}
 
 	for (const { pattern, reason } of SUSPICIOUS_BASH_PATTERNS) {

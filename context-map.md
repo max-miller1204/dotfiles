@@ -12,8 +12,12 @@ Some changes cross scopes and require more than one rule.
 Read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md) for changes involving:
 
 - `.chezmoidata/packages.yaml`
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl`
+- `.chezmoiscripts/run_once_before_{10-install-packages,12-install-nix}.sh.tmpl`
+- `.chezmoiscripts/run_onchange_before_{15-install-nix-profile,16-install-language-runtimes,17-install-hunk,18-install-pi}.sh.tmpl`
+- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl`
 - `.chezmoitemplates/lib-install.sh`, `lib-apt.sh`, or `lib-resolve.sh`
+- `dot_config/direnv/direnvrc`, `dot_config/fish/config.fish.tmpl`, `dot_config/fish/functions/{update-all,lsp-upgrade}.fish.tmpl`, or `dot_config/tmux/{tmux.conf,executable_agent-switch.sh}`
+- PATH precedence, the stale mise shim scrub, or any consumer of the dedicated Nix profile path
 - package ordering, install methods, retired mise state, fnm/uv/rustup/Bun runtimes, vendor install scripts, native packages, or dedicated Nix profile ownership
 - `nix/**`, `renovate.json`, or the checked-in flake update workflow
 
@@ -53,5 +57,6 @@ For package, headless, MCP, or pi changes, also read the corresponding scoped do
 
 ## Other configuration
 
-No extra scoped document is currently required for unrelated files under `dot_config/`, `dot_claude/`, `dot_agents/`, or `private_dot_local/`.
+The `dot_config/` files listed under "Package manifest and bootstrap behavior" above are owned by that rule; read it before editing them.
+No extra scoped document is currently required for the REMAINING files under `dot_config/`, or for `dot_claude/`, `dot_agents/`, or `private_dot_local/`.
 Follow the root instructions and add a narrowly scoped rule plus a map entry if durable subsystem-specific guidance emerges.

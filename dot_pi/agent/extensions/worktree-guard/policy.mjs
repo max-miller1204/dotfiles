@@ -1,6 +1,14 @@
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+	basename,
+	dirname,
+	isAbsolute,
+	join,
+	relative,
+	resolve,
+	sep,
+} from "node:path";
 
 const TREEHOUSE_STATE_FILE = "treehouse-state.json";
 
@@ -126,7 +134,10 @@ function linkedMainSource(workspace) {
 		const commonDir = canonicalizePath(
 			resolve(adminDir, readFileSync(commonDirFile, "utf8").trim()),
 		);
-		return dirname(commonDir);
+		// A normal checkout keeps its common dir at <live source>/.git, so the
+		// live source tree is one level up. A bare repository IS its common dir;
+		// taking its parent would hard-block an arbitrarily broad directory.
+		return basename(commonDir) === ".git" ? dirname(commonDir) : commonDir;
 	} catch {
 		return undefined;
 	}

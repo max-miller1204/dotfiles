@@ -101,6 +101,36 @@ try {
 		new Set([canonicalizePath(sibling), canonicalizePath(mainSource)]),
 	);
 
+	// A worktree linked to a bare repository has a common dir that IS the
+	// repository (no ".git" basename); the guard must protect that directory
+	// itself rather than hard-blocking its arbitrarily broad parent.
+	const bareRepo = join(fixture, "bare-main.git");
+	const bareAdminDir = join(bareRepo, "worktrees", "one");
+	const barePool = join(fixture, "custom-treehouse-root", "bare-abcd34");
+	const bareWorkspace = join(barePool, "1", "repo");
+	const bareSibling = join(barePool, "2", "repo");
+	for (const path of [bareAdminDir, bareWorkspace, bareSibling]) {
+		mkdirSync(path, { recursive: true });
+	}
+	writeFileSync(join(bareWorkspace, ".git"), `gitdir: ${bareAdminDir}\n`);
+	writeFileSync(join(bareAdminDir, "commondir"), "../..\n");
+	writeFileSync(
+		join(barePool, "treehouse-state.json"),
+		JSON.stringify({
+			worktrees: [
+				{ name: "1", path: bareWorkspace },
+				{ name: "2", path: bareSibling },
+			],
+		}),
+	);
+	const bareContext = detectTreehouseContext(bareWorkspace, undefined);
+	assert.ok(bareContext, "bare-linked worktree should still activate");
+	assert.deepEqual(
+		new Set(bareContext.protectedPaths),
+		new Set([canonicalizePath(bareSibling), canonicalizePath(bareRepo)]),
+		"a bare repository common dir must be protected itself, not its parent",
+	);
+
 	const ordinaryRepo = join(fixture, "ordinary", "repo");
 	mkdirSync(ordinaryRepo, { recursive: true });
 	assert.equal(

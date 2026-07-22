@@ -68,11 +68,14 @@ install_flatpak() {
 install_deburl() {
     local bin="$1" url="$2"
     log "Installing $bin from a downloaded .deb"
-    local deb
-    deb="$(mktemp --suffix=.deb)"
+    # apt-get needs a path ending in .deb; a fixed name inside a temp directory
+    # stays portable (BSD mktemp has no --suffix), should this ever run on macOS.
+    local deb_dir deb
+    deb_dir="$(mktemp -d)"
+    deb="$deb_dir/$bin.deb"
     curl -fsSL -o "$deb" "$url"
     sudo apt-get install -y "$deb"
-    rm -f "$deb"
+    rm -rf "$deb_dir"
 }
 
 # debsig verification policy + keyring, independent of the apt keyring/list. Only

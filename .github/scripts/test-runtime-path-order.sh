@@ -57,6 +57,9 @@ make_command "$home/.bun/bin/bun"
 make_command "$home/.local/share/mise/shims/legacy-only"
 make_command "$tmp/system/bin/legacy-only"
 make_command "$home/.local/share/mise/shims/mise-only"
+# A relocated XDG_DATA_HOME shim dir must be scrubbed from PATH as well.
+mkdir -p "$data/mise/shims"
+make_command "$data/mise/shims/mise-xdg-only"
 
 chezmoi --source "$repo_root" execute-template \
 	<"$repo_root/dot_config/fish/config.fish.tmpl" \
@@ -73,7 +76,7 @@ fish_path() {
 		BUN_INSTALL="$home/.bun" \
 		RUSTUP_TOOLCHAIN=stale-mise-toolchain \
 		NODE_PATH="$tmp/existing-node-modules" \
-		PATH="$home/.local/share/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		PATH="$home/.local/share/mise/shims:$data/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
 		fish -l -i -c "command -v $1" 2>/dev/null | tail -1
 }
 
@@ -106,6 +109,7 @@ assert_path pi "$home/.local/bin/pi"
 assert_path hunk "$home/.local/bin/hunk"
 assert_path legacy-only "$tmp/system/bin/legacy-only"
 assert_absent mise-only
+assert_absent mise-xdg-only
 
 node_path="$(
 	env \

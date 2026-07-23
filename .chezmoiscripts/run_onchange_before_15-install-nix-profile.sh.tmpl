@@ -90,6 +90,8 @@ if [[ -L "$profile" ]]; then
         else
             echo "The dedicated profile must contain exactly one element; found $element_count." >&2
             echo "Refusing to modify a manually changed profile: $profile" >&2
+            echo "Move it aside explicitly to rebuild it from this source:" >&2
+            echo "  mv '$profile' '${profile}.backup'" >&2
         fi
         exit 1
     fi

@@ -28,11 +28,12 @@ ROLE_ORDER = (
     "install-lsp-servers",
 )
 STAGE_PATTERN = re.compile(
-    r"^run_(?:once|onchange)_(?P<phase>before|after)_(?P<stage>\d+)"
-    r"-(?P<role>.+)\.sh\.tmpl$"
+    r"^run_(?:once|onchange)_(?P<phase>before|after)_"
+    r"(?P<name>\d+-(?P<role>[a-z-]+)\.sh)\.tmpl$"
 )
-# chezmoi runs every `before` script ahead of every `after` script, and sorts
-# within each phase by name.
+# chezmoi runs every `before` script ahead of every `after` script, and within a
+# phase sorts by the target NAME as a byte string - so `10-` sorts before `9-`,
+# and a numeric stage key would mis-model that. Key on (phase, target name).
 PHASE_ORDER = {"before": 0, "after": 1}
 
 
@@ -62,7 +63,7 @@ def check_stage_order() -> None:
         match = STAGE_PATTERN.match(path.name)
         if not match or match.group("role") not in ROLE_ORDER:
             continue
-        key = (PHASE_ORDER[match.group("phase")], int(match.group("stage")))
+        key = (PHASE_ORDER[match.group("phase")], match.group("name"))
         discovered.setdefault(match.group("role"), []).append((key, path))
 
     duplicated = {

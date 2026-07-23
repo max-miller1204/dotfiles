@@ -60,9 +60,12 @@ make_command "$home/.local/share/mise/shims/mise-only"
 # A relocated XDG_DATA_HOME shim dir must be scrubbed from PATH as well.
 mkdir -p "$data/mise/shims"
 make_command "$data/mise/shims/mise-xdg-only"
-# So must a MISE_DATA_DIR relocation, which follows neither data home.
-mkdir -p "$tmp/mise-data-dir/mise/shims"
-make_command "$tmp/mise-data-dir/mise/shims/mise-relocated-only"
+# A MISE_DATA_DIR override relocates the shim dir outside any /mise/ path, so
+# the /mise/shims suffix match cannot reach it - the scrub must strip
+# $MISE_DATA_DIR/shims explicitly.
+mise_data_dir="$tmp/opt-toolchains"
+mkdir -p "$mise_data_dir/shims"
+make_command "$mise_data_dir/shims/mise-relocated-only"
 
 chezmoi --source "$repo_root" execute-template \
 	<"$repo_root/dot_config/fish/config.fish.tmpl" \
@@ -77,9 +80,10 @@ fish_path() {
 		XDG_RUNTIME_DIR="$runtime" \
 		CARGO_HOME="$home/.cargo" \
 		BUN_INSTALL="$home/.bun" \
+		MISE_DATA_DIR="$mise_data_dir" \
 		RUSTUP_TOOLCHAIN=stale-mise-toolchain \
 		NODE_PATH="$tmp/existing-node-modules" \
-		PATH="$home/.local/share/mise/shims:$data/mise/shims:$tmp/mise-data-dir/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		PATH="$home/.local/share/mise/shims:$data/mise/shims:$mise_data_dir/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
 		fish -l -i -c "command -v $1" 2>/dev/null | tail -1
 }
 

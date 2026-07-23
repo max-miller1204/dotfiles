@@ -156,6 +156,38 @@ nix profile rollback --profile "$profile"
 rolled_back_link="$(readlink "$profile")"
 [[ "$rolled_back_link" == "$initial_link" ]]
 
+# Applying from a relocated source dir makes the recorded originalUrl differ from
+# the rendered flake ref, driving the installer's re-point branch. It must
+# replace the managed element (never strand a zero-element profile) and record
+# the new flake ref while keeping the same built store path.
+relocated_source="$tmp/relocated-source"
+mkdir -p "$relocated_source"
+cp -a "$repo_root/nix" "$relocated_source/nix"
+cp -a "$repo_root/.chezmoitemplates" "$relocated_source/.chezmoitemplates"
+relocated_flake="path:$relocated_source/nix"
+chezmoi --source "$relocated_source" execute-template \
+	<"$profile_template" >"$tmp/relocated-install.sh"
+grep -Fq "flake=\"$relocated_flake\"" "$tmp/relocated-install.sh"
+XDG_STATE_HOME="$tmp/state" bash "$tmp/relocated-install.sh"
+repoint_json="$(nix profile list --profile "$profile" --json)"
+REPOINT_JSON="$repoint_json" RELOCATED_FLAKE="$relocated_flake" OUT="$out" python3 <<'PY'
+import json
+import os
+
+profile = json.loads(os.environ["REPOINT_JSON"])
+elements = profile["elements"]
+if len(elements) != 1:
+    raise SystemExit(f"re-point left {len(elements)} element(s), expected exactly 1")
+element = next(iter(elements.values()))
+if not element.get("attrPath", "").endswith(".workstation"):
+    raise SystemExit(f"re-point lost the workstation attrPath: {element.get('attrPath')!r}")
+if element.get("originalUrl") != os.environ["RELOCATED_FLAKE"]:
+    raise SystemExit(f"re-point did not record the new flake ref: {element.get('originalUrl')!r}")
+if os.environ["OUT"] not in element.get("storePaths", []):
+    raise SystemExit("re-point changed the built store path")
+print("re-point branch replaced the managed element from a relocated source")
+PY
+
 if find "$tmp" -user 0 -print -quit | grep -q .; then
 	echo "Temporary profile test created root-owned files" >&2
 	exit 1

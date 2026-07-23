@@ -19,7 +19,7 @@ Read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md
 - `dot_config/direnv/direnvrc`, `dot_config/fish/config.fish.tmpl`, `dot_config/fish/functions/{update-all,lsp-upgrade}.fish.tmpl`, or `dot_config/tmux/{tmux.conf,executable_agent-switch.sh}`
 - PATH precedence, the stale mise shim scrub, or any consumer of the dedicated Nix profile path
 - package ordering, install methods, retired mise state, fnm/uv/rustup/Bun runtimes, vendor install scripts, native packages, or dedicated Nix profile ownership
-- `nix/**`, `renovate.json`, or the checked-in flake update workflow
+- `nix/**`, or `renovate.json` (the hosted-Renovate config that governs flake input updates; there is no in-repo update workflow)
 
 ## Script and tool-owned configuration
 

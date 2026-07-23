@@ -15,9 +15,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           persist-credentials: false
-      # v3
-      - uses: >-
-          DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88
+      - uses: DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88  # v3
       - name: Evaluate every supported system
         run: nix flake check --all-systems --no-build "path:$PWD/nix"
       - name: Check Nix formatting

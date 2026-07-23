@@ -18,15 +18,18 @@
     direnv
     tmux
     neovim
+    shellcheck
     nix-direnv
   ];
-  # gopls invokes Go from PATH, and typescript-language-server loads the
-  # TypeScript module at runtime, so each server stays pinned with its runtime.
+  # gopls invokes Go from PATH, so Go stays pinned beside it. typescript-go
+  # owns the tsc/tsgo CLIs; the nixpkgs typescript attribute would collide on
+  # bin/tsc and trails the native TS 7 compiler. typescript-language-server
+  # resolves its own pinned TypeScript module internally.
   lsp = with pkgs; [
     go
     gopls
     pyright
-    typescript
+    typescript-go
     typescript-language-server
   ];
 

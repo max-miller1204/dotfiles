@@ -67,6 +67,7 @@
                 direnv version
                 tmux -V
                 nvim --version
+                shellcheck --version
                 test -r ${bundles.headless}/share/nix-direnv/direnvrc
                 touch "$out"
               '';
@@ -85,6 +86,7 @@
                 pyright --version
                 typescript-language-server --version
                 tsc --version
+                tsgo --version
                 python3 ${./lsp-smoke.py} \
                   "$(command -v pyright-langserver)" \
                   "$(command -v typescript-language-server)"

@@ -49,7 +49,7 @@ That's it - the install scripts run during `apply` and handle the rest:
 - installs mutable language runtimes through their native managers after the Nix profile is active.
   `fnm` owns Node LTS, `uv` owns Python 3, and `rustup` owns stable Rust, Cargo, targets, and rust-analyzer.
   Bun remains on its official native installer.
-  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, and typescript-language-server.
+  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, typescript-go, and typescript-language-server.
   Existing stale mise installations are not deleted, but their shims are removed from Fish PATH.
 - installs **Nix** before profile activation.
   Linux uses the Determinate installer with a sanitized root environment.
@@ -102,8 +102,8 @@ Intel macOS is not supported: nixpkgs-unstable dropped the platform and no machi
 
 The flake exposes cumulative `core`, `headless`, `lsp`, and `workstation` package outputs, plus `default` as an alias of `workstation`.
 The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.
-The cumulative `headless` output adds `gum`, `starship`, `atuin`, `zoxide`, `direnv`, `tmux`, Neovim, and nix-direnv.
-The cumulative `lsp` output adds Go, gopls, Pyright, TypeScript, and typescript-language-server together.
+The cumulative `headless` output adds `gum`, `starship`, `atuin`, `zoxide`, `direnv`, `tmux`, Neovim, `shellcheck`, and nix-direnv.
+The cumulative `lsp` output adds Go, gopls, Pyright, typescript-go, and typescript-language-server together.
 The Nix package gives the language server a pinned TypeScript fallback internally, so no shell-wide `NODE_PATH` is needed.
 The cumulative `workstation` output adds the `fnm` and `uv` manager executables.
 Only `workstation` is installed, so overlapping bundle elements never enter the profile.
@@ -568,7 +568,7 @@ the repo and need manual hand-off.
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
    nix profile list --profile "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv # first result should be the dedicated profile
+   type -a eza shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv # first result should be the dedicated profile
    type -a hunk pi           # first results should be the ~/.local/bin launchers
    type -a node python rustc bun # native runtime-manager paths should win
    which brew fish claude codex opencode pi op

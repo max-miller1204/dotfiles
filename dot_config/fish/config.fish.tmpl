@@ -94,6 +94,26 @@ if status is-interactive
     end
     set -gx PATH (string match -v -r -- $stale_shim_re $PATH)
 
+    # The old mise activation also exported toolchain env that outlives it in
+    # any shell nested under a pre-migration session. A stale GOROOT breaks the
+    # profile's go outright once the mise dir is gone, and a mise NODE_PATH
+    # would shadow typescript-language-server's pinned module. Drop only
+    # mise-derived values; user- and project-owned exports pass through.
+    for stale_var in GOROOT GOBIN
+        if set -q $stale_var; and string match -q '*/mise/installs/*' -- $$stale_var
+            set -e $stale_var
+        end
+    end
+    if set -q NODE_PATH; and test -n "$NODE_PATH"
+        set -l kept_node_dirs (string match -v '*/mise/installs/*' -- (string split -- : $NODE_PATH))
+        if test (count $kept_node_dirs) -eq 0
+            set -e NODE_PATH
+        else
+            set -gx NODE_PATH (string join -- : $kept_node_dirs)
+        end
+    end
+    set -e MISE_SHELL __MISE_DIFF __MISE_SESSION __MISE_ORIG_PATH
+
     # Mutable runtime paths intentionally sit above the Nix profile. uv-managed
     # project virtual environments and direnv dev shells can still override them.
     set -l uv_data_home "$HOME/.local/share"

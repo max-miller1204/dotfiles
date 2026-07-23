@@ -41,7 +41,7 @@ fi
 EOF
 chmod +x "$profile/bin/fnm"
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server uv node python rustup rustc cargo bun; do
+for bin in eza shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server uv node python rustup rustc cargo bun; do
 	make_command "$profile/bin/$bin"
 	make_command "$home/.local/share/mise/shims/$bin"
 done
@@ -105,7 +105,7 @@ assert_absent() {
 	fi
 }
 
-for bin in eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
+for bin in eza shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv; do
 	assert_path "$bin" "$profile/bin/$bin"
 done
 for bin in node npm; do assert_path "$bin" "$runtime/fnm_multishells/test/bin/$bin"; done
@@ -119,17 +119,36 @@ assert_absent mise-only
 assert_absent mise-xdg-only
 assert_absent mise-relocated-only
 
-node_path="$(
+# Stale mise-derived toolchain env must be scrubbed while user-owned values
+# pass through: the mise NODE_PATH entry is filtered out, the user entry
+# survives, and a mise GOROOT/GOBIN pair is dropped entirely.
+stale_env="$(
 	env \
 		HOME="$home" \
 		XDG_CONFIG_HOME="$home/.config" \
 		XDG_DATA_HOME="$data" \
 		XDG_STATE_HOME="$state" \
 		XDG_RUNTIME_DIR="$runtime" \
-		NODE_PATH="$tmp/existing-node-modules" \
+		GOROOT="$home/.local/share/mise/installs/go/1.26.5" \
+		GOBIN="$home/.local/share/mise/installs/go/1.26.5/bin" \
+		NODE_PATH="$home/.local/share/mise/installs/npm-typescript/latest/lib/node_modules:$tmp/existing-node-modules" \
 		PATH="$home/.local/share/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
-		fish -l -i -c 'printf "%s\n" "$NODE_PATH"' 2>/dev/null | tail -1
+		fish -l -i -c 'printf "%s|%s|%s\n" "$NODE_PATH" "$GOROOT" "$GOBIN"' 2>/dev/null | tail -1
 )"
-[[ "$node_path" == "$tmp/existing-node-modules" ]]
+[[ "$stale_env" == "$tmp/existing-node-modules||" ]]
+
+# A GOROOT outside any mise path is user-owned and must be preserved.
+custom_goroot="$(
+	env \
+		HOME="$home" \
+		XDG_CONFIG_HOME="$home/.config" \
+		XDG_DATA_HOME="$data" \
+		XDG_STATE_HOME="$state" \
+		XDG_RUNTIME_DIR="$runtime" \
+		GOROOT="$tmp/custom-goroot" \
+		PATH="$home/.local/share/mise/shims:$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		fish -l -i -c 'printf "%s\n" "$GOROOT"' 2>/dev/null | tail -1
+)"
+[[ "$custom_goroot" == "$tmp/custom-goroot" ]]
 
 echo "Fish runtime and package ownership precedence passed"

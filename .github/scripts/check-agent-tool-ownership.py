@@ -138,14 +138,21 @@ def main() -> None:
         ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl": pi_installer,
     }
     # Match the command shape, not one unquoted spelling: every real `rm -rf`
-    # in this repository quotes its target, and the data directory can be
-    # written as $HOME/.local/share, $XDG_DATA_HOME, or $MISE_DATA_DIR.
+    # in this repository quotes its target, and the mise data directory can be
+    # written as $HOME/.local/share/mise, $XDG_DATA_HOME/mise, or $MISE_DATA_DIR.
     destructive = (
         (re.compile(r"\bmise\s+uninstall\b"), "mise uninstall"),
-        (re.compile(r"\brm\b[^\n;&|]*/mise\b"), "rm of preserved mise state"),
+        (re.compile(r"\brm\b[^\n;&|]*(?:/mise\b|\bMISE_DATA_DIR\b)"),
+         "rm of preserved mise state"),
     )
     for relative, text in migration_files.items():
-        found = [label for pattern, label in destructive if pattern.search(text)]
+        # Comments describe the preservation rule; only code should trip it, and
+        # a `\`-continued command must be joined so its target is on one logical
+        # line before matching.
+        scannable = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        ).replace("\\\n", " ")
+        found = [label for pattern, label in destructive if pattern.search(scannable)]
         if found:
             fail(f"{relative} deletes preserved stale mise state: {found!r}")
 

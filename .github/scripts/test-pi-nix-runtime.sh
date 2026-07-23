@@ -30,12 +30,17 @@ PI_OFFLINE=1 \
     "$pi_bin" --mode rpc --no-session \
     <"$tmp/request.jsonl" >"$tmp/rpc.jsonl" 2>"$tmp/stderr" &
 pi_pid=$!
+# Launch the watchdog under job control so it gets its own process group; that
+# lets the cleanup below signal the group and reap the `sleep` too, instead of
+# orphaning it for the rest of rpc_timeout once Pi exits on its own.
+set -m
 { sleep "$rpc_timeout" && kill -9 "$pi_pid"; } >/dev/null 2>&1 &
 watchdog_pid=$!
+set +m
 
 rpc_status=0
 wait "$pi_pid" || rpc_status=$?
-kill "$watchdog_pid" >/dev/null 2>&1 || true
+kill -- -"$watchdog_pid" >/dev/null 2>&1 || true
 wait "$watchdog_pid" >/dev/null 2>&1 || true
 
 if [[ "$rpc_status" -ne 0 ]]; then

@@ -121,8 +121,8 @@ The `run_onchange_before_15` script builds first, verifies the expected executab
 A failed build cannot replace the active generation.
 Do not manually add packages to this profile.
 If the path still points at the retired Home Manager prototype, the script refuses to overwrite it and prints an explicit `mv` command that preserves the old profile as a backup before the next apply.
-Ownership is decided by what the single profile element IS - a `dotfiles-workstation` attribute path - not by where it was installed from, so relocating the chezmoi source directory or applying from a worktree re-points the managed element instead of failing.
-Anything else in that profile is refused with the mismatching attribute path named and the same `mv` recovery printed.
+Ownership is decided by what the single profile element IS - its flake attribute path ends in `.workstation` (the real value is `packages.<system>.workstation`; `dotfiles-workstation` is only the build's derivation name) - not by where it was installed from, so relocating the chezmoi source directory or applying from a worktree re-points the managed element instead of failing.
+Any other contents - a wrong element count, or an element whose attribute path is not `*.workstation` - are refused; the attribute-path mismatch is named, and every refusal prints an `mv` command that preserves the old profile before a rebuild.
 
 ```sh
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
@@ -415,7 +415,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
 - `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - native packages, coding agents, and Fish as the login shell
 - `.chezmoiscripts/run_once_before_12-install-nix.sh.tmpl` - architecture-aware Linux and macOS Nix bootstrap, with existing-state refusal and post-install activation verification
-- `.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl` - build-first installation or upgrade of the one-element dedicated `dotfiles-workstation` profile whenever flake, lock, or bundle selection changes
+- `.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl` - build-first installation or upgrade of the one-element dedicated `dotfiles-workstation` profile whenever a checked-in `nix/` flake file changes
 - `.chezmoiscripts/run_onchange_before_16-install-language-runtimes.sh.tmpl` - installs or updates mutable fnm Node, uv Python, rustup Rust, and native Bun after their Nix-owned manager executables are active
 - `.chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl` - installs Hunk through fnm-managed npm into a stable native prefix and links its CLI into `~/.local/bin`
 - `.chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl` - installs Pi through fnm-managed npm into its stable native prefix on the `latest` channel and links its CLI into `~/.local/bin`
@@ -584,7 +584,7 @@ the repo and need manual hand-off.
 - `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
 - The native bootstrap script is `run_once`, so it reruns only if its rendered content changes
-- The Nix profile installer is `run_onchange`, so a committed flake, lock, package grouping, or selected bundle change triggers a build-first profile upgrade
+- The Nix profile installer is `run_onchange`, so a committed flake, lock, or package-grouping change triggers a build-first profile upgrade
 - `update-all` refreshes native package managers, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi.
   It never updates `flake.lock`; `chezmoi update` receives lock changes committed by Renovate or a maintainer
 - `lsp-upgrade` reports the flake-pinned LSPs and upgrades the rustup- and OS-owned servers

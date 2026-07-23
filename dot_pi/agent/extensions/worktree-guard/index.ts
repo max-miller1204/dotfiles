@@ -29,13 +29,17 @@ import {
 import {
 	bashGuardReason,
 	detectTreehouseContext,
-	isPathInside,
 	isWritablePath,
 	resolveToolPath,
 } from "./policy.mjs";
 
-// Shell word boundaries, so `--source=/x` and `a,b` yield their path operands.
-const COMMAND_TOKEN_PATTERN = /[^\s"'`;|&<>()=,]+/g;
+// policy.mjs tags a protected-path reference with this exact reason prefix. The
+// extension can hot-reload against a policy.mjs that predates any export added
+// after initial load, so index.ts stays on the stable bashGuardReason entry
+// point and recovers the hard-block-vs-review distinction from this prefix
+// rather than importing or re-implementing the protected-path scan. Keep it
+// byte-identical with that reason wording in policy.mjs.
+const PROTECTED_PATH_REASON_PREFIX = "command references protected path ";
 
 type TreehouseContext = NonNullable<ReturnType<typeof detectTreehouseContext>>;
 type GuardMode = "auto" | "prompt";
@@ -77,26 +81,6 @@ type BashGuardRequest = {
 
 function shortToolName(toolName: string): string {
 	return toolName.split(".").at(-1) ?? toolName;
-}
-
-// Canonicalize every path-shaped operand so a non-canonical spelling of a
-// protected path - `../2/repo`, or /var vs /private/var on macOS - cannot slip
-// past a raw substring comparison.
-function referencedProtectedPath(
-	command: string,
-	treehouse: TreehouseContext,
-): string | undefined {
-	for (const token of command.match(COMMAND_TOKEN_PATTERN) ?? []) {
-		if (!token.includes("/")) continue;
-		const target = resolveToolPath(treehouse.workspace, token);
-		const referenced = treehouse.protectedPaths.find((path: string) =>
-			isPathInside(path, target),
-		);
-		if (referenced) return referenced;
-	}
-	return treehouse.protectedPaths.find((path: string) =>
-		command.includes(path),
-	);
 }
 
 function block(reason: string): BlockResult {
@@ -222,15 +206,15 @@ async function guardBashTool({
 		);
 	}
 
-	const protectedPath = referencedProtectedPath(command, treehouse);
-	if (protectedPath) {
-		const reason = `command references protected path ${protectedPath}`;
-		ctx.ui.notify(`Blocked: ${reason}`, "warning");
-		return block(`Treehouse worktree guard blocked command: ${reason}`);
-	}
-
+	// One deterministic classification in policy.mjs. A protected-path reference
+	// is the single review class that must hard-block with no judge override;
+	// policy.mjs marks it with PROTECTED_PATH_REASON_PREFIX.
 	const reviewReason = bashGuardReason(command, treehouse);
 	if (!reviewReason) return undefined;
+	if (reviewReason.startsWith(PROTECTED_PATH_REASON_PREFIX)) {
+		ctx.ui.notify(`Blocked: ${reviewReason}`, "warning");
+		return block(`Treehouse worktree guard blocked command: ${reviewReason}`);
+	}
 	if (runtime.mode === "prompt") {
 		return confirmCommand(command, reviewReason, ctx);
 	}

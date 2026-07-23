@@ -51,6 +51,13 @@ function update-all --description 'Update every package source this dotfiles rep
     end
 
     if command -q npm
+        # config.fish only activates fnm in interactive shells, so a
+        # non-interactive `fish -c update-all` starts with no FNM_MULTISHELL_PATH.
+        # Activate fnm here first so the ownership gate sees the fnm-managed npm
+        # instead of failing closed (and skipping the chezmoi refresh below).
+        if command -q fnm; and test -z "$FNM_MULTISHELL_PATH"
+            fnm env --shell fish | source
+        end
         # run_onchange_before_17 and _18 install both tools with fnm-managed npm
         # and verify the result; a refresh here must assert exactly the same
         # things or it can silently break what the installers guarantee.

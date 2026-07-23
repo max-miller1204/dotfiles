@@ -71,11 +71,16 @@ if status is-interactive
 
     # Never delete stale mise installations automatically, but retire any shim
     # path inherited from an older shell so migrated commands cannot regain
-    # ownership. mise resolves its shim directory from MISE_DATA_DIR or either
-    # data home, so match every PATH entry that ends in /mise/shims instead of
-    # enumerating the locations it might have been relocated to.
+    # ownership. Match every PATH entry ending in /mise/shims (covers both data
+    # homes and the default). mise also honors MISE_DATA_DIR, which can relocate
+    # the shim dir outside any /mise/ path, so scrub $MISE_DATA_DIR/shims too
+    # without broadening to every */shims (that would strip pyenv/rbenv dirs).
+    set -l stale_shim_re '/mise/shims/?$'
+    if set -q MISE_DATA_DIR; and test -n "$MISE_DATA_DIR"
+        set stale_shim_re "$stale_shim_re"'|^'(string escape --style=regex -- "$MISE_DATA_DIR/shims")'/?$'
+    end
     if set -q fish_user_paths
-        set -l kept_user_paths (string match -v -r -- '/mise/shims/?$' $fish_user_paths)
+        set -l kept_user_paths (string match -v -r -- $stale_shim_re $fish_user_paths)
         if test (count $kept_user_paths) -ne (count $fish_user_paths)
             # Rewrite in the variable's own scope: a session global would shadow
             # a universal fish_user_paths, silently de-persisting every later
@@ -87,7 +92,7 @@ if status is-interactive
             end
         end
     end
-    set -gx PATH (string match -v -r -- '/mise/shims/?$' $PATH)
+    set -gx PATH (string match -v -r -- $stale_shim_re $PATH)
 
     # Mutable runtime paths intentionally sit above the Nix profile. uv-managed
     # project virtual environments and direnv dev shells can still override them.

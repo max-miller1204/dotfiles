@@ -261,6 +261,9 @@ export function detectTreehouseContext(
 export function assessBashCommand(command, context) {
 	const protectedPath = protectedPathReference(command, context);
 	if (protectedPath) {
+		// index.ts recovers this hard-block class from the reason's leading
+		// "command references protected path " prefix instead of a second scan;
+		// keep this wording stable or update its copy in index.ts in lockstep.
 		return {
 			action: "block",
 			reason: `command references protected path ${protectedPath}`,

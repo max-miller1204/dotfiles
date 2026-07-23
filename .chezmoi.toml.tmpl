@@ -9,10 +9,14 @@
     # The prompt text has no trailing '?' on purpose: promptBoolOnce renders
     # its own question mark, so a literal one would double up.
     headless = {{ if eq .chezmoi.os "linux" }}{{ promptBoolOnce . "headless" "Is this machine headless/server-only (skip GUI desktop apps)" false }}{{ else }}false{{ end }}
-    # The mise typescript prefix relative to $HOME, shared by the fish config's
-    # NODE_PATH and the install script's resolution check (each prepends its own
-    # shell's home) so the derived path can't drift between the two.
-    tsNodeModulesRel = ".local/share/mise/installs/npm-typescript/latest/lib/node_modules"
+    # The dedicated Nix profile is not configurable here: run_onchange_before_15
+    # hardcodes the cumulative workstation bundle, whose fnm and uv its
+    # pre-activation smoke and its profile ownership guard both require.
+    # Mutable runtime policies. Existing machine configs may predate these keys,
+    # so consumers apply the same defaults defensively.
+    nodeVersion = "lts"
+    pythonVersion = "3"
+    rustToolchain = "stable"
     # Non-LSP Claude Code plugins (marketplace-qualified in the install script).
     # Installed/enabled by run_after_65-setup-claude-plugins.
     extraClaudePlugins = ["agent-sdk-dev", "skill-creator"]
@@ -23,8 +27,8 @@
 # run_onchange_after_50-install-lsp-servers and the lsp-upgrade fish function), so
 # adding or removing an LSP language is a one-place edit here. The plugin list and
 # the server-install list can no longer drift because both derive from this table.
-#   method = "mise"   -> miseTools installed via `mise use -g`
-#   method = "rustup" -> rustupComponent added to the active rust toolchain
+#   method = "nix"    -> executable supplied by the dedicated Nix profile
+#   method = "rustup" -> rustupComponent added to the selected rust toolchain
 #   method = "os"     -> OS package (aptPackage on Linux, brewFormula on macOS)
 [[data.lspLanguages]]
     plugin = "rust-analyzer-lsp"
@@ -33,19 +37,15 @@
     verifyBin = "rust-analyzer"
 [[data.lspLanguages]]
     plugin = "pyright-lsp"
-    method = "mise"
-    miseTools = ["npm:pyright"]
+    method = "nix"
     verifyBin = "pyright-langserver"
 [[data.lspLanguages]]
     plugin = "typescript-lsp"
-    method = "mise"
-    miseTools = ["npm:typescript-language-server", "npm:typescript"]
+    method = "nix"
     verifyBin = "typescript-language-server"
-    verifyTsResolve = true
 [[data.lspLanguages]]
     plugin = "gopls-lsp"
-    method = "mise"
-    miseTools = ["go:golang.org/x/tools/gopls"]
+    method = "nix"
     verifyBin = "gopls"
 [[data.lspLanguages]]
     plugin = "clangd-lsp"

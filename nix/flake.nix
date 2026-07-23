@@ -1,0 +1,109 @@
+{
+  description = "Pinned command-line bundles for Max's dotfiles";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  };
+
+  outputs =
+    { nixpkgs, ... }:
+    let
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
+
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+
+      pkgsFor =
+        system:
+        import nixpkgs {
+          inherit system;
+        };
+
+      bundlesFor =
+        system:
+        let
+          pkgs = pkgsFor system;
+          packageGroups = import ./packages.nix { inherit pkgs; };
+        in
+        import ./bundles.nix { inherit pkgs packageGroups; };
+    in
+    {
+      packages = forAllSystems bundlesFor;
+
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+          bundles = bundlesFor system;
+        in
+        {
+          core-smoke =
+            pkgs.runCommand "dotfiles-core-smoke"
+              {
+                nativeBuildInputs = [ bundles.core ];
+              }
+              ''
+                eza --version
+                bat --version
+                fd --version
+                rg --version
+                fzf --version
+                touch "$out"
+              '';
+
+          headless-smoke =
+            pkgs.runCommand "dotfiles-headless-smoke"
+              {
+                nativeBuildInputs = [ bundles.headless ];
+              }
+              ''
+                gum --version
+                starship --version
+                atuin --version
+                zoxide --version
+                direnv version
+                tmux -V
+                nvim --version
+                test -r ${bundles.headless}/share/nix-direnv/direnvrc
+                touch "$out"
+              '';
+
+          lsp-smoke =
+            pkgs.runCommand "dotfiles-lsp-smoke"
+              {
+                nativeBuildInputs = [
+                  bundles.lsp
+                  pkgs.python3
+                ];
+              }
+              ''
+                go version
+                gopls version
+                pyright --version
+                typescript-language-server --version
+                tsc --version
+                python3 ${./lsp-smoke.py} \
+                  "$(command -v pyright-langserver)" \
+                  "$(command -v typescript-language-server)"
+                touch "$out"
+              '';
+
+          workstation-smoke =
+            pkgs.runCommand "dotfiles-workstation-smoke"
+              {
+                nativeBuildInputs = [ bundles.workstation ];
+              }
+              ''
+                fnm --version
+                uv --version
+                touch "$out"
+              '';
+        }
+      );
+
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt);
+    };
+}

@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 -->
+
 # dotfiles
 
 Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubuntu** (which uses the Linux path with desktop apps gated off — see [WSL Ubuntu](#wsl-ubuntu)).
@@ -13,24 +15,24 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 | `chezmoi cd` | Drop into a shell inside the chezmoi source repo. Exit with `exit` / Ctrl-D. |
 | `chezmoi add <path>` | Start tracking a file that already exists in `$HOME`. |
 | `chezmoi re-add` | Pull edits you made directly to files in `$HOME` back into the source. |
-| `update-all` | Fish function — refreshes brew / apt / flatpak, mise toolchains, chezmoi, atuin. |
+| `update-all` | Fish function that refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi. Committed Nix updates arrive through `chezmoi update`. |
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
-On first `chezmoi apply`, a `run_once_before` script installs every CLI and GUI
-app these dotfiles expect; the full set is the `.chezmoidata/packages.yaml`
-manifest (see [Bootstrap a new machine](#bootstrap-a-new-machine)), not a list
-kept here.
+On first `chezmoi apply`, bootstrap scripts install every CLI and GUI
+app these dotfiles expect from the native package manifest and the checked-in
+Nix bundle described below.
 `run_once_after` scripts clone TPM + install tmux plugins and drop the LazyVim
 starter into `~/.config/nvim` if it's empty.
 
 ## Bootstrap a new machine
 
 ```sh
-# macOS: install chezmoi (brings curl along for the ride)
-brew install chezmoi
-# Ubuntu: one-liner from the chezmoi site
-sh -c "$(curl -fsSL https://get.chezmoi.io)"
+# macOS only, run this first: xcode-select --install
+
+# Every platform: install chezmoi without requiring a package manager.
+sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
 
 chezmoi init --apply max-miller1204/dotfiles
 ```
@@ -39,30 +41,38 @@ chezmoi init --apply max-miller1204/dotfiles
 
 That's it - the install scripts run during `apply` and handle the rest:
 
-- installs every **CLI and GUI app** these dotfiles expect from the package
-  manifest, `.chezmoidata/packages.yaml`.
-  That manifest is the single source of truth: it describes each tool once and
-  carries its per-OS install method as data, so it is the one place to look (and
-  the one place to edit), not a hand-kept list here.
-  GUI desktop apps are skipped on WSL (where the Windows-native versions are used
-  instead) and on headless/server machines; the non-GUI CLI tools install
-  everywhere
-- installs **toolchains via mise**: `node@lts`, `python@latest`,
-  `rust@latest`, `go@latest`, `fzf@latest`, `bun@latest`, `neovim@latest`,
-  `uv@latest` (so fzf/bun/neovim are mise-managed, not apt/brew)
-- installs **Nix** via the Determinate installer
+- installs native CLI and GUI dependencies from `.chezmoidata/packages.yaml`.
+  GUI desktop apps are skipped on WSL and headless/server machines.
+  Commands owned by the checked-in Nix flake are intentionally absent from this manifest on every supported platform.
+- installs the checked-in `nix/` flake's cumulative `workstation` bundle into one dedicated profile at `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles`.
+  Only the `nix/` subtree is passed to Nix, so templates and future secrets elsewhere in the chezmoi source are never copied into the store.
+- installs mutable language runtimes through their native managers after the Nix profile is active.
+  `fnm` owns Node LTS, `uv` owns Python 3, and `rustup` owns stable Rust, Cargo, targets, and rust-analyzer.
+  Bun remains on its official native installer.
+  Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, TypeScript, and typescript-language-server.
+  Existing stale mise installations are not deleted, but their shims are removed from Fish PATH.
+- installs **Nix** before profile activation.
+  Linux uses the Determinate installer with a sanitized root environment.
+  Apple Silicon macOS uses Determinate's signed package after verifying its Apple Developer team.
+  Existing or incomplete `/nix` state is never deleted automatically.
 - installs **Claude Code** via the official installer
   (`curl -fsSL https://claude.ai/install.sh | bash`) — lands in
   `~/.local/bin/claude` and self-updates in the background
 - installs the **Codex** and **OpenCode** agents via their own official
-  installers too, and the **pi** agent (`@earendil-works/pi-coding-agent`,
-  npm-distributed) as a mise-managed npm tool so it survives a node upgrade
-  instead of orphaning in the version-pinned runtime dir - so all four coding
-  agents (Claude, Codex, OpenCode, pi) are present and interchangeable - see
+  installers and installs **pi** through fnm-managed npm into the stable
+  `~/.local/share/npm-pi` prefix, linking its CLI into `~/.local/bin`.
+  Pi stays outside Nix so npm releases land immediately, and it uses
+  fnm-managed npm for its published extension packages without owning the
+  interactive Node runtime, so all four coding agents (Claude, Codex,
+  OpenCode, pi) are present and interchangeable - see
   [Agents (multi-agent)](#agents-multi-agent)
-- installs the **language servers** Claude Code's LSP plugins need: pyright,
-  typescript-language-server (+ typescript) and gopls as mise-managed tools,
-  rust-analyzer via the rustup component, and clangd from apt (Linux) or
+- installs **Hunk** through fnm-managed npm into the stable
+  `~/.local/share/npm-hunkdiff` prefix and links its CLI into `~/.local/bin`.
+  Hunk remains outside Nix with Pi: nixpkgs does not package hunkdiff, and npm
+  releases land immediately.
+- installs the **language servers** Claude Code's LSP plugins need: Pyright,
+  TypeScript, typescript-language-server, Go, and gopls through the cumulative
+  Nix profile, rust-analyzer through rustup, and clangd from apt (Linux) or
   Homebrew `llvm` (macOS). Driven by `run_onchange_after_50` so it reruns
   when that script changes. The language set (plugin + server install method)
   lives once in the `lspLanguages` table in `.chezmoi.toml.tmpl`, shared by the
@@ -85,6 +95,83 @@ silently fail inside some TTYs), run it manually:
 chsh -s "$(command -v fish)"
 ```
 
+## Global Nix package profile
+
+The source-only flake lives under `nix/` and supports `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`, all following `nixpkgs-unstable`.
+Intel macOS is not supported: nixpkgs-unstable dropped the platform and no machine here uses it, so the bootstrap refuses `x86_64` Darwin.
+
+The flake exposes cumulative `core`, `headless`, `lsp`, and `workstation` package outputs, plus `default` as an alias of `workstation`.
+The `core` output contains `eza`, `bat`, `fd`, `ripgrep`, and `fzf`.
+The cumulative `headless` output adds `gum`, `starship`, `atuin`, `zoxide`, `direnv`, `tmux`, Neovim, and nix-direnv.
+The cumulative `lsp` output adds Go, gopls, Pyright, TypeScript, and typescript-language-server together.
+The Nix package gives the language server a pinned TypeScript fallback internally, so no shell-wide `NODE_PATH` is needed.
+The cumulative `workstation` output adds the `fnm` and `uv` manager executables.
+Only `workstation` is installed, so overlapping bundle elements never enter the profile.
+
+Build and smoke-test without activation:
+
+```sh
+flake="path:$(chezmoi source-path)/nix"
+out="$(nix build "$flake#core" --no-link --print-out-paths)"
+"$out/bin/eza" --version
+"$out/bin/rg" --version
+```
+
+The `run_onchange_before_15` script builds first, verifies the expected executables, then adds or upgrades exactly one `dotfiles-workstation` element in the dedicated profile.
+A failed build cannot replace the active generation.
+Do not manually add packages to this profile.
+If the path still points at the retired Home Manager prototype, the script refuses to overwrite it and prints an explicit `mv` command that preserves the old profile as a backup before the next apply.
+Ownership is decided by what the single profile element IS - its flake attribute path ends in `.workstation` (the real value is `packages.<system>.workstation`; `dotfiles-workstation` is only the build's derivation name) - not by where it was installed from, so relocating the chezmoi source directory or applying from a worktree re-points the managed element instead of failing.
+Any other contents - a wrong element count, or an element whose attribute path is not `*.workstation` - are refused; the attribute-path mismatch is named, and every refusal prints an `mv` command that preserves the old profile before a rebuild.
+
+```sh
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+nix profile list --profile "$profile"
+nix profile history --profile "$profile"
+nix profile diff-closures --profile "$profile"
+nix profile rollback --profile "$profile"
+nix profile rollback --profile "$profile" --to 3
+```
+
+A durable rollback also requires reverting the corresponding Git, lock, or machine-data change and applying chezmoi again.
+Fish removes inherited stale mise shims, prepends the dedicated profile, then initializes uv Python, rustup, Bun, and fnm paths above it.
+Project direnv and flake environments override the global tools.
+Audit with:
+
+```sh
+type -a rg
+command -v rg
+realpath "$(command -v rg)"
+```
+
+Maintainers update the committed lock explicitly rather than through `update-all`:
+
+```sh
+cd "$(chezmoi source-path)/nix"
+flake="path:$PWD"
+nix flake update nixpkgs --flake "$flake"
+nix flake check "$flake"
+nix build "$flake#core"
+git diff -- flake.lock
+```
+
+Renovate is configured to open nixpkgs input updates, which CI evaluates on all systems and builds on native Linux and Apple Silicon macOS runners.
+Only `cache.nixos.org` is used.
+
+Measure and maintain the store manually:
+
+```sh
+flake="path:$(chezmoi source-path)/nix"
+out=$(nix build "$flake#workstation" --no-link --print-out-paths)
+nix path-info --closure-size --human-readable "$out"
+nix path-info --recursive --size --human-readable "$out"
+nix profile wipe-history --profile "$profile" --older-than 30d
+nix store gc --dry-run
+nix store gc
+```
+
+Garbage collection never runs during `chezmoi apply`.
+
 ## Secrets (1Password)
 
 Secrets live in 1Password, not in this repo — nothing encrypted is committed
@@ -93,7 +180,7 @@ to git, and nothing plaintext lands in the source tree. There are currently
 
 - **chezmoi template** (value rendered into a target file at apply time):
 
-  ```
+  ```gotmpl
   {{ onepasswordRead "op://Personal/MyService/credential" }}
   ```
 
@@ -195,8 +282,9 @@ Four coding agents are first-class and interchangeable: **Claude Code**, **Codex
 They share one set of global instructions, so you can switch between them with the same rules.
 
 Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
-pi and Hunk are npm-distributed, so they install as mise-managed npm tools (`npm:@earendil-works/pi-coding-agent` and `npm:hunkdiff`) that survive node upgrades.
-A fresh apply has all four agents and the Hunk review CLI present.
+Pi comes from its own stable native npm prefix (`~/.local/share/npm-pi`) on the `latest` channel and uses fnm-managed npm for its published extension packages.
+Hunk comes from a stable native npm prefix outside the fnm version directory, so Node upgrades do not orphan its CLI or bundled review skill.
+A fresh apply has all four agents and the Hunk review CLI present without active mise ownership.
 
 ### Shared instructions (single-source AGENTS.md)
 
@@ -228,10 +316,17 @@ The five LSP plugins are not hand-listed here: they derive from the single-sourc
 - `run_onchange_after_41-sync-codex-mcp.sh.tmpl` owns the `[mcp_servers.*]` sections (appended at the end).
 
 **pi config ownership.**
-pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models and published extension packages, including `npm:pi-git-diff` and `npm:@tintinweb/pi-subagents`), `agent/agents/` (the read-only `Explore` and `Plan` subagent definitions), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, and `/handoff` extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+pi's config lives under `~/.pi` (source: `dot_pi/`): `agent/settings.json` (models and published extension packages, including `npm:pi-git-diff` and `npm:@tintinweb/pi-subagents`), `agent/agents/` (the read-only `Explore` and `Plan` subagent definitions), `agent/extensions/` (the custom status bar, GitHub issue `#` autocomplete, `/handoff`, and Treehouse worktree guard extensions), `agent/prompts/` (prompt templates such as `/artifact`), and `web-search.json` (provider choice), plus the rendered `agent/mcp.json` above.
+The worktree guard activates only inside a Treehouse-managed worktree and allows direct Pi writes only within its assigned tree and the canonical OS temporary directory.
+Its default `auto` mode sends ambiguous shell commands to an isolated, tool-less `opencode-go/deepseek-v4-flash` judge and automatically accepts only strict JSON approvals at 95 percent confidence or higher.
+Explicit protected-path references remain deterministic hard blocks, while an unavailable or uncertain judge falls back to interactive confirmation and fails closed without a UI.
+Use `/worktree-guard prompt` for confirmation-only behavior, `/worktree-guard auto` to switch back, and `/worktree-guard status` to inspect the active policy.
+`PI_WORKTREE_GUARD_MODEL`, `PI_WORKTREE_GUARD_CONFIDENCE`, `PI_WORKTREE_GUARD_TIMEOUT_MS`, and `PI_WORKTREE_GUARD_MODE=prompt` provide startup overrides.
+Symlinks from either writable root are canonicalized before policy checks, so they cannot grant write access to protected repositories.
+It is an accident-prevention policy rather than a security sandbox because arbitrary extension tools still run with Pi's host permissions.
 Subagent routing lives in the `agent/agents/*.md` frontmatter, not in `settings.json`: `npm:@tintinweb/pi-subagents` discovers those files and they replace the settings-level `subagents.agentOverrides` block the previous `npm:pi-subagents` package used.
 The Git diff viewer is installed from npm rather than duplicated under `agent/extensions/`.
-Hunk is also installed from npm, and Pi loads its bundled review skill from the stable `npm-hunkdiff/latest` mise path declared in `agent/settings.json`.
+Hunk is installed from npm into `~/.local/share/npm-hunkdiff`, and Pi loads its bundled review skill from that stable prefix as declared in `agent/settings.json`.
 pi's runtime state - credentials, sessions, run history, npm package checkouts, the pi-mcp-adapter caches, the generated models store, and scratch dirs - is deliberately not managed; `.chezmoiignore`'s pi block is the authoritative list of those paths.
 One caveat: pi itself rewrites `agent/settings.json` at runtime (model switches, `lastChangelogVersion` bumps), so `chezmoi status` can show it as modified; fold deliberate changes back with `chezmoi add ~/.pi/agent/settings.json`, or `chezmoi apply` to reset to the managed state.
 
@@ -240,8 +335,10 @@ One caveat: pi itself rewrites `agent/settings.json` at runtime (model switches,
 Cross-platform:
 
 - `dot_gitconfig` — git identity, aliases, sane defaults, gh credential helper
-- `dot_config/fish/config.fish.tmpl` — fish shell (aliases, env, prompt init)
-- `dot_config/fish/functions/*.fish` — custom fish functions (includes `update-all`, which refreshes the system package manager — brew on macOS, apt + flatpak on Ubuntu — plus mise, chezmoi, and atuin in one go; `lsp-upgrade` does a targeted upgrade of just the Claude Code language servers)
+- `dot_config/fish/config.fish.tmpl` - fish shell aliases, environment, prompt integration, and dedicated Nix profile PATH ordering
+- `dot_config/fish/functions/*.fish` - custom Fish functions.
+  `update-all` refreshes native packages, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi without mutating `flake.lock`.
+  `lsp-upgrade` reports the flake-pinned servers and upgrades the rustup- and OS-owned Claude Code language servers
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
 - `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
@@ -249,8 +346,13 @@ Cross-platform:
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
 - `dot_config/starship.toml` — prompt
-- `dot_config/direnv/direnvrc` - nix-direnv pin providing `use flake` for per-directory Nix devshells (cd into a flake repo and its devshell toolchain auto-loads for rust-analyzer and other LSPs); the `direnv hook fish` in `config.fish` runs after mise activation, and it stays inert on machines without Nix
-- `.chezmoidata/packages.yaml` - single source of truth for every package the bootstrap installs, described once (name, `gui` flag, bin guard, and its install method under `darwin:`/`linux:`, or the shared `any:` fallback for tools whose installer is identical on both) plus an `aptrepos` lookup table; `run_once_before_10-install-packages.sh.tmpl` walks it in one loop, dispatching each entry to a per-method helper in `.chezmoitemplates/lib-install.sh` by OS + method, so adding a tool is a one-line manifest edit
+- `dot_config/direnv/direnvrc` - loads the profile-provided nix-direnv integration for `use flake` in per-directory Nix devshells.
+  The `direnv hook fish` in `config.fish` runs after the dedicated profile is added, and the integration stays inert if that profile is absent.
+- `.chezmoidata/packages.yaml` - single source of truth for native bootstrap packages.
+  It intentionally excludes executables owned by the Nix bundle
+- `nix/flake.nix`, `flake.lock`, `packages.nix`, `bundles.nix`, and `lsp-smoke.py` - the source-only pinned package graph and Claude-like LSP protocol smoke.
+  `.chezmoiignore` prevents this directory from materializing as `~/nix`
+- `renovate.json` - automated update rule for the unstable nixpkgs input
 - `.chezmoidata/mcp.yaml` - single source of truth for the MCP servers; the four staging templates below render from it, tagging each server per agent
 - `dot_config/claude-code/mcp-servers.json.tmpl` - staging JSON (Claude servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.claude.json` by `run_onchange_after_40-sync-claude-mcp.sh.tmpl`
 - `dot_config/codex/mcp-servers.toml.tmpl` - staging TOML (Codex servers from `.chezmoidata/mcp.yaml`); sync'd into `~/.codex/config.toml` by `run_onchange_after_41-sync-codex-mcp.sh.tmpl`
@@ -311,19 +413,24 @@ To update the snapshot after changing settings: re-export from Raycast
 
 Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 
-- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - packages (from the `.chezmoidata/packages.yaml` manifest, one dispatch loop), toolchains, Nix, Hunk, the coding agents (Claude, Codex, OpenCode, pi), fish-as-login-shell
+- `.chezmoiscripts/run_once_before_10-install-packages.sh.tmpl` - native packages, coding agents, and Fish as the login shell
+- `.chezmoiscripts/run_once_before_12-install-nix.sh.tmpl` - architecture-aware Linux and macOS Nix bootstrap, with existing-state refusal and post-install activation verification
+- `.chezmoiscripts/run_onchange_before_15-install-nix-profile.sh.tmpl` - build-first installation or upgrade of the one-element dedicated `dotfiles-workstation` profile whenever a checked-in `nix/` flake file changes
+- `.chezmoiscripts/run_onchange_before_16-install-language-runtimes.sh.tmpl` - installs or updates mutable fnm Node, uv Python, rustup Rust, and native Bun after their Nix-owned manager executables are active
+- `.chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl` - installs Hunk through fnm-managed npm into a stable native prefix and links its CLI into `~/.local/bin`
+- `.chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl` - installs Pi through fnm-managed npm into its stable native prefix on the `latest` channel and links its CLI into `~/.local/bin`
 - `.chezmoiscripts/run_once_after_20-install-tpm.sh.tmpl` — TPM + tmux plugins
 - `.chezmoiscripts/run_once_after_30-install-lazyvim.sh.tmpl` — LazyVim starter (only if `~/.config/nvim` is missing)
 - `.chezmoiscripts/run_onchange_after_40-sync-claude-mcp.sh.tmpl` — re-syncs MCPs into `~/.claude.json` whenever the staging JSON changes
 - `.chezmoiscripts/run_onchange_after_41-sync-codex-mcp.sh.tmpl` — re-syncs MCPs into `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
-- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` — installs the language servers Claude Code's LSP plugins need (pyright, typescript-language-server, typescript, gopls via mise; rust-analyzer via rustup; clangd via apt/brew), all derived from the single-source `lspLanguages` table, whenever the script changes
+- `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` - verifies the Nix-owned Pyright, TypeScript, typescript-language-server, and gopls tools, ensures rust-analyzer through rustup, and installs clangd via apt/brew, all derived from the single-source `lspLanguages` table
 - `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (that state lives in the chezmoi-rewritten settings.json, so it must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode) and the shared `~/.agents/skills` tree pi reads; the skill is `.chezmoiignore`d in both locations, so brev owns it with no chezmoi conflict
 - `.chezmoiscripts/run_after_71-sync-no-mistakes-skill.sh.tmpl` - keeps the ignored Claude and shared-agent no-mistakes skills aligned with the installed CLI release, fetching only when its release marker or either skill checksum differs
 
 Most of these scripts pull their shared shell boilerplate from partials in `.chezmoitemplates/`, included with `{{ template "lib-<x>.sh" . }}` so chezmoi inlines the partial's bytes verbatim.
-`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the mise/rustup/`PATH` resolve helpers (`resolve_mise`, `resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for third-party apt repos (1Password and gh now - eza and gum moved to mise); `lib-install.sh` holds the per-method `install_*` helpers (`install_brew`, `install_cask`, `install_apt`, `install_flatpak`, `install_deburl`, `install_debsig`, `install_mise`) that the package-manifest loop dispatches to by OS + method; `lib-codex-sync.sh` holds the shared file-prep preamble (define `CODEX_CONFIG`, verify the staging source is readable, `mkdir`/touch the target) for the two Codex config-sync scripts.
+`lib-log.sh` is `set -euo pipefail` plus the `log()` helper; `lib-resolve.sh` holds the rustup/`PATH` resolve helpers (`resolve_rustup <bin>`, `prepend_path <dir>...`); `lib-apt.sh` holds `install_aptrepo`, the shared keyring+list+update+install dance for the 1Password and gh apt repositories; `lib-install.sh` holds the per-method `install_*` helpers that the package-manifest loop dispatches to by OS and method; `lib-codex-sync.sh` holds the shared file-prep preamble for the two Codex config-sync scripts.
 The Claude MCP sync (`run_onchange_after_40`) keeps its own bare preamble; the two Codex sync scripts (`run_onchange_after_41`/`42`) share only that file-prep preamble via `lib-codex-sync.sh` and keep their differing awk-strip + recombine bodies inline.
 All three deliberately stay on a bare `set -euo pipefail` + `echo` and pull in no `lib-log.sh`.
 See [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md) for the convention.
@@ -349,9 +456,8 @@ sh -c "$(curl -fsSL https://get.chezmoi.io)"
 chezmoi init --apply max-miller1204/dotfiles
 ```
 
-The first apply installs CLIs, mise toolchains, Nix, the coding agents
-(Claude, Codex, OpenCode, pi), and the 1Password CLI, then sets fish as your
-login shell.
+The first apply installs native packages, Nix-owned command bundles and manager executables, mutable language runtimes, the coding agents (Claude, Codex, OpenCode, pi), and the 1Password CLI.
+It then sets Fish as the login shell.
 
 ### 1Password sign-in from WSL
 
@@ -432,10 +538,12 @@ the repo and need manual hand-off.
    chmod 600 ~/.ssh/id_*
    ```
 
-3. **Bootstrap** — same command as the top of this README:
+3. **Bootstrap** with the standalone chezmoi installer.
+   The apply installs Homebrew when needed, installs Nix through the architecture-appropriate path, and then activates the dedicated profile:
 
    ```sh
-   brew install chezmoi
+   sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b "$HOME/.local/bin"
+   export PATH="$HOME/.local/bin:$PATH"
    chezmoi init --apply max-miller1204/dotfiles
    ```
 
@@ -459,8 +567,11 @@ the repo and need manual hand-off.
 
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
-   mise list                 # node, python, rust, go, fzf, bun, neovim, uv (+ LSP servers & pi)
-   which brew fish claude codex opencode pi op # sanity-check everything's on PATH
+   nix profile list --profile "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv # first result should be the dedicated profile
+   type -a hunk pi           # first results should be the ~/.local/bin launchers
+   type -a node python rustc bun # native runtime-manager paths should win
+   which brew fish claude codex opencode pi op
    op whoami                 # confirms 1Password sign-in
    ```
 
@@ -472,6 +583,8 @@ the repo and need manual hand-off.
 
 - `chezmoi edit <file>` to edit a managed file, or `chezmoi cd` to jump into the source repo
 - `chezmoi diff` to preview, `chezmoi apply` to write changes
-- The install script is `run_once` — it only reruns if its content changes
-- `update-all` (fish function) refreshes everything the bootstrap installs: brew (formulae + casks) on macOS or apt (+ PPAs) + flatpak on Ubuntu, plus mise toolchains, chezmoi itself, and atuin
-- `lsp-upgrade` (fish function) does a targeted upgrade of just the Claude Code language servers. `update-all`'s `mise upgrade` already covers the mise-managed ones, but `lsp-upgrade` also refreshes rust-analyzer (rustup) and clangd (apt/brew), which mise doesn't manage
+- The native bootstrap script is `run_once`, so it reruns only if its rendered content changes
+- The Nix profile installer is `run_onchange`, so a committed flake, lock, or package-grouping change triggers a build-first profile upgrade
+- `update-all` refreshes native package managers, fnm Node, uv Python, rustup, Bun, native Hunk and Pi, and chezmoi.
+  It never updates `flake.lock`; `chezmoi update` receives lock changes committed by Renovate or a maintainer
+- `lsp-upgrade` reports the flake-pinned LSPs and upgrades the rustup- and OS-owned servers

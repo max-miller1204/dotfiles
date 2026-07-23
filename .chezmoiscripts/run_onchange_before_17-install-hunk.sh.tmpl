@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+{{ $nodeVersion := (get . "nodeVersion" | default "lts") }}
+# Hunk stays outside Nix with Pi: nixpkgs does not package hunkdiff, and npm
+# releases land immediately. Install into a stable npm prefix after fnm has
+# prepared Node so a Node upgrade cannot orphan either the CLI or Pi's bundled
+# review skill.
+# Node policy: {{ $nodeVersion }}
+{{ template "lib-log.sh" . }}
+
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+fnm_bin="$profile/bin/fnm"
+if [[ ! -x "$fnm_bin" ]]; then
+    echo "The dedicated Nix profile is missing required runtime manager: $fnm_bin" >&2
+    exit 1
+fi
+
+eval "$("$fnm_bin" env --shell bash)"
+node --version
+npm --version
+
+npm_bin="$(command -v npm)"
+if [[ -z "${FNM_MULTISHELL_PATH:-}" || "$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm" ]]; then
+    echo "Hunk must be installed with fnm-managed npm; resolved: $npm_bin" >&2
+    exit 1
+fi
+
+hunk_prefix="$HOME/.local/share/npm-hunkdiff"
+hunk_skill="$hunk_prefix/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+log "Installing Hunk into its stable native npm prefix"
+npm_config_update_notifier=false npm install --global --prefix "$hunk_prefix" hunkdiff@latest
+
+if [[ ! -x "$hunk_prefix/bin/hunk" || ! -f "$hunk_skill" ]]; then
+    echo "The native Hunk installation is incomplete under: $hunk_prefix" >&2
+    exit 1
+fi
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$hunk_prefix/bin/hunk" "$HOME/.local/bin/hunk"
+"$HOME/.local/bin/hunk" --version
+log "Native Hunk and its review skill are ready"

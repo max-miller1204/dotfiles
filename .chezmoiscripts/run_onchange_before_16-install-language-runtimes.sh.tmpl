@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+{{ $nodeVersion := (get . "nodeVersion" | default "lts") }}
+{{ $pythonVersion := (get . "pythonVersion" | default "3") }}
+{{ $rustToolchain := (get . "rustToolchain" | default "stable") }}
+# Install mutable language runtimes after run_onchange_before_15 has activated
+# the checked-in Nix bundle that supplies fnm and uv.
+# Runtime policies: node={{ $nodeVersion }} python={{ $pythonVersion }} rust={{ $rustToolchain }}
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+fnm_bin="$profile/bin/fnm"
+uv_bin="$profile/bin/uv"
+
+for bin in "$fnm_bin" "$uv_bin"; do
+    if [[ ! -x "$bin" ]]; then
+        echo "The dedicated Nix profile is missing required runtime manager: $bin" >&2
+        exit 1
+    fi
+done
+
+# Node versions are mutable fnm state. Resolve the current latest LTS to an exact
+# version before installing and making it the default, so fnm never receives the
+# human-readable LTS codename suffix from list-remote.
+node_policy="{{ $nodeVersion }}"
+if [[ "$node_policy" == "lts" ]]; then
+    node_target="$("$fnm_bin" list-remote --lts --latest | awk 'NR == 1 { print $1 }')"
+else
+    node_target="$node_policy"
+fi
+if [[ -z "$node_target" ]]; then
+    echo "fnm could not resolve Node policy: $node_policy" >&2
+    exit 1
+fi
+log "Ensuring fnm-managed Node $node_target"
+"$fnm_bin" install "$node_target"
+"$fnm_bin" default "$node_target"
+eval "$("$fnm_bin" env --shell bash)"
+node --version
+npm --version
+
+# Keep uv's Python launcher directory distinct from ~/.local/bin so it can be
+# placed above stale mise shims without also promoting unrelated local commands
+# above the dedicated Nix profile.
+uv_data_home="${XDG_DATA_HOME:-$HOME/.local/share}/uv"
+export UV_PYTHON_BIN_DIR="$uv_data_home/python-bin"
+mkdir -p "$UV_PYTHON_BIN_DIR"
+prepend_path "$UV_PYTHON_BIN_DIR"
+log "Ensuring uv-managed Python {{ $pythonVersion }}"
+"$uv_bin" --preview-features python-install-default \
+    python install "{{ $pythonVersion }}" --default --upgrade
+python --version
+python3 --version
+
+# rustup owns Rust, Cargo, targets, and rust-analyzer together. Its official
+# installer is used only when rustup is absent and never edits shell startup
+# files; subsequent runs operate through the standard cargo-home shim directly.
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+rustup_bin="$cargo_home/bin/rustup"
+# A shell launched before this migration may still export mise's exact Rust
+# override. Clear it so rustup commands and shims select the managed default.
+unset RUSTUP_TOOLCHAIN
+if [[ ! -x "$rustup_bin" ]]; then
+    log "Installing rustup"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | CARGO_HOME="$cargo_home" sh -s -- \
+            -y --no-modify-path --profile default \
+            --default-toolchain "{{ $rustToolchain }}"
+fi
+log "Ensuring rustup toolchain {{ $rustToolchain }} and rust-analyzer"
+"$rustup_bin" toolchain install "{{ $rustToolchain }}" --profile default
+"$rustup_bin" default "{{ $rustToolchain }}"
+"$rustup_bin" component add --toolchain "{{ $rustToolchain }}" rust-analyzer
+prepend_path "$cargo_home/bin"
+rustc --version
+cargo --version
+rust-analyzer --version
+
+# Bun remains native because universal Nix support and cache coverage are
+# weaker. Prepending the destination before invoking the
+# official installer makes its post-install command check succeed, preventing it
+# from appending unmanaged lines to the chezmoi-owned Fish config.
+bun_install="${BUN_INSTALL:-$HOME/.bun}"
+export BUN_INSTALL="$bun_install"
+prepend_path "$bun_install/bin"
+if [[ ! -x "$bun_install/bin/bun" ]]; then
+    command -v unzip >/dev/null 2>&1 || {
+        echo "unzip is required by the Bun installer" >&2
+        exit 1
+    }
+    log "Installing Bun via its official installer"
+    curl -fsSL https://bun.sh/install | bash
+fi
+"$bun_install/bin/bun" --version
+
+log "Mutable language runtimes are ready"

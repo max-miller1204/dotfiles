@@ -30,7 +30,7 @@ LSP_BINS=(rust-analyzer pyright-langserver typescript-language-server gopls clan
 
 # Resolve through a login+interactive fish so PATH reflects the real UX the
 # dotfiles set up: project hooks, native runtime managers, the dedicated profile,
-# and native package managers, with inherited stale mise shims removed.
+# and native package managers.
 fish_has() { fish -l -i -c "command -q $1" 2>/dev/null; }
 fish_path() {
 	fish -l -i -c "command -v $1" 2>/dev/null |
@@ -148,7 +148,7 @@ hard "source declarations assign every LSP tool to exactly one owner" \
 AGENT_OWNERSHIP_REPORT="$(python3 "$SOURCE_PATH/.github/scripts/check-agent-tool-ownership.py" 2>&1)"
 AGENT_OWNERSHIP_RC=$?
 [[ -n "$AGENT_OWNERSHIP_REPORT" ]] && echo "$AGENT_OWNERSHIP_REPORT"
-hard "source declarations assign Pi and Hunk to exact owners with mise inactive" \
+hard "source declarations assign Pi and Hunk to exact owners" \
 	test "$AGENT_OWNERSHIP_RC" -eq 0
 LSP_REPORT="$(
 	python3 "$SOURCE_PATH/nix/lsp-smoke.py" \

@@ -50,7 +50,6 @@ That's it - the install scripts run during `apply` and handle the rest:
   `fnm` owns Node LTS, `uv` owns Python 3, and `rustup` owns stable Rust, Cargo, targets, and rust-analyzer.
   Bun remains on its official native installer.
   Nix owns the `fnm` and `uv` executables plus Go, gopls, Pyright, typescript-go, and typescript-language-server.
-  Existing stale mise installations are not deleted, but their shims are removed from Fish PATH.
 - installs **Nix** before profile activation.
   Linux uses the Determinate installer with a sanitized root environment.
   Apple Silicon macOS uses Determinate's signed package after verifying its Apple Developer team.
@@ -134,7 +133,7 @@ nix profile rollback --profile "$profile" --to 3
 ```
 
 A durable rollback also requires reverting the corresponding Git, lock, or machine-data change and applying chezmoi again.
-Fish removes inherited stale mise shims, prepends the dedicated profile, then initializes uv Python, rustup, Bun, and fnm paths above it.
+Fish prepends the dedicated profile, then initializes uv Python, rustup, Bun, and fnm paths above it.
 Project direnv and flake environments override the global tools.
 Audit with:
 
@@ -284,7 +283,7 @@ They share one set of global instructions, so you can switch between them with t
 Claude, Codex, and OpenCode install via their own official installers (each ships a user-level `curl | sh` installer that works on Linux and macOS).
 Pi comes from its own stable native npm prefix (`~/.local/share/npm-pi`) on the `latest` channel and uses fnm-managed npm for its published extension packages.
 Hunk comes from a stable native npm prefix outside the fnm version directory, so Node upgrades do not orphan its CLI or bundled review skill.
-A fresh apply has all four agents and the Hunk review CLI present without active mise ownership.
+A fresh apply has all four agents and the Hunk review CLI present.
 
 ### Shared instructions (single-source AGENTS.md)
 

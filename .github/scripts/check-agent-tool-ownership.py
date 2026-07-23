@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check exact Phase 7 ownership for Pi, Hunk, and retired mise state."""
+"""Check exact Phase 7 ownership for Pi and Hunk."""
 
 from __future__ import annotations
 
@@ -50,12 +50,6 @@ def main() -> None:
         fail("Hunk must remain outside the universal Nix bundle")
     if re.search(r"^\s+pi-coding-agent\s*$", packages, re.MULTILINE):
         fail("Pi must remain outside the universal Nix bundle")
-
-    manifest = read(".chezmoidata/packages.yaml")
-    if re.search(r"^\s*- name: mise\s*$", manifest, re.MULTILINE):
-        fail("the native package manifest still installs mise")
-    if re.search(r"^\s+mise:\s*", manifest, re.MULTILINE):
-        fail("the native package manifest still exposes a mise method")
 
     hunk_installer = read(".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl")
     required_hunk_installer = (
@@ -109,57 +103,7 @@ def main() -> None:
     if missing:
         fail(f"update-all lacks native Hunk and Pi updates: {missing!r}")
 
-    active_files = {
-        ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl": read(
-            ".chezmoiscripts/run_once_before_10-install-packages.sh.tmpl"
-        ),
-        ".chezmoitemplates/lib-install.sh": read(".chezmoitemplates/lib-install.sh"),
-        ".chezmoitemplates/lib-resolve.sh": read(".chezmoitemplates/lib-resolve.sh"),
-        "dot_config/fish/config.fish.tmpl": read("dot_config/fish/config.fish.tmpl"),
-        "dot_config/fish/functions/update-all.fish.tmpl": update_all,
-    }
-    forbidden_active = (
-        "mise activate",
-        "mise upgrade",
-        "mise use",
-        "resolve_mise",
-        "install_mise",
-        "npm:@earendil-works/pi-coding-agent",
-        "npm:hunkdiff",
-    )
-    for relative, text in active_files.items():
-        found = [value for value in forbidden_active if value in text]
-        if found:
-            fail(f"{relative} retains active mise ownership: {found!r}")
-
-    migration_files = active_files | {
-        ".chezmoidata/packages.yaml": manifest,
-        ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl": hunk_installer,
-        ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl": pi_installer,
-    }
-    # Match the command shape, not one unquoted spelling: every real `rm -rf`
-    # in this repository quotes its target, and the mise data directory can be
-    # written as $HOME/.local/share/mise, $XDG_DATA_HOME/mise, or $MISE_DATA_DIR.
-    destructive = (
-        (re.compile(r"\bmise\s+uninstall\b"), "mise uninstall"),
-        (re.compile(r"\brm\b[^\n;&|]*(?:/mise\b|\bMISE_DATA_DIR\b)"),
-         "rm of preserved mise state"),
-    )
-    for relative, text in migration_files.items():
-        # Comments describe the preservation rule; only code should trip it, and
-        # a `\`-continued command must be joined so its target is on one logical
-        # line before matching.
-        scannable = "\n".join(
-            line for line in text.splitlines() if not line.lstrip().startswith("#")
-        ).replace("\\\n", " ")
-        found = [label for pattern, label in destructive if pattern.search(scannable)]
-        if found:
-            fail(f"{relative} deletes preserved stale mise state: {found!r}")
-
-    print(
-        "Agent-tool ownership is exact: native npm owns Pi and Hunk, "
-        "and mise is inactive"
-    )
+    print("Agent-tool ownership is exact: native npm owns Pi and Hunk")
 
 
 if __name__ == "__main__":

@@ -59,44 +59,6 @@ def main() -> None:
     if nix_lsp != expected_nix_lsp:
         fail(f"Nix lsp group is {nix_lsp!r}, expected {expected_nix_lsp!r}")
 
-    lsp_installer = read(
-        ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl"
-    )
-    if "use -g" in lsp_installer:
-        fail("the LSP installer still declares mise tools")
-    if "mise upgrade" in read("dot_config/fish/functions/lsp-upgrade.fish.tmpl"):
-        fail("lsp-upgrade still upgrades mise tools")
-
-    migration_files = [
-        ".chezmoi.toml.tmpl",
-        ".chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl",
-        "dot_config/fish/config.fish.tmpl",
-        "dot_config/fish/functions/update-all.fish.tmpl",
-        "dot_config/fish/functions/lsp-upgrade.fish.tmpl",
-    ]
-    forbidden = (
-        "npm:pyright",
-        "npm:typescript",
-        "npm:typescript-language-server",
-        "tsNodeModulesRel",
-        "verifyTsResolve",
-    )
-    for relative in migration_files:
-        text = read(relative)
-        found = [value for value in forbidden if value in text]
-        if found:
-            fail(f"{relative} retains mise LSP declarations: {found!r}")
-    config_fish = read("dot_config/fish/config.fish.tmpl")
-    mise_node_path = [
-        value.strip()
-        for value in re.findall(
-            r"^\s*set\b(?:\s+-\S+)*\s+NODE_PATH\b(.*)$", config_fish, re.MULTILINE
-        )
-        if re.search(r"mise|ts_node_modules", value)
-    ]
-    if mise_node_path:
-        fail(f"Fish exports a mise-derived NODE_PATH: {mise_node_path!r}")
-
     print("LSP ownership is exact: Nix owns Pyright and TypeScript tooling")
 
 

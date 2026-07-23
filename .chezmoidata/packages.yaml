@@ -116,7 +116,6 @@ packages:
   # eza, bat, fd, ripgrep, and fzf (Nix core bundle) plus gum, starship, atuin,
   # zoxide, direnv, tmux, Neovim, and nix-direnv (Nix headless bundle) moved to
   # the checked-in cumulative Nix bundle and are absent here on both platforms.
-  # mise is retired outright: it is neither a package nor an install method.
   # ---- gh (GitHub CLI): native on both OSes for the newest upstream release -
   #      brew on macOS, GitHub's official apt-repo on Linux (needs curl + gnupg
   #      from the base apt block above; params in `aptrepos.gh`). Kept native

@@ -86,8 +86,16 @@ def main() -> None:
         found = [value for value in forbidden if value in text]
         if found:
             fail(f"{relative} retains mise LSP declarations: {found!r}")
-    if "NODE_PATH" in read("dot_config/fish/config.fish.tmpl"):
-        fail("Fish still exports NODE_PATH")
+    config_fish = read("dot_config/fish/config.fish.tmpl")
+    mise_node_path = [
+        value.strip()
+        for value in re.findall(
+            r"^\s*set\b(?:\s+-\S+)*\s+NODE_PATH\b(.*)$", config_fish, re.MULTILINE
+        )
+        if re.search(r"mise|ts_node_modules", value)
+    ]
+    if mise_node_path:
+        fail(f"Fish exports a mise-derived NODE_PATH: {mise_node_path!r}")
 
     print("LSP ownership is exact: Nix owns Pyright and TypeScript tooling")
 

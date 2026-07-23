@@ -420,12 +420,13 @@ echo "== versions (for the report) =="
 # pipefail), then invoke the binary directly for its version. pfetch's last
 # escape sequence (ESC[?7h) has no trailing newline and lands on the path's
 # line, so strip ANSI/DEC escapes before picking the line.
-for b in chezmoi nix fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim fnm uv go gopls pyright typescript-language-server tsc node python rustup rustc cargo bun pi hunk gh op; do
+for b in chezmoi nix fish eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim shellcheck fnm uv go gopls pyright typescript-language-server tsc tsgo node python rustup rustc cargo bun pi hunk gh op; do
 	p="$(fish -l -i -c "command -v $b" 2>/dev/null | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' | tail -1 || true)"
 	if [[ -n "$p" && -x "$p" ]]; then
 		case "$b" in
 		direnv | go | gopls) version=$("$p" version 2>/dev/null | head -1) ;;
 		tmux) version=$("$p" -V 2>/dev/null | head -1) ;;
+		shellcheck) version=$("$p" --version 2>/dev/null | sed -n 's/^version: //p') ;;
 		*) version=$("$p" --version 2>/dev/null | head -1) ;;
 		esac
 		echo "VERSION: $b = $version"

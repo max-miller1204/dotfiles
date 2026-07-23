@@ -568,7 +568,7 @@ the repo and need manual hand-off.
    ```sh
    claude mcp list           # should show playwright + playwright-chrome
    nix profile list --profile "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
-   type -a eza go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv # first result should be the dedicated profile
+   type -a eza shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv # first result should be the dedicated profile
    type -a hunk pi           # first results should be the ~/.local/bin launchers
    type -a node python rustc bun # native runtime-manager paths should win
    which brew fish claude codex opencode pi op

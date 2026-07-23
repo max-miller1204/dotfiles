@@ -49,10 +49,10 @@ flake="path:$source_dir/nix"
 mkdir -p "$(dirname "$profile")"
 
 out="$(nix build "$flake#workstation" --no-link --print-out-paths)"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv; do
 	case "$bin" in
 	direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
-	pyright-langserver | tsserver) ;;
+	pyright-langserver) ;;
 	tmux) "$out/bin/$bin" -V >/dev/null ;;
 	*) "$out/bin/$bin" --version >/dev/null ;;
 	esac

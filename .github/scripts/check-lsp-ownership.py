@@ -53,7 +53,7 @@ def main() -> None:
         "go",
         "gopls",
         "pyright",
-        "typescript",
+        "typescript-go",
         "typescript-language-server",
     }
     if nix_lsp != expected_nix_lsp:

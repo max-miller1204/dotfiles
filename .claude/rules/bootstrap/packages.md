@@ -58,6 +58,8 @@ paths:
 - The profile PATH is explicit in bootstrap and Fish.
   Fish puts the dedicated profile above native package-manager paths, prepends uv Python, rustup, Bun, and fnm runtime paths, and removes any stale mise shim path inherited from an older shell.
   That scrub matches any PATH entry ending in `/mise/shims` (both data homes and the default) and, when `MISE_DATA_DIR` is set, `$MISE_DATA_DIR/shims` as well, since that override can relocate the shim dir outside any `/mise/` path; it deliberately does not strip every `*/shims` dir, which would also remove pyenv- and rbenv-style shims. When it has to rewrite `fish_user_paths` it writes in that variable's own scope, since a session global would shadow a universal one and silently de-persist later interactive `fish_add_path` calls.
+  The same retirement scrubs mise-derived toolchain env inherited from pre-migration shells: `RUSTUP_TOOLCHAIN` unconditionally, `GOROOT`/`GOBIN` only when they point into `*/mise/installs/*`, mise-install entries filtered out of `NODE_PATH` (user- and project-owned values pass through), and the `MISE_SHELL`/`__MISE_*` bookkeeping variables.
+  `run_onchange_before_15` additionally unsets `GOROOT`/`GOBIN` before its smoke loop so a stale caller environment cannot fail bundle validation; `test-runtime-path-order.sh` asserts both the scrub and the user-owned passthrough.
   Do not restore mise activation or dynamic project hooks; project-specific environments belong to direnv and flakes.
   Project direnv environments remain highest priority.
 - `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles` is hardcoded well beyond `run_onchange_before_15`: the other bootstrap scripts that consume it (`run_once_before_10`, `run_once_after_20-install-tpm`, `run_onchange_before_16`/`17`/`18`, `run_onchange_after_50-install-lsp-servers`); the applied configs `dot_config/direnv/direnvrc` (sources its `share/nix-direnv/direnvrc`), `dot_config/fish/config.fish.tmpl` (prepends its `bin`), and `dot_config/tmux/executable_agent-switch.sh`; the CI and E2E harness `.github/e2e/verify.sh`, `.github/scripts/test-nix-profile.sh`, `.github/scripts/test-runtime-path-order.sh`, and `.github/workflows/e2e-native-ubuntu.yml`; and `README.md`.
@@ -73,10 +75,10 @@ paths:
   Bun remains under `${BUN_INSTALL:-~/.bun}` through its official installer.
   The Bun destination is placed on PATH before invoking the installer so the installer does not append unmanaged lines to Fish config.
   Existing mise declarations and installations are audited but never deleted automatically.
-- Go, gopls, Pyright, TypeScript, and typescript-language-server are Nix-owned and live in the cumulative `lsp` bundle.
+- Go, gopls, Pyright, typescript-go, and typescript-language-server are Nix-owned and live in the cumulative `lsp` bundle.
   Never split Go from gopls because gopls invokes Go from PATH.
-  Never split TypeScript from typescript-language-server because the server loads that module at runtime.
-  The Nix package supplies its pinned TypeScript fallback internally, so Fish must not export a mise-specific `NODE_PATH`.
+  typescript-go owns the `tsc` and `tsgo` CLIs; the nixpkgs `typescript` attribute (TypeScript 5.x, which also ships `tsserver`) is deliberately absent because it collides with typescript-go on `bin/tsc` and trails the native TS 7 compiler.
+  typescript-language-server resolves its own pinned TypeScript module internally (proven by `nix/lsp-smoke.py`), so it needs no sibling `typescript` package and Fish must not export a mise-specific `NODE_PATH`.
 
 ## Vendor script installers
 
@@ -90,7 +92,7 @@ paths:
 
 ## Package ownership choices
 
-- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, Go, gopls, Pyright, TypeScript, typescript-language-server, fnm, and uv on every supported system.
+- The checked-in `nix/` flake owns eza, bat, fd, ripgrep, fzf, gum, starship, atuin, zoxide, direnv, tmux, Neovim, nix-direnv, shellcheck, Go, gopls, Pyright, typescript-go (`tsc`/`tsgo`), typescript-language-server, fnm, and uv on every supported system.
   They are absent from the native manifest.
   Hunk remains outside Nix with Pi (nixpkgs does not package hunkdiff, and npm releases land immediately); `run_onchange_before_17` installs `hunkdiff@latest` through fnm-managed npm into the stable `~/.local/share/npm-hunkdiff` prefix and links `hunk` into `~/.local/bin`.
   Pi remains outside Nix so npm releases land immediately; `run_onchange_before_18` installs `@earendil-works/pi-coding-agent@latest` the same way into `~/.local/share/npm-pi` and links `pi` into `~/.local/bin`.

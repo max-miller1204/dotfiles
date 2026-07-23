@@ -60,14 +60,18 @@ out="$(
         --no-link \
         --print-out-paths
 )"
-for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls pyright pyright-langserver tsc tsserver typescript-language-server fnm uv; do
+# Validate the built bundle, not the caller's environment: a shell nested
+# under a pre-migration session still exports a mise GOROOT that would fail
+# the go probe (lsp-smoke.py removes NODE_PATH for the same reason).
+unset GOROOT GOBIN
+for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv; do
     if [[ ! -x "$out/bin/$bin" ]]; then
         echo "Built bundle is missing executable: $bin" >&2
         exit 1
     fi
     case "$bin" in
         direnv | go | gopls) "$out/bin/$bin" version >/dev/null ;;
-        pyright-langserver | tsserver) ;;
+        pyright-langserver) ;;
         tmux) "$out/bin/$bin" -V >/dev/null ;;
         *) "$out/bin/$bin" --version >/dev/null ;;
     esac

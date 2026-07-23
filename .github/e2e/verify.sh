@@ -19,8 +19,8 @@ APPLY_LOG="${APPLY_LOG:-}"
 # Kept explicit so this file doubles as the ownership checklist specification.
 MANIFEST_BINS=(fish git jq curl wget gpg unzip add-apt-repository zenity
 	gh op pfetch brev treehouse no-mistakes herdr)
-NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim go gopls
-	pyright pyright-langserver tsc tsserver typescript-language-server fnm uv)
+NIX_BINS=(eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim shellcheck
+	go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv)
 GUI_BINS=(ghostty discord google-chrome-stable 1password obsidian)
 FLATPAK_APPS=(net.ankiweb.Anki com.spotify.Client us.zoom.Zoom)
 RUNTIME_BINS=(node npm python python3 rustup rustc cargo bun)

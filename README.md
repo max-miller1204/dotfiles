@@ -19,7 +19,7 @@ Chezmoi-managed dotfiles for Max. Targets **Ubuntu**, **macOS**, and **WSL Ubunt
 
 Then `git add … && git commit && git push` from inside `chezmoi cd` to share changes with your other machines.
 
-On first `chezmoi apply`, a `run_once_before` script installs every CLI and GUI
+On first `chezmoi apply`, bootstrap scripts install every CLI and GUI
 app these dotfiles expect from the native package manifest and the checked-in
 Nix bundle described below.
 `run_once_after` scripts clone TPM + install tmux plugins and drop the LazyVim

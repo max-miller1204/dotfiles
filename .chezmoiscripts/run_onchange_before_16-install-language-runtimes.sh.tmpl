@@ -58,6 +58,11 @@ python3 --version
 # files; subsequent runs operate through the standard cargo-home shim directly.
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 rustup_bin="$cargo_home/bin/rustup"
+# Manage the default toolchain, not the caller's environment: a RUSTUP_TOOLCHAIN
+# exported into this shell is honored by the rustup operations below and by the
+# bare rustc/cargo/rust-analyzer shim probes, which would then abort on or
+# silently verify a toolchain other than the managed default.
+unset RUSTUP_TOOLCHAIN
 if [[ ! -x "$rustup_bin" ]]; then
     log "Installing rustup"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \

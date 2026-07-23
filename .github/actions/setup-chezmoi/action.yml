@@ -9,7 +9,28 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p "$HOME/.local/bin"
-        sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+        # get.chezmoi.io fetches an install script that then downloads the
+        # release binary from a CDN; either transfer can hit a transient 5xx
+        # (a mid-download 500 surfaces as `curl: (56)`) and fail the whole job
+        # through no fault of the change under test. Retry the fetch-and-install
+        # a few times, treating an empty script fetch as a failure too.
+        install_chezmoi() {
+          local script
+          script="$(curl -fsLS get.chezmoi.io)" || return 1
+          [ -n "$script" ] || return 1
+          sh -c "$script" -- -b "$HOME/.local/bin"
+        }
+        for attempt in 1 2 3 4 5; do
+          if install_chezmoi; then
+            break
+          fi
+          if [ "$attempt" -eq 5 ]; then
+            echo "chezmoi install failed after $attempt attempts" >&2
+            exit 1
+          fi
+          echo "chezmoi install attempt $attempt failed; retrying in $((attempt * 3))s" >&2
+          sleep "$((attempt * 3))"
+        done
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: Symlink workspace as chezmoi source dir

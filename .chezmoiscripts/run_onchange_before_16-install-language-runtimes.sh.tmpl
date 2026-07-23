@@ -41,8 +41,8 @@ node --version
 npm --version
 
 # Keep uv's Python launcher directory distinct from ~/.local/bin so it can be
-# placed above stale mise shims without also promoting unrelated local commands
-# above the dedicated Nix profile.
+# placed above the dedicated Nix profile without also promoting unrelated local
+# commands there.
 uv_data_home="${XDG_DATA_HOME:-$HOME/.local/share}/uv"
 export UV_PYTHON_BIN_DIR="$uv_data_home/python-bin"
 mkdir -p "$UV_PYTHON_BIN_DIR"
@@ -58,8 +58,10 @@ python3 --version
 # files; subsequent runs operate through the standard cargo-home shim directly.
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 rustup_bin="$cargo_home/bin/rustup"
-# A shell launched before this migration may still export mise's exact Rust
-# override. Clear it so rustup commands and shims select the managed default.
+# Manage the default toolchain, not the caller's environment: a RUSTUP_TOOLCHAIN
+# exported into this shell is honored by the rustup operations below and by the
+# bare rustc/cargo/rust-analyzer shim probes, which would then abort on or
+# silently verify a toolchain other than the managed default.
 unset RUSTUP_TOOLCHAIN
 if [[ ! -x "$rustup_bin" ]]; then
     log "Installing rustup"

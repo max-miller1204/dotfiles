@@ -218,7 +218,7 @@ jobs:
         run: python3 .github/scripts/check-nix-bootstrap.py
       - name: Check exact LSP package ownership
         run: python3 .github/scripts/check-lsp-ownership.py
-      - name: Check exact Pi, Hunk, and mise ownership
+      - name: Check exact Pi and Hunk ownership
         run: python3 .github/scripts/check-agent-tool-ownership.py
       - name: Check pi subagent model pins against enabledModels
         run: |

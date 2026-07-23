@@ -26,7 +26,6 @@ paths:
   The method vocabulary is `brew` / `cask` / `apt` (optional sibling `ppa`) / `aptrepo` / `flatpak` / `deburl` / `script`, and each helper reproduces exactly that method's pre-refactor idempotency guard (`brew`/`cask` lean on brew's own idempotency, `apt`/`flatpak`/`deburl` guard on `command -v` or `flatpak info`, `aptrepo` is guarded at the call site).
   A package carries its method under `darwin:`, `linux:`, or the shared fallback `any:`; the loop takes the current OS's key when the package has one and falls back to `any:` otherwise, so an explicit `darwin:`/`linux:` always overrides `any:` and a package with neither is skipped on that OS.
   `any:` is for tools whose installer command is byte-identical on both OSes - today the three curl `script` installers treehouse, no-mistakes, and herdr - so the command is single-sourced and cannot drift on one OS during a URL or flag change; the `any:` branch is additionally gated on `$supportedOS` (darwin or linux) so an unsupported OS still installs nothing.
-  mise is not an active package owner or install method.
 
 ## Fresh-machine Nix bootstrap
 
@@ -56,12 +55,11 @@ paths:
   A failed build must leave the prior profile generation active, which `.github/scripts/test-nix-profile.sh` proves by running the rendered installer itself against an intentionally invalid flake.
   Never add other packages to this profile and never install overlapping bundle outputs separately.
 - The profile PATH is explicit in bootstrap and Fish.
-  Fish puts the dedicated profile above native package-manager paths, prepends uv Python, rustup, Bun, and fnm runtime paths, and removes any stale mise shim path inherited from an older shell.
-  That scrub matches any PATH entry ending in `/mise/shims` (both data homes and the default) and, when `MISE_DATA_DIR` is set, `$MISE_DATA_DIR/shims` as well, since that override can relocate the shim dir outside any `/mise/` path; it deliberately does not strip every `*/shims` dir, which would also remove pyenv- and rbenv-style shims. When it has to rewrite `fish_user_paths` it writes in that variable's own scope, since a session global would shadow a universal one and silently de-persist later interactive `fish_add_path` calls.
-  The same retirement scrubs mise-derived toolchain env inherited from pre-migration shells: `RUSTUP_TOOLCHAIN` unconditionally, `GOROOT`/`GOBIN` only when they point into `*/mise/installs/*`, mise-install entries filtered out of `NODE_PATH` (user- and project-owned values pass through), and the `MISE_SHELL`/`__MISE_*` bookkeeping variables.
-  `run_onchange_before_15` additionally unsets `GOROOT`/`GOBIN` before its smoke loop so a stale caller environment cannot fail bundle validation; `test-runtime-path-order.sh` asserts both the scrub and the user-owned passthrough.
-  Do not restore mise activation or dynamic project hooks; project-specific environments belong to direnv and flakes.
-  Project direnv environments remain highest priority.
+  Fish puts the dedicated profile above native package-manager paths, then prepends uv Python, rustup, Bun, and fnm runtime paths above it.
+  Fish owns PATH only: inherited toolchain env (`GOROOT`, `GOBIN`, `RUSTUP_TOOLCHAIN`, `NODE_PATH`) is user- or project-owned and must reach the interactive shell unmodified.
+  The bootstrap scripts clear only what would corrupt their own probes: `run_onchange_before_15` unsets `GOROOT`/`GOBIN` before its smoke loop so a stale caller environment cannot fail bundle validation, and `run_onchange_before_16` unsets `RUSTUP_TOOLCHAIN` so its rustup operations and bare `rustc`/`cargo`/`rust-analyzer` shim probes see the managed default toolchain.
+  `test-runtime-path-order.sh` asserts both the resulting precedence chain and that Fish passthrough.
+  Project-specific environments belong to direnv and flakes, and project direnv environments remain highest priority.
 - `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles` is hardcoded well beyond `run_onchange_before_15`: the other bootstrap scripts that consume it (`run_once_before_10`, `run_once_after_20-install-tpm`, `run_onchange_before_16`/`17`/`18`, `run_onchange_after_50-install-lsp-servers`); the applied configs `dot_config/direnv/direnvrc` (sources its `share/nix-direnv/direnvrc`), `dot_config/fish/config.fish.tmpl` (prepends its `bin`), and `dot_config/tmux/executable_agent-switch.sh`; the CI and E2E harness `.github/e2e/verify.sh`, `.github/scripts/test-nix-profile.sh`, `.github/scripts/test-runtime-path-order.sh`, and `.github/workflows/e2e-native-ubuntu.yml`; and `README.md`.
   `nix/flake.nix` does NOT reference the profile path - its headless smoke asserts a built store path (`share/nix-direnv/direnvrc`), independent of where the profile symlink lives.
   Changing the profile path is an edit to every one of those consumers.
@@ -70,15 +68,14 @@ paths:
 
 - `run_onchange_before_16-install-language-runtimes.sh.tmpl` runs after the Nix profile is active.
   Nix owns the `fnm` and `uv` executables, while fnm owns Node LTS and uv owns Python 3 installations and environments.
-  `UV_PYTHON_BIN_DIR` is isolated under the uv data directory so Python can outrank stale mise shims without moving every command in `~/.local/bin` above Nix.
+  `UV_PYTHON_BIN_DIR` is isolated under the uv data directory so Python can sit above the dedicated Nix profile without moving every command in `~/.local/bin` above it.
   Official rustup owns stable Rust, Cargo, targets, and rust-analyzer under `${CARGO_HOME:-~/.cargo}`.
   Bun remains under `${BUN_INSTALL:-~/.bun}` through its official installer.
   The Bun destination is placed on PATH before invoking the installer so the installer does not append unmanaged lines to Fish config.
-  Existing mise declarations and installations are audited but never deleted automatically.
 - Go, gopls, Pyright, typescript-go, and typescript-language-server are Nix-owned and live in the cumulative `lsp` bundle.
   Never split Go from gopls because gopls invokes Go from PATH.
   typescript-go owns the `tsc` and `tsgo` CLIs; the nixpkgs `typescript` attribute (TypeScript 5.x, which also ships `tsserver`) is deliberately absent because it collides with typescript-go on `bin/tsc` and trails the native TS 7 compiler.
-  typescript-language-server resolves its own pinned TypeScript module internally (proven by `nix/lsp-smoke.py`), so it needs no sibling `typescript` package and Fish must not export a mise-specific `NODE_PATH`.
+  typescript-language-server resolves its own pinned TypeScript module internally (proven by `nix/lsp-smoke.py`), so it needs no sibling `typescript` package and Fish exports no `NODE_PATH` that could shadow it.
 
 ## Vendor script installers
 
@@ -96,15 +93,15 @@ paths:
   They are absent from the native manifest.
   Hunk remains outside Nix with Pi (nixpkgs does not package hunkdiff, and npm releases land immediately); `run_onchange_before_17` installs `hunkdiff@latest` through fnm-managed npm into the stable `~/.local/share/npm-hunkdiff` prefix and links `hunk` into `~/.local/bin`.
   Pi remains outside Nix so npm releases land immediately; `run_onchange_before_18` installs `@earendil-works/pi-coding-agent@latest` the same way into `~/.local/share/npm-pi` and links `pi` into `~/.local/bin`.
-  Existing stale installs are not automatically deleted, and Fish removes stale mise shims from PATH so migrated owners win.
+  Existing stale installs are not automatically deleted.
   Nix also gives Linux a tmux release new enough for the `extended-keys-format` option used by `tmux.conf` instead of Ubuntu 24.04's tmux 3.4.
   `jq` and `op` (1Password) deliberately stay native on Linux: `jq` is a `command -v jq || exit 1` bootstrap dependency of the apply-time MCP/plugin scripts (and is used bare in obsidian's installer), and `op` unlocks chezmoi's secret reads before the dedicated Nix profile is active.
   On macOS `jq` is brew-installed into a prefix that is not on the stock PATH, and each chezmoi script starts a fresh process that never inherits script 10's `brew shellenv`, so `run_onchange_before_15` probes `/opt/homebrew/bin` and `/usr/local/bin` for `jq` and hard-fails with a clear message before any profile mutation; `check-nix-bootstrap.py` requires that probe and its ordering.
   The eza `ls` aliases are probed after the dedicated Nix profile PATH addition.
   1Password keeps its debsig setup, and Obsidian keeps resolving its `.deb` URL from the GitHub releases API at runtime.
   The manifest is order-sensitive on Linux (curl + ca-certificates before HTTPS vendor installers, gnupg before the op and gh apt-repos, software-properties-common before the ghostty PPA); macOS is brew/cask plus the three self-contained curl `script` installers (treehouse, no-mistakes, herdr), and order-independent.
-  `gh` deliberately stays native, NOT mise: brew on macOS and GitHub's official apt-repo on Linux (`aptrepos.gh`, sharing op's `install_aptrepo` path - gh's keyring is already binary but `gpg --dearmor` passes binary OpenPGP through byte-for-byte, and gh needs no debsig).
-  This reverses an earlier gh-on-mise consolidation: a mise-shim gh is invisible to any process launched with a sanitized PATH that drops the mise shims dir (notably the no-mistakes daemon's git subprocess), which a one-off `~/.local/bin/gh -> mise shim` symlink had been the stopgap for; an apt gh at `/usr/bin/gh` is on the plain system PATH everything sees, so that symlink is removed and no per-machine hack is needed.
+  `gh` deliberately stays native: brew on macOS and GitHub's official apt-repo on Linux (`aptrepos.gh`, sharing op's `install_aptrepo` path - gh's keyring is already binary but `gpg --dearmor` passes binary OpenPGP through byte-for-byte, and gh needs no debsig).
+  It must sit on the plain system PATH: an apt gh at `/usr/bin/gh` is visible to any process launched with a sanitized PATH (notably the no-mistakes daemon's git subprocess), so no per-machine symlink stopgap is needed.
   Atuin self-update is disabled now that Nix owns the executable.
   The legacy `~/.atuin/bin` PATH entry remains for non-executable vendor state and stale-install auditing, but the later dedicated-profile prepend guarantees its `atuin` wins.
   Prove equivalence by rendering the script for darwin / linux / WSL (force `.chezmoi.os` + `.isWSL` via `sed` on a copy, render with `chezmoi --source "$PWD" execute-template`) and diffing the canonical install actions against a known-good baseline.

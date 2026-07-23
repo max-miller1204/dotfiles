@@ -60,9 +60,9 @@ out="$(
         --no-link \
         --print-out-paths
 )"
-# Validate the built bundle, not the caller's environment: a shell nested
-# under a pre-migration session still exports a mise GOROOT that would fail
-# the go probe (lsp-smoke.py removes NODE_PATH for the same reason).
+# Validate the built bundle, not the caller's environment: a GOROOT/GOBIN
+# exported into this shell would point the go probe at a different toolchain and
+# could fail bundle validation (lsp-smoke.py removes NODE_PATH for the same reason).
 unset GOROOT GOBIN
 for bin in eza bat fd rg fzf gum starship atuin zoxide direnv tmux nvim shellcheck go gopls pyright pyright-langserver tsc tsgo typescript-language-server fnm uv; do
     if [[ ! -x "$out/bin/$bin" ]]; then

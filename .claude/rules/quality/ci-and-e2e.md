@@ -32,7 +32,7 @@ paths:
   Runtime, agent-tool, and LSP ownership checks must assert exact Fish resolution through fnm, uv, rustup, native Bun, the stable native Hunk launcher, or the dedicated Nix profile rather than merely checking command presence.
   The Pyright and TypeScript smoke sends Claude-like initialize, hover, shutdown, and exit messages with `NODE_PATH` removed, proving server startup and pinned TypeScript module resolution.
   `check-lsp-ownership.py` statically proves exact language-server ownership in CI and E2E.
-  `check-agent-tool-ownership.py` separately proves that stable native npm prefixes own Pi and Hunk, that neither ships in the Nix bundle, and that no active source declaration owns tools through mise.
+  `check-agent-tool-ownership.py` separately proves that stable native npm prefixes own Pi and Hunk and that neither ships in the Nix bundle.
   `test-pi-nix-runtime.sh` uses RPC `get_commands` without a model call to prove Pi loads the managed local extensions; CI runs it against a throwaway `@latest` npm-prefix install, and E2E additionally installs Pi's npm packages through fnm npm and repeats that RPC smoke against the applied configuration.
   It sets `PI_OFFLINE=1` and bounds the invocation with a portable background watchdog rather than GNU `timeout`, because it also runs on the macOS leg where `timeout` is absent; an `@latest` build that blocks on a network or auth path must fail in minutes, not at the Actions job timeout.
   `.github/scripts/test-runtime-path-order.sh` supplies isolated fake commands to prove the precedence chain on every Linux CI run without downloading mutable runtimes.

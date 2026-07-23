@@ -3,7 +3,7 @@
 # in .chezmoidata/packages.yaml. Each helper reproduces exactly the idempotency
 # guard that method used before the manifest refactor, so re-runs stay safe
 # no-ops. Included after lib-log.sh (provides `log` + set -euo pipefail),
-# lib-resolve.sh (provides `resolve_mise`), and lib-apt.sh (provides
+# lib-resolve.sh (provides PATH helpers), and lib-apt.sh (provides
 # `install_aptrepo`), so those helpers are already defined here. Depending on the
 # target OS some of these are defined-but-unused (e.g. install_apt on macOS,
 # install_cask on Linux); that is expected and stays shellcheck-clean at
@@ -68,11 +68,17 @@ install_flatpak() {
 install_deburl() {
     local bin="$1" url="$2"
     log "Installing $bin from a downloaded .deb"
-    local deb
-    deb="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$deb" "$url"
-    sudo apt-get install -y "$deb"
-    rm -f "$deb"
+    # apt-get needs a path ending in .deb; a fixed name inside a temp directory
+    # stays portable (BSD mktemp has no --suffix), should this ever run on macOS.
+    local deb_dir deb status=0
+    deb_dir="$(mktemp -d)"
+    deb="$deb_dir/$bin.deb"
+    # Every call site is guarded on `command -v`, so under set -e a failed
+    # download would abort the apply before any trailing cleanup ran and leak the
+    # partial .deb; clean up unconditionally, then re-raise the failure.
+    { curl -fsSL -o "$deb" "$url" && sudo apt-get install -y "$deb"; } || status=$?
+    rm -rf "$deb_dir"
+    return "$status"
 }
 
 # debsig verification policy + keyring, independent of the apt keyring/list. Only
@@ -84,19 +90,4 @@ install_debsig() {
     curl -fsSL "$pol_url" | sudo tee "/etc/debsig/policies/$policy_id/1password.pol" >/dev/null
     sudo mkdir -p "/usr/share/debsig/keyrings/$policy_id"
     curl -fsSL "$key_url" | sudo gpg --dearmor --output "/usr/share/debsig/keyrings/$policy_id/debsig.gpg"
-}
-
-# mise-managed tool. Backs the Linux CLI tools (eza, gum, starship, atuin, bat, fd,
-# ripgrep, zoxide, direnv) via mise's aqua backend; the separate `mise use -g` toolchains
-# block owns the language runtimes and is NOT part of the manifest. Guarded on the
-# command name, then installed through the resolved mise (not on PATH in a non-interactive apply).
-install_mise() {
-    local bin="$1" tool="$2"
-    command -v "$bin" >/dev/null 2>&1 && return 0
-    local mise_bin
-    mise_bin="$(resolve_mise)"
-    if [[ -n "$mise_bin" ]]; then
-        log "Installing $tool via mise"
-        "$mise_bin" use -g "$tool"
-    fi
 }

@@ -1,3 +1,6 @@
+{{- $nodeVersion := (get . "nodeVersion" | default "lts") -}}
+{{- $pythonVersion := (get . "pythonVersion" | default "3") -}}
+{{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
 function update-all --description 'Update every package source this dotfiles repo installs'
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
@@ -16,19 +19,80 @@ function update-all --description 'Update every package source this dotfiles rep
 
     if command -q flatpak
         echo "$section==> flatpak$reset"
-        flatpak update -y
+        flatpak update -y; or return
     end
     {{- end }}
 
-    echo "$section==> mise$reset"
-    mise upgrade
+    if command -q fnm
+        echo "$section==> fnm Node {{ $nodeVersion }}$reset"
+        set -l node_target "{{ $nodeVersion }}"
+        if test "$node_target" = lts
+            set node_target (fnm list-remote --lts --latest | string replace -r ' .*' '')
+        end
+        test -n "$node_target"; or return 1
+        fnm install "$node_target"; or return
+        fnm default "$node_target"; or return
+    end
+
+    if command -q uv
+        echo "$section==> uv Python {{ $pythonVersion }}$reset"
+        uv --preview-features python-install-default python install "{{ $pythonVersion }}" --default --upgrade; or return
+    end
+
+    if command -q rustup
+        echo "$section==> rustup {{ $rustToolchain }}$reset"
+        rustup update "{{ $rustToolchain }}"; or return
+        rustup component add --toolchain "{{ $rustToolchain }}" rust-analyzer; or return
+    end
+
+    if command -q bun
+        echo "$section==> bun$reset"
+        bun upgrade; or return
+    end
+
+    if command -q npm
+        # config.fish only activates fnm in interactive shells, so a
+        # non-interactive `fish -c update-all` starts with no FNM_MULTISHELL_PATH.
+        # Activate fnm here first so the ownership gate sees the fnm-managed npm
+        # instead of failing closed (and skipping the chezmoi refresh below).
+        if command -q fnm; and test -z "$FNM_MULTISHELL_PATH"
+            fnm env --shell fish | source
+        end
+        # run_onchange_before_17 and _18 install both tools with fnm-managed npm
+        # and verify the result; a refresh here must assert exactly the same
+        # things or it can silently break what the installers guarantee.
+        set -l npm_bin (command -v npm)
+        if test -z "$FNM_MULTISHELL_PATH"; or test "$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm"
+            echo "Hunk and Pi must be updated with fnm-managed npm; resolved: $npm_bin" >&2
+            return 1
+        end
+
+        echo "$section==> native Hunk npm package$reset"
+        set -l hunk_prefix "$HOME/.local/share/npm-hunkdiff"
+        set -l hunk_skill "$hunk_prefix/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
+        env npm_config_update_notifier=false \
+            npm install --global --prefix "$hunk_prefix" hunkdiff@latest; or return
+        # Pi's settings.json declares this exact skill path, so a release that
+        # moves or drops it must fail here, not leave that entry dangling.
+        if not test -x "$hunk_prefix/bin/hunk"; or not test -f "$hunk_skill"
+            echo "The native Hunk installation is incomplete under: $hunk_prefix" >&2
+            return 1
+        end
+        mkdir -p "$HOME/.local/bin"; or return
+        ln -sfn "$hunk_prefix/bin/hunk" "$HOME/.local/bin/hunk"; or return
+
+        echo "$section==> native Pi npm package$reset"
+        set -l pi_prefix "$HOME/.local/share/npm-pi"
+        env npm_config_update_notifier=false \
+            npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest; or return
+        if not test -x "$pi_prefix/bin/pi"
+            echo "The native Pi installation is incomplete under: $pi_prefix" >&2
+            return 1
+        end
+        ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"; or return
+    end
 
     echo "$section==> chezmoi$reset"
     chezmoi upgrade
     and chezmoi update
-
-    if test -x "$HOME/.atuin/bin/atuin-update"
-        echo "$section==> atuin$reset"
-        "$HOME/.atuin/bin/atuin-update"
-    end
 end

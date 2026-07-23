@@ -1,47 +1,42 @@
 #!/usr/bin/env bash
+{{ $rustToolchain := (get . "rustToolchain" | default "stable") }}
 # Install the language servers the enabled Claude Code LSP plugins expect.
 # The single source of truth for the LSP language set is `lspLanguages` in
-# .chezmoi.toml.tmpl: each entry pairs the marketplace plugin with how its server
-# is installed (mise / rustup / OS package). This script installs the servers and
-# run_after_65-setup-claude-plugins installs/enables the matching plugins, both
-# derived from that one table, so the two lists can never drift.
-#
-# The npm/go servers are installed as mise-managed tools so they do not orphan on
-# a node/go upgrade (a raw `npm install -g` lands in the version-pinned runtime
-# dir and vanishes when mise repoints the version). clangd comes from the OS
-# package manager and rust-analyzer from rustup. Re-runs when this script changes.
+# .chezmoi.toml.tmpl. Servers come from Nix, rustup, or the OS package manager;
+# run_after_65 installs and enables the matching plugins from the same
+# table so the two lists cannot drift.
 {{ template "lib-log.sh" . }}
 
 {{ template "lib-resolve.sh" . }}
 
-MISE_BIN="$(resolve_mise)"
-if [[ -z "$MISE_BIN" ]]; then
-    echo "mise not found; cannot install LSP servers" >&2
-    exit 1
-fi
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+prepend_path "$profile/bin" "$HOME/.local/bin" "${CARGO_HOME:-$HOME/.cargo}/bin"
+unset RUSTUP_TOOLCHAIN
+{{- if eq .chezmoi.os "darwin" }}
 
-# ---- mise-managed servers (npm + go backends) --------------------
-{{- $miseTools := list -}}
-{{- range .lspLanguages -}}
-{{-   if eq .method "mise" -}}
-{{-     range .miseTools -}}
-{{-       $miseTools = append $miseTools . -}}
-{{-     end -}}
-{{-   end -}}
-{{- end }}
-{{- if $miseTools }}
-log "Installing mise-backed LSP servers ({{ $miseTools | join " " }})"
-"$MISE_BIN" use -g {{ $miseTools | join " " }}
+# Homebrew's prefix is not on the stock macOS PATH of a non-interactive apply,
+# and each chezmoi script starts a fresh process that never inherits script 10's
+# shellenv. Append both prefixes so the OS-package branch below reports its own
+# diagnostics instead of failing with "brew: command not found", while the
+# dedicated Nix profile keeps ownership of every executable it provides.
+for brew_bin in /opt/homebrew/bin /usr/local/bin; do
+    if [[ -x "$brew_bin/brew" ]]; then
+        export PATH="$PATH:$brew_bin"
+        break
+    fi
+done
 {{- end }}
 
 # ---- rustup component servers (rust-analyzer) --------------------
 {{- range .lspLanguages }}
 {{-   if eq .method "rustup" }}
 RUSTUP_BIN="$(resolve_rustup rustup)"
-if [[ -n "$RUSTUP_BIN" ]]; then
-    log "Ensuring {{ .rustupComponent }} (rustup component for {{ .plugin }})"
-    "$RUSTUP_BIN" component add {{ .rustupComponent }} || true
+if [[ -z "$RUSTUP_BIN" ]]; then
+    echo "rustup not found; cannot install {{ .rustupComponent }}" >&2
+    exit 1
 fi
+log "Ensuring {{ .rustupComponent }} (rustup component for {{ .plugin }})"
+"$RUSTUP_BIN" component add --toolchain "{{ $rustToolchain }}" {{ .rustupComponent }}
 {{-   end }}
 {{- end }}
 
@@ -52,7 +47,7 @@ fi
 if ! command -v {{ .verifyBin }} >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/{{ .verifyBin }}" ]]; then
     log "Installing {{ .verifyBin }} via Homebrew {{ .brewFormula }} (for {{ .plugin }})"
     brew install {{ .brewFormula }}
-    # {{ .brewFormula }} is keg-only, so brew does not put {{ .verifyBin }} on PATH; expose it via ~/.local/bin.
+    # {{ .brewFormula }} is keg-only, so expose its server through ~/.local/bin.
     # TODO(macos): confirm on a Mac - this branch is untested from Linux.
     mkdir -p "$HOME/.local/bin"
     ln -sf "$(brew --prefix {{ .brewFormula }})/bin/{{ .verifyBin }}" "$HOME/.local/bin/{{ .verifyBin }}"
@@ -69,38 +64,18 @@ fi
 # ---- verify every enabled server resolves and runs ---------------
 log "Verifying language servers"
 fail=0
-{{- $miseVerify := list -}}
-{{- range .lspLanguages -}}
-{{-   if and (eq .method "mise") .verifyBin -}}
-{{-     $miseVerify = append $miseVerify .verifyBin -}}
-{{-   end -}}
-{{- end }}
-for bin in {{ $miseVerify | join " " }}; do
-    if ! "$MISE_BIN" which "$bin" >/dev/null 2>&1; then
-        echo "MISSING (mise): $bin" >&2; fail=1
-    fi
-done
 {{- range .lspLanguages }}
-{{-   if get . "verifyTsResolve" }}
-# {{ .plugin }} resolves `typescript` (tsserver) at runtime, which fails across
-# mise's isolated npm prefixes unless NODE_PATH points at it (set in the fish
-# config). Verify the resolution itself, not just that the launcher runs.
-TS_MODULES="$HOME/{{ $.tsNodeModulesRel }}"
-NODE_BIN="$("$MISE_BIN" which node 2>/dev/null || true)"
-if [[ -z "$NODE_BIN" ]] || ! NODE_PATH="$TS_MODULES" "$NODE_BIN" -e "require.resolve('typescript')" >/dev/null 2>&1; then
-    echo "MISSING: typescript not resolvable by {{ .verifyBin }}" >&2; fail=1
+{{-   if eq .method "nix" }}
+if [[ ! -x "$profile/bin/{{ .verifyBin }}" ]]; then
+    echo "MISSING (Nix profile): {{ .verifyBin }}" >&2; fail=1
 fi
 {{-   end }}
-{{- end }}
-{{- range .lspLanguages }}
 {{-   if eq .method "rustup" }}
 RA_BIN="$(resolve_rustup {{ .verifyBin }})"
 if [[ -z "$RA_BIN" ]] || ! "$RA_BIN" --version >/dev/null 2>&1; then
     echo "MISSING: {{ .verifyBin }}" >&2; fail=1
 fi
 {{-   end }}
-{{- end }}
-{{- range .lspLanguages }}
 {{-   if eq .method "os" }}
 if ! { command -v {{ .verifyBin }} >/dev/null 2>&1 || [[ -x /usr/bin/{{ .verifyBin }} ]] || [[ -x "$HOME/.local/bin/{{ .verifyBin }}" ]]; }; then
     echo "MISSING: {{ .verifyBin }}" >&2; fail=1

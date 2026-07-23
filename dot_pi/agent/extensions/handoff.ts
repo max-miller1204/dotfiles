@@ -16,7 +16,7 @@ import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { complete, type Message } from "@earendil-works/pi-ai/compat";
+import type { Message } from "@earendil-works/pi-ai/compat";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -28,6 +28,23 @@ import {
 	copyToClipboard,
 	serializeConversation,
 } from "@earendil-works/pi-coding-agent";
+
+type Complete = typeof import("@earendil-works/pi-ai/compat").complete;
+
+let completePromise: Promise<Complete> | undefined;
+
+function loadComplete(): Promise<Complete> {
+	completePromise ??= import("@earendil-works/pi-ai/compat")
+		.then(({ complete }) => complete)
+		.catch(async (compatError: unknown) => {
+			const legacy = await import("@earendil-works/pi-ai");
+			if (!("complete" in legacy) || typeof legacy.complete !== "function") {
+				throw compatError;
+			}
+			return legacy.complete as Complete;
+		});
+	return completePromise;
+}
 
 const SYSTEM_PROMPT = `You are a context transfer assistant. Given a conversation history and the user's goal for a new thread, generate a focused prompt that:
 
@@ -256,6 +273,7 @@ export default function (pi: ExtensionAPI) {
 							timestamp: Date.now(),
 						};
 
+						const complete = await loadComplete();
 						const response = await complete(
 							model,
 							{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },

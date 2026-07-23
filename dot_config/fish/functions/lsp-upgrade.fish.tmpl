@@ -1,11 +1,12 @@
 {{- /* Derive the LSP server set from the single-source lspLanguages table in
-       .chezmoi.toml.tmpl, the same table that drives the install script and the
-       plugin install, so this upgrade helper can never drift from either. */ -}}
-{{- $miseTools := list -}}
+       .chezmoi.toml.tmpl, the same table that drives installation and plugin
+       setup, so this upgrade helper cannot drift from either. */ -}}
+{{- $rustToolchain := (get . "rustToolchain" | default "stable") -}}
+{{- $nixLangs := list -}}
 {{- $rustupLangs := list -}}
 {{- $osLangs := list -}}
 {{- range .lspLanguages -}}
-{{-   if eq .method "mise" -}}{{- range .miseTools -}}{{- $miseTools = append $miseTools . -}}{{- end -}}{{- end -}}
+{{-   if eq .method "nix" -}}{{- $nixLangs = append $nixLangs . -}}{{- end -}}
 {{-   if eq .method "rustup" -}}{{- $rustupLangs = append $rustupLangs . -}}{{- end -}}
 {{-   if eq .method "os" -}}{{- $osLangs = append $osLangs . -}}{{- end -}}
 {{- end -}}
@@ -13,40 +14,32 @@ function lsp-upgrade --description 'Upgrade all Claude Code LSP language servers
     set -l section (set_color --bold cyan)
     set -l reset (set_color normal)
 
-    echo "$section==> mise LSP servers$reset"
-    mise upgrade {{ $miseTools | join " " }}
 {{- range $rustupLangs }}
 
     if command -q rustup
-        echo "$section==> {{ .rustupComponent }}$reset"
-        # {{ .rustupComponent }} is a rustup component pinned to the active rust
-        # toolchain, and that toolchain is mise-managed. A bare
-        # `rustup component add {{ .rustupComponent }}` only re-adds it to the current
-        # toolchain, so it no-ops once present and never pulls a newer version.
-        # Advance the mise-managed rust first, then add the component for the
-        # toolchain mise now resolves, queried fresh via `mise current` (this
-        # shell's RUSTUP_TOOLCHAIN stays stale until the next mise hook). If
-        # rust is not mise-managed (`mise current` prints nothing) or resolves
-        # to more than one version, fall back to a plain add so we never pass a
-        # malformed --toolchain. `mise current` prints multiple versions
-        # space-separated on one line, so tokenize on whitespace before
-        # counting rather than relying on command substitution's newline split.
-        mise upgrade rust
-        set -l rust_toolchain (mise current rust | string split -n ' ')
-        if test (count $rust_toolchain) -eq 1
-            rustup component add --toolchain $rust_toolchain {{ .rustupComponent }}
-        else
-            rustup component add {{ .rustupComponent }}
-        end
+        echo "$section==> {{ .rustupComponent }} (rustup {{ $rustToolchain }})$reset"
+        rustup update "{{ $rustToolchain }}"; or return
+        rustup component add --toolchain "{{ $rustToolchain }}" {{ .rustupComponent }}; or return
     end
+{{- end }}
+{{- range $nixLangs }}
+
+    echo "$section==> {{ .verifyBin }} is pinned by flake.lock$reset"
 {{- end }}
 {{- range $osLangs }}
 
     echo "$section==> {{ .verifyBin }}$reset"
     {{- if eq $.chezmoi.os "darwin" }}
-    brew upgrade {{ .brewFormula }}
+    # run_onchange_after_50 brew-installs {{ .brewFormula }} only when
+    # {{ .verifyBin }} does not already resolve, so an unconditional upgrade
+    # would abort this function with "Error: {{ .brewFormula }} not installed".
+    if brew list --formula {{ .brewFormula }} >/dev/null 2>&1
+        brew upgrade {{ .brewFormula }}; or return
+    else
+        echo "    {{ .brewFormula }} is not Homebrew-managed here; skipping"
+    end
     {{- else }}
-    sudo apt-get install --only-upgrade -y {{ .aptPackage }}
+    sudo apt-get install --only-upgrade -y {{ .aptPackage }}; or return
     {{- end }}
 {{- end }}
 end

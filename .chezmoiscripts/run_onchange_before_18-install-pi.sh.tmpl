@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+{{ $nodeVersion := (get . "nodeVersion" | default "lts") }}
+# Pi stays outside Nix with Hunk so npm releases land immediately instead of
+# trailing the nixpkgs package bump and a flake.lock advance. Install into a
+# stable npm prefix after fnm has prepared Node so a Node upgrade cannot orphan
+# the CLI, and keep the prefix separate from Hunk's so each tool has exactly
+# one owner directory.
+# Node policy: {{ $nodeVersion }}
+{{ template "lib-log.sh" . }}
+
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
+fnm_bin="$profile/bin/fnm"
+if [[ ! -x "$fnm_bin" ]]; then
+    echo "The dedicated Nix profile is missing required runtime manager: $fnm_bin" >&2
+    exit 1
+fi
+
+eval "$("$fnm_bin" env --shell bash)"
+node --version
+npm --version
+
+npm_bin="$(command -v npm)"
+if [[ -z "${FNM_MULTISHELL_PATH:-}" || "$npm_bin" != "$FNM_MULTISHELL_PATH/bin/npm" ]]; then
+    echo "Pi must be installed with fnm-managed npm; resolved: $npm_bin" >&2
+    exit 1
+fi
+
+pi_prefix="$HOME/.local/share/npm-pi"
+log "Installing Pi into its stable native npm prefix"
+npm_config_update_notifier=false npm install --global --prefix "$pi_prefix" @earendil-works/pi-coding-agent@latest
+
+if [[ ! -x "$pi_prefix/bin/pi" ]]; then
+    echo "The native Pi installation is incomplete under: $pi_prefix" >&2
+    exit 1
+fi
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$pi_prefix/bin/pi" "$HOME/.local/bin/pi"
+"$HOME/.local/bin/pi" --version
+log "Native Pi is ready"

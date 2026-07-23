@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["nix", "github-actions"],
+  "nix": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "packageRules": [
+    {
+      "description": ["Update the unstable nixpkgs input independently"],
+      "matchManagers": ["nix"],
+      "matchDepNames": ["nixpkgs"],
+      "groupName": "nixpkgs unstable"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check exact Phase 7 ownership for Pi and Hunk."""
+"""Check exact agent-tool ownership for Pi and Hunk."""
 
 from __future__ import annotations
 

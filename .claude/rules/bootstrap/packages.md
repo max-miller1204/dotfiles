@@ -56,7 +56,9 @@ paths:
   Never add other packages to this profile and never install overlapping bundle outputs separately.
 - The profile PATH is explicit in bootstrap and Fish.
   Fish puts the dedicated profile above native package-manager paths, then prepends uv Python, rustup, Bun, and fnm runtime paths above it.
-  `run_onchange_before_15` unsets `GOROOT`/`GOBIN` before its smoke loop so a stale caller environment cannot fail bundle validation; `test-runtime-path-order.sh` asserts the resulting precedence chain.
+  Fish owns PATH only: inherited toolchain env (`GOROOT`, `GOBIN`, `RUSTUP_TOOLCHAIN`, `NODE_PATH`) is user- or project-owned and must reach the interactive shell unmodified.
+  The bootstrap scripts clear only what would corrupt their own probes: `run_onchange_before_15` unsets `GOROOT`/`GOBIN` before its smoke loop so a stale caller environment cannot fail bundle validation, and `run_onchange_before_16` unsets `RUSTUP_TOOLCHAIN` so its rustup operations and bare `rustc`/`cargo`/`rust-analyzer` shim probes see the managed default toolchain.
+  `test-runtime-path-order.sh` asserts both the resulting precedence chain and that Fish passthrough.
   Project-specific environments belong to direnv and flakes, and project direnv environments remain highest priority.
 - `${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles` is hardcoded well beyond `run_onchange_before_15`: the other bootstrap scripts that consume it (`run_once_before_10`, `run_once_after_20-install-tpm`, `run_onchange_before_16`/`17`/`18`, `run_onchange_after_50-install-lsp-servers`); the applied configs `dot_config/direnv/direnvrc` (sources its `share/nix-direnv/direnvrc`), `dot_config/fish/config.fish.tmpl` (prepends its `bin`), and `dot_config/tmux/executable_agent-switch.sh`; the CI and E2E harness `.github/e2e/verify.sh`, `.github/scripts/test-nix-profile.sh`, `.github/scripts/test-runtime-path-order.sh`, and `.github/workflows/e2e-native-ubuntu.yml`; and `README.md`.
   `nix/flake.nix` does NOT reference the profile path - its headless smoke asserts a built store path (`share/nix-direnv/direnvrc`), independent of where the profile symlink lives.

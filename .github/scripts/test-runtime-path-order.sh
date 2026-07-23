@@ -89,4 +89,29 @@ assert_path pi "$home/.local/bin/pi"
 assert_path hunk "$home/.local/bin/hunk"
 assert_path legacy-only "$tmp/system/bin/legacy-only"
 
+# Fish startup owns PATH, not the caller's toolchain environment. User- and
+# project-owned exports must reach the interactive shell unmodified so a pinned
+# toolchain or module path selected outside Fish still applies inside it.
+inherited_env="$(
+	env \
+		HOME="$home" \
+		XDG_CONFIG_HOME="$home/.config" \
+		XDG_DATA_HOME="$data" \
+		XDG_STATE_HOME="$state" \
+		XDG_RUNTIME_DIR="$runtime" \
+		CARGO_HOME="$home/.cargo" \
+		BUN_INSTALL="$home/.bun" \
+		GOROOT="$tmp/user-goroot" \
+		GOBIN="$tmp/user-gobin" \
+		RUSTUP_TOOLCHAIN=user-pinned-toolchain \
+		NODE_PATH="$tmp/user-node-modules" \
+		PATH="$tmp/system/bin:$tmp/default/bin:/usr/bin:/bin" \
+		fish -l -i -c 'printf "%s|%s|%s|%s\n" "$GOROOT" "$GOBIN" "$RUSTUP_TOOLCHAIN" "$NODE_PATH"' 2>/dev/null | tail -1
+)"
+expected_env="$tmp/user-goroot|$tmp/user-gobin|user-pinned-toolchain|$tmp/user-node-modules"
+if [[ "$inherited_env" != "$expected_env" ]]; then
+	printf 'inherited toolchain env is %s, expected %s\n' "$inherited_env" "$expected_env" >&2
+	exit 1
+fi
+
 echo "Fish runtime and package ownership precedence passed"

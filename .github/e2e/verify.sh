@@ -326,6 +326,15 @@ hard "claude plugins: exact LSP set plus agent-sdk-dev and skill-creator enabled
 		map(select(.enabled) | .id) as \$enabled
 		| [\"rust-analyzer-lsp\", \"pyright-lsp\", \"typescript-lsp\", \"gopls-lsp\", \"clangd-lsp\", \"agent-sdk-dev\", \"skill-creator\"]
 		| all(. as \$name | \$enabled | index(\$name + \"@claude-plugins-official\") != null)'"
+# The herdr claude integration is the other settings.json block chezmoi strips on
+# every apply (run_after_66 re-asserts it). Assert the WIRING, not the installed
+# hook script: `herdr integration status` reads only the script's version marker,
+# which an apply never touches, so it reports "current" for a stripped install.
+# Without this hook herdr cannot resume Claude panes on session restore.
+hard "herdr claude hook wired into ~/.claude/settings.json (survives the apply strip)" \
+	bash -c "jq -e --arg hook \"\$HOME/.claude/hooks/herdr-agent-state.sh\" '
+		[.hooks // {} | to_entries[] | .value[]? | .hooks[]? | .command? // empty]
+		| any(contains(\$hook))' \"\$HOME/.claude/settings.json\""
 hard "claude MCP servers synced into ~/.claude.json" \
 	bash -c "jq -e '.mcpServers | has(\"playwright\") and has(\"playwright-chrome\")' \"\$HOME/.claude.json\""
 hard "codex MCP servers in ~/.codex/config.toml" \

@@ -308,6 +308,20 @@ The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/
 It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
 The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
 
+### herdr agent integration (CLI-owned)
+
+herdr's Claude Code integration is owned by `herdr integration install`, and it is the second thing every `chezmoi apply` strips out of `~/.claude/settings.json`.
+`run_after_66-herdr-agent-integrations.sh.tmpl` re-asserts it on every apply, for exactly the same reason the plugin script above must be a plain `run_after_`.
+
+The integration has two halves, and an apply only destroys one of them: the hook script at `~/.claude/hooks/herdr-agent-state.sh` (which chezmoi does not manage, so it survives) and a `SessionStart` hook entry in the managed `settings.json` that invokes it (which does not).
+That entry is how a Claude Code session reports its session id to the running herdr server. Lose it and herdr records the pane with no `agent_session`, so restoring a herdr session reopens your Claude panes as bare shells instead of resuming the sessions that were in them - with no error anywhere, because nothing failed; a hook simply never ran.
+
+`herdr integration status` does not detect this. It reads the version marker inside the unmanaged hook script, so it happily reports `claude: current (v7)` for an install whose settings wiring was stripped an apply ago.
+The script therefore re-runs the installer (idempotent - it re-ensures exactly one `SessionStart` entry and leaves the atuin hooks alone) and then asserts the wiring landed in the applied `settings.json`, warning if it did not; `.github/e2e/verify.sh` gates the same condition after a full E2E apply.
+
+Only agents whose herdr wiring lands in a chezmoi-managed file need this, which today means Claude alone.
+pi and OpenCode drop their integration into auto-discovered directories (`~/.pi/agent/extensions`, `~/.config/opencode/plugins`) that are managed without an `exact_` prefix, so chezmoi leaves the herdr file alone, and Codex keeps its integration in `~/.codex`, which chezmoi does not manage as a target.
+
 **Codex config ownership.**
 `~/.codex/config.toml` is assembled (not a single chezmoi target) so the managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
 
@@ -340,7 +354,8 @@ Cross-platform:
   `lsp-upgrade` reports the flake-pinned servers and upgrades the rustup- and OS-owned Claude Code language servers
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
-- `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
+- `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed.
+  Its Claude Code hook is CLI-owned and re-asserted every apply - see [herdr agent integration](#herdr-agent-integration-cli-owned)
 - `dot_config/ghostty/config` + `themes/catppuccin-mocha`
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme

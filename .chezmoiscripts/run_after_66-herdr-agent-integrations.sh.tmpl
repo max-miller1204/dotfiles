@@ -78,8 +78,14 @@ fi
 hook_script="$HOME/.claude/hooks/herdr-agent-state.sh"
 settings="$HOME/.claude/settings.json"
 if ! jq -e --arg hook "$hook_script" '
-    [.hooks // {} | to_entries[] | .value[]? | .hooks[]? | .command? // empty]
-    | any(contains($hook))' "$settings" >/dev/null 2>&1; then
+    [
+        .hooks.SessionStart[]?
+        | select(.matcher? == "*")
+        | .hooks[]?
+        | select(.type? == "command")
+        | .command? // empty
+    ]
+    | any(. == ("bash " + ($hook | @sh) + " session"))' "$settings" >/dev/null 2>&1; then
     log "warn: herdr hook missing from $settings after install (retries next apply)"
     exit 0
 fi

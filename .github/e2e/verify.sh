@@ -333,8 +333,28 @@ hard "claude plugins: exact LSP set plus agent-sdk-dev and skill-creator enabled
 # Without this hook herdr cannot resume Claude panes on session restore.
 hard "herdr claude hook wired into ~/.claude/settings.json (survives the apply strip)" \
 	bash -c "jq -e --arg hook \"\$HOME/.claude/hooks/herdr-agent-state.sh\" '
-		[.hooks // {} | to_entries[] | .value[]? | .hooks[]? | .command? // empty]
-		| any(contains(\$hook))' \"\$HOME/.claude/settings.json\""
+		def has_command(\$event; \$command):
+			[
+				.hooks[\$event][]?
+				| .hooks[]?
+				| select(.type? == \"command\")
+				| .command? // empty
+			]
+			| any(. == \$command);
+		(
+			[
+				.hooks.SessionStart[]?
+				| select(.matcher? == \"*\")
+				| .hooks[]?
+				| select(.type? == \"command\")
+				| .command? // empty
+			]
+			| any(. == (\"bash \" + (\$hook | @sh) + \" session\"))
+		)
+		and has_command(\"PreToolUse\"; \"atuin hook claude-code\")
+		and has_command(\"PostToolUse\"; \"atuin hook claude-code\")
+		and has_command(\"PostToolUseFailure\"; \"atuin hook claude-code\")' \
+		\"\$HOME/.claude/settings.json\""
 hard "claude MCP servers synced into ~/.claude.json" \
 	bash -c "jq -e '.mcpServers | has(\"playwright\") and has(\"playwright-chrome\")' \"\$HOME/.claude.json\""
 hard "codex MCP servers in ~/.codex/config.toml" \

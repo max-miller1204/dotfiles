@@ -27,6 +27,7 @@ Read [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/s
 
 - `.chezmoiscripts/` or `.chezmoitemplates/` files
 - Claude plugins, marketplace state, or `dot_claude/settings.json`
+- the herdr agent integration hook (the other CLI-owned `settings.json` block)
 - the Brev skill installer
 - shell partials, path resolution, apt repositories, or Codex sync helpers
 - `.chezmoidata/mcp.yaml` or any generated Claude, Codex, OpenCode, or pi MCP target

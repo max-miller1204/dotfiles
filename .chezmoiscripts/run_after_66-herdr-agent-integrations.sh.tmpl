@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Re-assert the herdr <-> coding-agent integration via `herdr integration
+# install`, so the hook wiring stays owned by herdr instead of hand-vendored into
+# dot_claude/settings.json.
+#
+# This MUST be a plain `run_after_` script (runs on EVERY apply), for the same
+# reason as run_after_65: herdr's claude integration registers a SessionStart
+# hook inside ~/.claude/settings.json, which chezmoi fully manages and rewrites
+# from source each apply, stripping the hook. A `run_onchange_after_` keyed to
+# this script's own hash would not re-fire after that strip and would silently
+# leave herdr blind again.
+#
+# What the stripped hook costs: that hook is how a Claude Code session reports
+# its session id to the running herdr server. Without it herdr records the pane
+# with no agent_session, so restoring a herdr session reopens those panes as bare
+# shells instead of resuming the agent - the failure this script exists to
+# prevent.
+#
+# `herdr integration status` is NOT a usable guard here. It reports "current" off
+# the version marker inside the installed hook SCRIPT
+# (~/.claude/hooks/herdr-agent-state.sh), which chezmoi does not manage and an
+# apply never touches; it never inspects the settings.json wiring, so a stripped
+# install still reports green. Reinstalling unconditionally is idempotent and
+# cheap - it rewrites the small hook script and re-ensures exactly one
+# SessionStart entry - so this reinstalls and then asserts the wiring landed.
+#
+# Only agents whose herdr wiring lands in a chezmoi-managed file need this, which
+# today is claude alone. pi and opencode drop their integration into
+# auto-discovered directories (~/.pi/agent/extensions, ~/.config/opencode/plugins)
+# that are managed WITHOUT an `exact_` prefix, so chezmoi leaves the herdr file
+# beside the managed ones; codex writes its own ~/.codex hooks file, which chezmoi
+# does not manage as a target at all. Add an agent here only once an apply is
+# shown to actually strip it.
+#
+# Ordered after run_once_before_10 installs herdr and the coding agents.
+{{ template "lib-log.sh" . }}
+
+{{ template "lib-resolve.sh" . }}
+
+# herdr and claude are installed by run_once_before_10 to ~/.local/bin; not
+# necessarily on PATH in a non-interactive apply. Guard so a not-yet-installed
+# tool degrades to a skip instead of failing the whole apply (self-heals on the
+# next apply).
+prepend_path "$HOME/.local/bin"
+if ! command -v herdr >/dev/null 2>&1; then
+    log "skip: herdr not on PATH yet (will wire its claude integration on next apply)"
+    exit 0
+fi
+if ! command -v claude >/dev/null 2>&1; then
+    log "skip: claude not on PATH yet (will wire its herdr integration on next apply)"
+    exit 0
+fi
+# jq stays a native package. On macOS brew installs it into a prefix that is not
+# on the stock PATH of a non-interactive apply, and this script runs in a fresh
+# process that never inherits script 10's shellenv, so probe both prefixes
+# before treating a missing jq as a hard bootstrap failure.
+if ! command -v jq >/dev/null 2>&1; then
+    for brew_bin in /opt/homebrew/bin /usr/local/bin; do
+        if [[ -x "$brew_bin/jq" ]]; then
+            prepend_path "$brew_bin"
+            break
+        fi
+    done
+fi
+command -v jq >/dev/null 2>&1 || { echo "jq required on PATH" >&2; exit 1; }
+
+log "Re-asserting the herdr claude integration"
+if ! herdr integration install claude >/dev/null; then
+    log "warn: herdr integration install claude failed (retries next apply)"
+    exit 0
+fi
+
+# Assert the half chezmoi strips. The installer reports success for writing the
+# hook script even when the settings wiring is the part that went missing, so
+# check that the applied settings.json really does invoke the hook script the
+# installer just wrote. A herdr-side rename or a settings-write that silently
+# no-ops then surfaces as a warn: line, which verify.sh's apply-log scan gates on.
+hook_script="$HOME/.claude/hooks/herdr-agent-state.sh"
+settings="$HOME/.claude/settings.json"
+if ! jq -e --arg hook "$hook_script" '
+    [
+        .hooks.SessionStart[]?
+        | select(.matcher? == "*")
+        | .hooks[]?
+        | select(.type? == "command")
+        | .command? // empty
+    ]
+    | any(. == ("bash " + ($hook | @sh) + " session"))' "$settings" >/dev/null 2>&1; then
+    log "warn: herdr hook missing from $settings after install (retries next apply)"
+    exit 0
+fi
+
+log "herdr claude integration re-asserted"

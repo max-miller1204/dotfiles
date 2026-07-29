@@ -180,9 +180,10 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           profile="${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/dotfiles"
           before=$(readlink "$profile")
-          # Plugin setup intentionally mutates the managed Claude settings after
-          # apply. In this TTY-less check, --force explicitly chooses the source
-          # version before run_after scripts re-assert that tool-owned state.
+          # Plugin and herdr setup intentionally mutate the managed Claude
+          # settings after apply. In this TTY-less check, --force explicitly
+          # chooses the source version before run_after scripts re-assert that
+          # tool-owned state.
           chezmoi apply --force 2>&1 \
             | sed 's/^/SECOND-APPLY: /' \
             | tee -a apply.log

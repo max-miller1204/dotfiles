@@ -304,9 +304,17 @@ Repo-specific agent notes are split by scope: [`CLAUDE.md`](CLAUDE.md) keeps onl
 The Claude Code plugins and their marketplace are owned by the `claude plugin` CLI, not hand-vendored into `dot_claude/settings.json` (`enabledPlugins` / `extraKnownMarketplaces`).
 `run_after_65-setup-claude-plugins.sh.tmpl` registers the `claude-plugins-official` marketplace and installs/enables each plugin on every apply.
 It must be a plain `run_after_` script (runs on every apply), not a `run_onchange_after_`: that state lives only in the settings.json family, which chezmoi fully manages - every `chezmoi apply` rewrites `~/.claude/settings.json` from source and strips anything a CLI appended - and a `run_onchange_` keyed to the script's own hash would not re-fire after that strip (its hash is unchanged), silently leaving the plugins disabled.
-The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin re-assert re-adds its blocks. That drift is by design, not a bug (see [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md)).
+The consequence is intended: after an apply, `chezmoi status` shows `dot_claude/settings.json` as locally modified because the plugin and herdr re-assertions add their CLI-owned blocks back.
+That drift is by design, not a bug (see [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/scripts-and-config.md)).
 It is cheap on re-apply - the plugin clones and the marketplace persist under `~/.claude/plugins` (not chezmoi-managed), so an installed-but-disabled plugin is a settings.json re-enable, not a fresh clone.
 The five LSP plugins are not hand-listed here: they derive from the single-source `lspLanguages` table in `.chezmoi.toml.tmpl` (the same table that drives the LSP-server install in `run_onchange_after_50`), so the plugin set and the server set can never drift. Only the two non-LSP plugins (`agent-sdk-dev`, `skill-creator`) are a small separate `extraClaudePlugins` list.
+
+### herdr agent integration (CLI-owned)
+
+herdr's Claude Code integration remains owned by `herdr integration install`, not vendored in the managed settings file.
+Every apply strips its `SessionStart` wiring, so `run_after_66-herdr-agent-integrations.sh.tmpl` re-runs the idempotent installer before herdr needs to retain or resume that Claude session.
+Only Claude currently needs this per-apply restoration.
+The [script and tool-owned configuration guide](.claude/rules/bootstrap/scripts-and-config.md#herdr-agent-integration-state) owns the detailed agent-by-agent rationale, wiring invariant, and verification contract.
 
 **Codex config ownership.**
 `~/.codex/config.toml` is assembled (not a single chezmoi target) so the managed mechanisms can each own their own keys without clobbering the machine-specific ones (`[projects.*]` trust, `[tui.*]`) or sections Codex adds itself:
@@ -340,7 +348,8 @@ Cross-platform:
   `lsp-upgrade` reports the flake-pinned servers and upgrades the rustup- and OS-owned Claude Code language servers
 - `dot_config/fish/themes/Catppuccin Mocha.theme`
 - `dot_config/tmux/tmux.conf` — tmux (TPM-based plugins)
-- `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed
+- `dot_config/herdr/config.toml` - herdr (agent multiplexer / terminal workspace manager); only `config.toml` is vendored (its keybindings mirror the tmux config), herdr's runtime state is not managed.
+  Its Claude Code hook is CLI-owned and re-asserted every apply - see [herdr agent integration](#herdr-agent-integration-cli-owned)
 - `dot_config/ghostty/config` + `themes/catppuccin-mocha`
 - `dot_config/atuin/*` — shell history sync config + theme
 - `dot_config/bat/*` — bat pager syntax + theme
@@ -425,6 +434,7 @@ Bootstrap scripts (not applied to `$HOME`, run during `chezmoi apply`):
 - `.chezmoiscripts/run_onchange_after_42-sync-codex-base.sh.tmpl` - syncs base Codex settings (`model`, reasoning effort) into a marker block at the top of `~/.codex/config.toml` whenever the staging TOML changes
 - `.chezmoiscripts/run_onchange_after_50-install-lsp-servers.sh.tmpl` - verifies the Nix-owned Pyright, TypeScript, typescript-language-server, and gopls tools, ensures rust-analyzer through rustup, and installs clangd via apt/brew, all derived from the single-source `lspLanguages` table
 - `.chezmoiscripts/run_after_65-setup-claude-plugins.sh.tmpl` - registers the `claude-plugins-official` marketplace and installs/enables the Claude Code plugins (LSP plugins derived from `lspLanguages`, plus `extraClaudePlugins`) via the `claude plugin` CLI, on every apply (that state lives in the chezmoi-rewritten settings.json, so it must be re-asserted each time; see [Agents (multi-agent)](#agents-multi-agent))
+- `.chezmoiscripts/run_after_66-herdr-agent-integrations.sh.tmpl` - re-asserts herdr's CLI-owned Claude `SessionStart` hook wiring on every apply; see [herdr agent integration](#herdr-agent-integration-cli-owned)
 - `.chezmoiscripts/run_once_after_70-install-brev-skill.sh.tmpl` - runs `brev agent-skill` once to write the brev-cli agent skill into every agent harness (Claude, Codex, OpenCode) and the shared `~/.agents/skills` tree pi reads; the skill is `.chezmoiignore`d in both locations, so brev owns it with no chezmoi conflict
 - `.chezmoiscripts/run_after_71-sync-no-mistakes-skill.sh.tmpl` - keeps the ignored Claude and shared-agent no-mistakes skills aligned with the installed CLI release, fetching only when its release marker or either skill checksum differs
 

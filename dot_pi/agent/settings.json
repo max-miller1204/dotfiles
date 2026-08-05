@@ -85,7 +85,7 @@
       "enabled": true,
       "main": {
         "model": "opencode-go/kimi-k3",
-        "thinking": "high"
+        "thinking": "max"
       }
     }
   },

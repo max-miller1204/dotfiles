@@ -225,6 +225,13 @@ jobs:
           set -euo pipefail
           bash .github/scripts/check-pi-model-pins.sh \
             dot_pi/agent/agents dot_pi/agent/settings.json
+      # Structural only here: the thinking-level check needs pi's generated
+      # models store, which exists on a real machine, so the E2E passes it.
+      - name: Check pi subagent configuration invariants
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-pi-subagent-config.sh \
+            dot_pi/agent/settings.json
       - name: Test Pi Treehouse worktree guard policy
         run: node .github/scripts/test-worktree-guard.mjs
       - name: Validate rendered TOML/JSON templates

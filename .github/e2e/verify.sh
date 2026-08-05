@@ -185,35 +185,21 @@ hard "pi Treehouse worktree guard policy materialized" \
 	test -f "$HOME/.pi/agent/extensions/worktree-guard/policy.mjs"
 hard "pi Treehouse worktree guard auto judge materialized" \
 	test -f "$HOME/.pi/agent/extensions/worktree-guard/auto-judge.mjs"
-hard "pi subagents package declared" \
-	jq -e '.packages | index("npm:pi-subagents") != null' "$HOME/.pi/agent/settings.json"
 hard "pi retired Explore subagent definition removed" test ! -e "$HOME/.pi/agent/agents/Explore.md"
 hard "pi retired Plan subagent definition removed" test ! -e "$HOME/.pi/agent/agents/Plan.md"
 hard "pi shaper subagent definition materialized" test -f "$HOME/.pi/agent/agents/shaper.md"
-# The capability tiers route the whole builtin roster; a builtin that loses its
-# override silently falls back to subagents.defaultModel instead of its tier.
-hard "pi subagent capability tiers cover every builtin" \
-	jq -e '([.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null) | .key] | sort)
-		== (["advisor","context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"] | sort)' \
-	"$HOME/.pi/agent/settings.json"
-# A watchdog model set without a thinking level silently runs with thinking OFF,
-# which is the one configuration that makes an adversarial reviewer useless.
-hard "pi subagent watchdog pins both a model and a thinking level" \
-	jq -e '.subagents.watchdog.enabled == true
-		and (.subagents.watchdog.main.model | type) == "string"
-		and (.subagents.watchdog.main.thinking | type) == "string"' \
-	"$HOME/.pi/agent/settings.json"
-# The watchdog reviews what the session just wrote, so sharing that session's
-# provider would hand it the same blind spots as the code's author.
-hard "pi subagent watchdog reviews from an independent provider" \
-	jq -e '. as $s
-		| $s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not' \
-	"$HOME/.pi/agent/settings.json"
-# Anthropic models bill against the API rather than a subscription, so no pin,
-# allowlist entry, or scope pattern anywhere in pi's settings may reach them.
-hard "pi settings name no Anthropic model" \
-	jq -e '[.. | strings | select(test("anthropic"; "i"))] | length == 0' \
-	"$HOME/.pi/agent/settings.json"
+# Package name, the Anthropic ban, tier coverage, and the watchdog invariants are
+# shared with the CI job of the same name so a regression fails a PR instead of
+# waiting for this dispatch-only workflow. Passing the generated models store
+# additionally validates every pinned thinking level against what the model
+# really supports - a level it does not support runs with thinking OFF.
+# Run outside `hard` so the per-invariant diagnostic survives (hard discards both
+# of its command's output streams).
+SUBAGENT_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-subagent-config.sh" \
+	"$HOME/.pi/agent/settings.json" "$HOME/.pi/agent/models-store.json" 2>&1)
+SUBAGENT_RC=$?
+[[ -n "$SUBAGENT_REPORT" ]] && echo "$SUBAGENT_REPORT"
+hard "pi subagent configuration invariants hold" test "$SUBAGENT_RC" -eq 0
 # Shared with the CI job of the same name; run outside `hard` so its per-file
 # diagnostic survives (hard discards both of its command's output streams).
 PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \

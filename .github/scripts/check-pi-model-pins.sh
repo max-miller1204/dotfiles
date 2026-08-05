@@ -44,6 +44,7 @@ fi
 # emitted, one model per line.
 frontmatter_pins() {
 	awk '
+		BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34) }
 		NR == 1 && $0 == "---" { in_fm = 1; next }
 		in_fm && $0 == "---" { exit }
 		!in_fm { next }
@@ -59,6 +60,13 @@ frontmatter_pins() {
 			value = $0
 			sub(/^fallbackModels:[[:space:]]*/, "", value)
 			if (value == "") { list = "fallbackModels"; next }
+			# Unquote the COMPLETE scalar before splitting. YAML permits quoting
+			# the whole comma-separated list, and splitting first would leave one
+			# unmatched quote on the first and last fragment.
+			q = substr(value, 1, 1)
+			if (length(value) >= 2 && (q == DQ || q == SQ) && substr(value, length(value), 1) == q) {
+				value = substr(value, 2, length(value) - 2)
+			}
 			count = split(value, parts, ",")
 			for (i = 1; i <= count; i++) print parts[i]
 			next
@@ -125,17 +133,29 @@ check_pin() {
 	fi
 }
 
+# Capture each extractor's output AND status before iterating. Reading straight
+# from a process substitution discards the extractor's exit code, so a malformed
+# agent file or a settings file whose subagents block has an unexpected shape
+# would emit nothing and let the loop report that every pin passed.
 for def in "$AGENTS_DIR"/*.md; do
 	[[ -e "$def" ]] || continue
+	if ! fm_pins="$(frontmatter_pins "$def")"; then
+		echo "check-pi-model-pins: could not read frontmatter pins from $def" >&2
+		exit 2
+	fi
 	while IFS= read -r pin; do
 		check_pin "$(basename "$def")" "$pin"
-	done < <(frontmatter_pins "$def")
+	done <<<"$fm_pins"
 done
 
+if ! settings_pin_rows="$(settings_pins "$SETTINGS")"; then
+	echo "check-pi-model-pins: could not read settings pins from $SETTINGS" >&2
+	exit 2
+fi
 while IFS=$'\t' read -r source pin; do
 	[[ -n "$source" ]] || continue
 	check_pin "$source" "$pin"
-done < <(settings_pins "$SETTINGS")
+done <<<"$settings_pin_rows"
 
 if [[ "$rc" -eq 0 ]]; then
 	echo "check-pi-model-pins: $checked pinned model(s), all present in enabledModels"

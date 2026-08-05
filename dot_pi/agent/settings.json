@@ -12,15 +12,19 @@
     "opencode-go/deepseek-v4-pro",
     "opencode-go/glm-5.1",
     "opencode-go/glm-5.2",
+    "opencode-go/grok-4.5",
+    "opencode-go/hy3",
     "opencode-go/kimi-k2.6",
     "opencode-go/kimi-k2.7-code",
+    "opencode-go/kimi-k3",
     "opencode-go/mimo-v2.5",
     "opencode-go/mimo-v2.5-pro",
     "opencode-go/minimax-m2.7",
     "opencode-go/minimax-m3",
     "opencode-go/qwen3.6-plus",
     "opencode-go/qwen3.7-max",
-    "opencode-go/qwen3.7-plus"
+    "opencode-go/qwen3.7-plus",
+    "opencode-go/qwen3.8-max"
   ],
   "packages": [
     "npm:pi-web-access",
@@ -80,7 +84,7 @@
     "watchdog": {
       "enabled": true,
       "main": {
-        "model": "openai-codex/gpt-5.6-sol",
+        "model": "opencode-go/kimi-k3",
         "thinking": "high"
       }
     }

@@ -203,6 +203,12 @@ hard "pi subagent watchdog pins both a model and a thinking level" \
 		and (.subagents.watchdog.main.model | type) == "string"
 		and (.subagents.watchdog.main.thinking | type) == "string"' \
 	"$HOME/.pi/agent/settings.json"
+# The watchdog reviews what the session just wrote, so sharing that session's
+# provider would hand it the same blind spots as the code's author.
+hard "pi subagent watchdog reviews from an independent provider" \
+	jq -e '. as $s
+		| $s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not' \
+	"$HOME/.pi/agent/settings.json"
 # Anthropic models bill against the API rather than a subscription, so no pin,
 # allowlist entry, or scope pattern anywhere in pi's settings may reach them.
 hard "pi settings name no Anthropic model" \

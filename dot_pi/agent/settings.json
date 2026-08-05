@@ -8,8 +8,6 @@
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-terra",
     "openai-codex/gpt-5.6-luna",
-    "anthropic/claude-fable-5",
-    "anthropic/claude-opus-4-8",
     "opencode-go/deepseek-v4-flash",
     "opencode-go/deepseek-v4-pro",
     "opencode-go/glm-5.1",
@@ -38,7 +36,6 @@
       "enforce": true,
       "allow": [
         "openai-codex/*",
-        "anthropic/*",
         "opencode-go/*"
       ]
     },
@@ -83,7 +80,7 @@
     "watchdog": {
       "enabled": true,
       "main": {
-        "model": "anthropic/claude-opus-4-8",
+        "model": "openai-codex/gpt-5.6-sol",
         "thinking": "high"
       }
     }

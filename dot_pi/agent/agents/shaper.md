@@ -2,7 +2,7 @@
 name: shaper
 description: "Taste-and-intent agent for ambiguous work: UX and design decisions, product tradeoffs, planning from vague requirements, and writing quality. Use it when scoping or judging is the task itself, and the capability-tier agents (scout, planner, worker, reviewer) when the task already has explicit goals and completion criteria."
 tools: read, grep, find, ls
-model: anthropic/claude-fable-5
+model: opencode-go/minimax-m3
 thinking: medium
 fallbackModels: openai-codex/gpt-5.6-sol:high
 acceptanceRole: read-only

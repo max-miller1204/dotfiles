@@ -196,10 +196,17 @@ hard "pi subagent capability tiers cover every builtin" \
 	jq -e '([.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null) | .key] | sort)
 		== (["advisor","context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"] | sort)' \
 	"$HOME/.pi/agent/settings.json"
-hard "pi subagent watchdog runs on an independent provider" \
-	jq -e '. as $s
-		| $s.subagents.watchdog.enabled == true
-		and ($s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not)' \
+# A watchdog model set without a thinking level silently runs with thinking OFF,
+# which is the one configuration that makes an adversarial reviewer useless.
+hard "pi subagent watchdog pins both a model and a thinking level" \
+	jq -e '.subagents.watchdog.enabled == true
+		and (.subagents.watchdog.main.model | type) == "string"
+		and (.subagents.watchdog.main.thinking | type) == "string"' \
+	"$HOME/.pi/agent/settings.json"
+# Anthropic models bill against the API rather than a subscription, so no pin,
+# allowlist entry, or scope pattern anywhere in pi's settings may reach them.
+hard "pi settings name no Anthropic model" \
+	jq -e '[.. | strings | select(test("anthropic"; "i"))] | length == 0' \
 	"$HOME/.pi/agent/settings.json"
 # Shared with the CI job of the same name; run outside `hard` so its per-file
 # diagnostic survives (hard discards both of its command's output streams).

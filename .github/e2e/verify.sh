@@ -196,17 +196,21 @@ hard "pi shaper subagent definition materialized" test -f "$HOME/.pi/agent/agent
 # Run outside `hard` so the per-invariant diagnostic survives (hard discards both
 # of its command's output streams).
 SUBAGENT_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-subagent-config.sh" \
-	"$HOME/.pi/agent/settings.json" "$HOME/.pi/agent/models-store.json" 2>&1)
+	"$HOME/.pi/agent/settings.json" 2>&1)
 SUBAGENT_RC=$?
 [[ -n "$SUBAGENT_REPORT" ]] && echo "$SUBAGENT_REPORT"
 hard "pi subagent configuration invariants hold" test "$SUBAGENT_RC" -eq 0
 # Shared with the CI job of the same name; run outside `hard` so its per-file
 # diagnostic survives (hard discards both of its command's output streams).
+# The models store is machine-only state, so only this caller can pass it; with
+# it the script also proves every pinned thinking level is one its model really
+# supports, rather than a level that silently resolves to thinking OFF.
 PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \
-	"$HOME/.pi/agent/agents" "$HOME/.pi/agent/settings.json" 2>&1)
+	"$HOME/.pi/agent/agents" "$HOME/.pi/agent/settings.json" \
+	"$HOME/.pi/agent/models-store.json" 2>&1)
 PIN_RC=$?
 [[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
-hard "pi subagent model pins are all in enabledModels" test "$PIN_RC" -eq 0
+hard "pi subagent model and thinking pins are valid" test "$PIN_RC" -eq 0
 hard "pi Hunk review skill declared" \
 	jq -e '.skills == ["~/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"]' \
 	"$HOME/.pi/agent/settings.json"

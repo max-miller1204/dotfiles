@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Structural invariants for pi's subagent configuration in agent/settings.json.
 #
-#   check-pi-subagent-config.sh <settings-json> [models-store-json]
+#   check-pi-subagent-config.sh <settings-json>
 #
 # These are pure-JSON invariants over a plain, non-templated file, so the SAME
 # script runs against the source tree in CI's config-syntax job on every PR and
@@ -9,21 +9,20 @@
 # inline in verify.sh, which meant a regression could merge freely: the E2E is
 # dispatch-only and never runs on a PR.
 #
-# The optional second argument is pi's generated models store. It only exists on
-# a real machine, so the thinking-level check is skipped when it is absent - the
-# structural checks above it still run in CI.
+# Thinking-level validity is NOT checked here: a thinking level is meaningful
+# only next to its model, and both live in agent frontmatter as well as settings,
+# so check-pi-model-pins.sh owns that check rather than re-parsing frontmatter.
 #
 # Failures are reported on stdout, one per line.
 # Exit: 0 = all invariants hold, 1 = violations found, 2 = bad input.
 set -uo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-	echo "usage: check-pi-subagent-config.sh <settings-json> [models-store-json]" >&2
+if [[ $# -ne 1 ]]; then
+	echo "usage: check-pi-subagent-config.sh <settings-json>" >&2
 	exit 2
 fi
 
 SETTINGS="$1"
-STORE="${2:-}"
 
 if [[ ! -f "$SETTINGS" ]]; then
 	echo "check-pi-subagent-config: settings file not found: $SETTINGS" >&2
@@ -79,43 +78,6 @@ check "modelScope must be enforced with a non-empty allow list" \
 	'.subagents.modelScope.enforce == true
 		and (.subagents.modelScope.allow | type) == "array"
 		and (.subagents.modelScope.allow | length) > 0'
-
-# Thinking levels are validated against the provider catalog because a level the
-# model does not support resolves to nothing and the agent silently runs with
-# thinking OFF. This mirrors getSupportedThinkingLevels in the fork's
-# src/shared/model-info.ts: an explicit null means unsupported, a missing map
-# means every level except max, and xhigh/max need an explicit mapping.
-if [[ -n "$STORE" ]]; then
-	if [[ ! -f "$STORE" ]]; then
-		echo "check-pi-subagent-config: models store not found: $STORE" >&2
-		exit 2
-	fi
-	while IFS=$'\t' read -r source model level; do
-		[[ -n "$model" && -n "$level" ]] || continue
-		provider="${model%%/*}"
-		id="${model#*/}"
-		supported="$(jq -r --arg p "$provider" --arg i "$id" --arg l "$level" '
-			(.[$p].models // [])[] | select(.id == $i)
-			| if .reasoning == false then ($l == "off")
-			  elif (.thinkingLevelMap == null) then ($l != "max")
-			  elif (.thinkingLevelMap | has($l) | not) then ($l != "xhigh" and $l != "max")
-			  elif (.thinkingLevelMap[$l] == null) then false
-			  else true end
-		' "$STORE" 2>/dev/null | head -1)"
-		if [[ -z "$supported" ]]; then
-			# Model absent from the catalog is check-pi-model-pins.sh's job.
-			continue
-		fi
-		if [[ "$supported" != "true" ]]; then
-			fail "$source pins thinking \"$level\" on \"$model\", which does not support it (it would run with thinking OFF)"
-		fi
-	done < <(jq -r '
-		(.subagents.watchdog.main // {} | select(.model != null and .thinking != null)
-			| "subagents.watchdog.main\t" + .model + "\t" + .thinking),
-		(.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null and .value.thinking != null)
-			| "subagents.agentOverrides." + .key + "\t" + .value.model + "\t" + .value.thinking)
-	' "$SETTINGS")
-fi
 
 if [[ "$rc" -eq 0 ]]; then
 	echo "check-pi-subagent-config: pi subagent configuration invariants hold"

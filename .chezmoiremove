@@ -1,0 +1,10 @@
+# Targets chezmoi must delete on every apply, one glob per line.
+# chezmoi does not remove a target just because its source file was deleted, so
+# a retired managed file lingers in $HOME forever without an entry here.
+#
+# Retired with the switch to the nicobailon `npm:pi-subagents` fork: the fork
+# ships `scout` and `planner` builtins that supersede these, and it silently
+# skips any agent definition without a frontmatter `name:` key, so leaving the
+# old files in place looks like configuration that does nothing.
+.pi/agent/agents/Explore.md
+.pi/agent/agents/Plan.md

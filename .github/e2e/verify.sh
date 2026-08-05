@@ -186,9 +186,21 @@ hard "pi Treehouse worktree guard policy materialized" \
 hard "pi Treehouse worktree guard auto judge materialized" \
 	test -f "$HOME/.pi/agent/extensions/worktree-guard/auto-judge.mjs"
 hard "pi subagents package declared" \
-	jq -e '.packages | index("npm:@tintinweb/pi-subagents") != null' "$HOME/.pi/agent/settings.json"
-hard "pi Explore subagent definition materialized" test -f "$HOME/.pi/agent/agents/Explore.md"
-hard "pi Plan subagent definition materialized" test -f "$HOME/.pi/agent/agents/Plan.md"
+	jq -e '.packages | index("npm:pi-subagents") != null' "$HOME/.pi/agent/settings.json"
+hard "pi retired Explore subagent definition removed" test ! -e "$HOME/.pi/agent/agents/Explore.md"
+hard "pi retired Plan subagent definition removed" test ! -e "$HOME/.pi/agent/agents/Plan.md"
+hard "pi shaper subagent definition materialized" test -f "$HOME/.pi/agent/agents/shaper.md"
+# The capability tiers route the whole builtin roster; a builtin that loses its
+# override silently falls back to subagents.defaultModel instead of its tier.
+hard "pi subagent capability tiers cover every builtin" \
+	jq -e '([.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null) | .key] | sort)
+		== (["advisor","context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"] | sort)' \
+	"$HOME/.pi/agent/settings.json"
+hard "pi subagent watchdog runs on an independent provider" \
+	jq -e '. as $s
+		| $s.subagents.watchdog.enabled == true
+		and ($s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not)' \
+	"$HOME/.pi/agent/settings.json"
 # Shared with the CI job of the same name; run outside `hard` so its per-file
 # diagnostic survives (hard discards both of its command's output streams).
 PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \
@@ -216,7 +228,7 @@ pi_native_runtime_smoke() (
 		>"$tmp/models"
 	for package in \
 		pi-web-access \
-		@tintinweb/pi-subagents \
+		pi-subagents \
 		pi-mcp-adapter \
 		pi-lens \
 		pi-worklist \

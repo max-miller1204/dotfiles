@@ -5,7 +5,6 @@ paths:
   - ".chezmoitemplates/**/*"
   - ".chezmoi.toml.tmpl"
   - ".chezmoiignore"
-  - ".chezmoiremove"
   - "dot_claude/settings.json"
   - "dot_config/{claude-code,codex,opencode,ghostty}/**/*"
   - "dot_pi/agent/mcp.json.tmpl"
@@ -62,9 +61,6 @@ paths:
 
 ## chezmoiignore path semantics
 
-- `.chezmoiremove` is the counterpart to `.chezmoiignore` and shares its pattern syntax, destination-path semantics, and support for `#` comments.
-  It exists because `chezmoi apply` never deletes a target merely because its source file was deleted, so retiring a managed file leaves a stale copy in `$HOME` on every existing machine unless the destination path is listed here.
-  Reach for it only for a path this repository is genuinely retiring: an entry removes that target on EVERY apply forever, so it also forbids the path from ever being managed again.
 - `.chezmoiignore` patterns match DESTINATION paths, never source paths.
   An entry like `.claude/rules` therefore un-manages `~/.claude/rules` (anything a future `dot_claude/rules/` would apply) and does nothing at all to this repo's own `.claude/rules/` tree.
 - Repo-only files need an entry only when chezmoi would otherwise apply them.

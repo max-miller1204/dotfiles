@@ -32,7 +32,7 @@ Read [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/s
 - shell partials, path resolution, apt repositories, or Codex sync helpers
 - `.chezmoidata/mcp.yaml` or any generated Claude, Codex, OpenCode, or pi MCP target
 - Claude or Codex MCP synchronization scripts
-- `.chezmoi.toml.tmpl`, `.chezmoiignore`, GUI package gating, `headless`, or WSL behavior
+- `.chezmoi.toml.tmpl`, `.chezmoiignore`, `.chezmoiremove`, GUI package gating, `headless`, or WSL behavior
 
 Also read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md) when a script change affects package installation semantics.
 

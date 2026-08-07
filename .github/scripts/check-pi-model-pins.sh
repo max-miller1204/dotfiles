@@ -272,13 +272,20 @@ while IFS=$'\t' read -r source pin; do
 	check_pin "$source" "$pin"
 done <<<"$settings_pin_rows"
 
+# Select on TYPE, not on non-null: the fork accepts a literal `false` for both
+# `model` and `thinking` (it clears the inherited value), so a null check lets a
+# boolean reach the string concatenation and aborts jq on a legal config. A
+# cleared model has nothing to resolve a level against and a cleared level is
+# thinking deliberately off, so neither is a row worth emitting.
 if ! settings_thinking_rows="$(jq -r '
-	(.subagents.watchdog.main // {} | select(.model != null and .thinking != null)
-		| "subagents.watchdog.main\t" + .model + "\t" + .thinking),
-	(.subagents.watchdog.children // {} | select(.model != null and .thinking != null)
-		| "subagents.watchdog.children\t" + .model + "\t" + .thinking),
-	(.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null and .value.thinking != null)
-		| "subagents.agentOverrides." + .key + "\t" + .value.model + "\t" + .value.thinking)
+	def rows($source): select((.model | type) == "string" and (.thinking | type) == "string")
+		| $source + "\t" + .model + "\t" + .thinking;
+	(.subagents.watchdog.main // {} | rows("subagents.watchdog.main")),
+	(.subagents.watchdog.children // {} | rows("subagents.watchdog.children")),
+	(.subagents.watchdog.children.overrides // {} | to_entries[]
+		| ("subagents.watchdog.children.overrides." + .key) as $source | .value | rows($source)),
+	(.subagents.agentOverrides // {} | to_entries[]
+		| ("subagents.agentOverrides." + .key) as $source | .value | rows($source))
 ' "$SETTINGS")"; then
 	echo "check-pi-model-pins: could not read settings thinking levels from $SETTINGS" >&2
 	exit 2

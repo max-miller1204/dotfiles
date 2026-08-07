@@ -37,6 +37,14 @@ fi
 # falls back to subagents.defaultModel instead of the tier it was assigned.
 BUILTINS='["advisor","context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"]'
 
+# Every string-valued invariant below asserts a USABLE value, not mere presence.
+# The fork accepts a literal `false` wherever it accepts a model or a thinking
+# level, and `false` DELETES the inherited value instead of setting one, so a
+# non-null test reports an invariant as met by a config that unsets the very
+# field the invariant is about; an absent key and an empty string read the same
+# way. One predicate, applied everywhere, keeps that from being re-decided.
+JQ_PRELUDE='def usable: type == "string" and length > 0;'
+
 rc=0
 fail() {
 	echo "  $1"
@@ -45,7 +53,7 @@ fail() {
 
 check() {
 	local label="$1" filter="$2"
-	jq -e "$filter" "$SETTINGS" >/dev/null 2>&1 || fail "$label"
+	jq -e "$JQ_PRELUDE $filter" "$SETTINGS" >/dev/null 2>&1 || fail "$label"
 }
 
 check "packages must declare npm:pi-subagents (the nicobailon fork)" \
@@ -60,24 +68,28 @@ check "no Anthropic model may be named anywhere in pi settings" \
 	'[.. | strings | select(test("anthropic"; "i"))] | length == 0'
 
 check "every builtin subagent must carry a capability-tier model override" \
-	"([.subagents.agentOverrides // {} | to_entries[] | select(.value.model != null) | .key] | sort) == ($BUILTINS | sort)"
+	"([.subagents.agentOverrides // {} | to_entries[] | select(.value.model | usable) | .key] | sort) == ($BUILTINS | sort)"
 
 check "watchdog must be enabled with both a model and a thinking level" \
 	'.subagents.watchdog.enabled == true
-		and (.subagents.watchdog.main.model | type) == "string"
-		and (.subagents.watchdog.main.thinking | type) == "string"'
+		and (.subagents.watchdog.main.model | usable)
+		and (.subagents.watchdog.main.thinking | usable)'
 
 # The watchdog reviews what the session just wrote, so sharing defaultProvider
-# would give it the same blind spots as the code's author.
-check "watchdog must review from a provider other than defaultProvider" \
-	'. as $s | $s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not'
+# would give it the same blind spots as the code's author. defaultProvider must
+# itself be set: jq reads a missing one as null, `null + "/"` is "/", and no
+# model id starts with that, so the comparison would pass without comparing.
+check "defaultProvider must be set and the watchdog must review from another provider" \
+	'. as $s | ($s.defaultProvider | usable)
+		and ($s.subagents.watchdog.main.model | startswith($s.defaultProvider + "/") | not)'
 
 # modelScope is the mechanism that rejects a model reached through a per-run
 # override or a fuzzy id match, so an empty allow list would silently disarm it.
 check "modelScope must be enforced with a non-empty allow list" \
 	'.subagents.modelScope.enforce == true
 		and (.subagents.modelScope.allow | type) == "array"
-		and (.subagents.modelScope.allow | length) > 0'
+		and (.subagents.modelScope.allow | length) > 0
+		and all(.subagents.modelScope.allow[]; usable)'
 
 if [[ "$rc" -eq 0 ]]; then
 	echo "check-pi-subagent-config: pi subagent configuration invariants hold"

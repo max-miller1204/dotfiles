@@ -43,7 +43,7 @@ Read [`.claude/rules/agents/pi.md`](.claude/rules/agents/pi.md) for changes invo
 - any managed file under `dot_pi/`
 - pi installation, packages, extensions, prompts, web search, MCP configuration, or runtime drift
 - the native Hunk and Pi installers (`.chezmoiscripts/run_onchange_before_{17-install-hunk,18-install-pi}.sh.tmpl`) or Pi's Hunk review skill path
-- pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/` pi checks (`check-pi-model-pins.sh`, `check-pi-subagent-config.sh`, `check-agent-tool-ownership.py`, `test-pi-nix-runtime.sh`, `test-worktree-guard.mjs`)
+- pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/` pi checks (`check-pi-model-pins.sh`, `check-pi-subagent-config.sh`, `test-pi-config-checks.sh`, `check-agent-tool-ownership.py`, `test-pi-nix-runtime.sh`, `test-worktree-guard.mjs`)
 
 ## CI and native Ubuntu E2E
 

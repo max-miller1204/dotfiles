@@ -4,7 +4,7 @@ paths:
   - ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl"
   - ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl"
   - ".github/e2e/verify.sh"
-  - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,check-pi-subagent-config.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
+  - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,check-pi-subagent-config.sh,test-pi-config-checks.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
 ---
 
 <!-- markdownlint-disable MD013 -->
@@ -58,8 +58,10 @@ paths:
   Its thinking level is `max`, NOT `high`, and that is not a preference: `kimi-k3`'s `thinkingLevelMap` in pi's models store maps every level to null except `max`, and the fork's `getSupportedThinkingLevels` (`src/shared/model-info.ts`) treats an explicit null as unsupported, so `high` there resolves to nothing and the watchdog runs with thinking OFF.
   Read that map before pinning any thinking level: a missing `thinkingLevelMap` means every level except `max` is supported, an absent KEY means supported (it is `undefined`, not `null`), and `xhigh`/`max` need an explicit mapping.
   Setting a thinking level a model does not support fails silently in the one direction that matters, which is why `check-pi-model-pins.sh` validates every pinned level - frontmatter AND settings - against the generated models store rather than merely asserting the field is present.
-  A level is checked against every model it will actually reach, not just the one it sits beside: `buildModelCandidates` builds `[model, ...fallbackModels]` and `applyThinkingSuffix` appends the level to whichever candidate is launched, so a fallback on the other provider inherits it, and `subagents.defaultThinking` reaches `subagents.defaultModel` the same way.
+  A level is checked against every model it will actually reach, not just the one it sits beside: `buildModelCandidates` builds `[model, ...fallbackModels]` and `applyThinkingSuffix` appends the level to whichever candidate is launched, so a fallback on the other provider inherits it, and an entry that declares no `thinking` inherits `subagents.defaultThinking` through `applySubagentDefaultThinking`, which fills it before any override is applied.
+  A definition file or override that names only one of the two inherits the other, so a level with no model is resolved against `subagents.defaultModel` and a model with no level against `subagents.defaultThinking`.
   That is why the checker enumerates each pin as a model paired with the level applicable to it rather than enumerating models and levels separately - two parallel enumerations are exactly how a fallback ended up inheriting an unchecked level.
+  One inheritance step it deliberately does NOT guess at: a `subagents.agentOverrides` entry that omits `thinking` takes the level from the builtin's own upstream definition (seven of the eight ship one), which lives in the npm package and not in this repo, so `check-pi-subagent-config.sh` requires every override to declare the key instead of the checker hardcoding a copy of upstream's levels that would silently go stale.
   That check lives in the pin checker because a thinking level only means anything beside its model, and both appear in agent frontmatter as well as settings; a separate script would have to re-parse the same frontmatter.
   `check-pi-subagent-config.sh` owns the structural invariants - package name, the Anthropic ban, tier coverage across the builtin roster, watchdog model/thinking presence, watchdog provider independence, and `modelScope` enforcement - and CI runs both scripts against the source tree on every PR while the E2E runs the SAME scripts against the applied `~/.pi` tree, additionally handing the pin checker the models store.
   Do not add a pi settings invariant inline in `verify.sh`: the E2E is dispatch-only, so a check that lives only there never runs on a PR and a regression merges freely.

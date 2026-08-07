@@ -199,6 +199,13 @@ SUBAGENT_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-subag
 SUBAGENT_RC=$?
 [[ -n "$SUBAGENT_REPORT" ]] && echo "$SUBAGENT_REPORT"
 hard "pi subagent configuration invariants hold" test "$SUBAGENT_RC" -eq 0
+# Both checkers pass above; this proves they would still FAIL on a violation,
+# which the passing configuration on its own cannot show.
+CHECK_TEST_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/test-pi-config-checks.sh" 2>&1)
+CHECK_TEST_RC=$?
+[[ -n "$CHECK_TEST_REPORT" ]] && echo "$CHECK_TEST_REPORT"
+hard "pi configuration checks reject the configurations they guard against" \
+	test "$CHECK_TEST_RC" -eq 0
 hard "pi Hunk review skill declared" \
 	jq -e '.skills == ["~/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"]' \
 	"$HOME/.pi/agent/settings.json"

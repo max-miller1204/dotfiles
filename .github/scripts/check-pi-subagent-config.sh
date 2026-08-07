@@ -79,6 +79,15 @@ check "no Anthropic model may be named anywhere in pi settings" \
 check "every builtin subagent must carry a capability-tier model override" \
 	"([.subagents.agentOverrides // {} | to_entries[] | select(.value.model | usable) | .key] | sort) == ($BUILTINS | sort)"
 
+# An override that omits `thinking` inherits the level from the builtin's own
+# upstream definition, falling back to subagents.defaultThinking - neither of
+# which this repo can see, so the level that would actually run is unverifiable
+# and check-pi-model-pins.sh cannot resolve it against the model. Declaring the
+# key (a level, or `false` for none) keeps the pairing local and checkable.
+check "every builtin subagent override must declare its own thinking level" \
+	'all(.subagents.agentOverrides // {} | .[];
+		type == "object" and has("thinking"))'
+
 check "watchdog must be enabled with both a model and a thinking level" \
 	'.subagents.watchdog.enabled == true
 		and (.subagents.watchdog.main.model | usable)

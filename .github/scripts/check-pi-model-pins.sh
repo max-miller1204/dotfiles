@@ -113,36 +113,60 @@ frontmatter_pins() {
 			next
 		}
 		# The `thinking:` key may follow the pins it applies to, so pair at the end.
-		END { for (i = 1; i <= n; i++) print pins[i] "\t" think }
+		# `-` marks a field the file does not name and inherits from settings; it
+		# is neither a model id nor a level, and an empty field cannot serve as the
+		# marker because the reader strips leading and trailing tabs.
+		END {
+			lvl = (think == "" ? "-" : think)
+			if (n == 0) { if (think != "") print "-\t" lvl }
+			else for (i = 1; i <= n; i++) print pins[i] "\t" lvl
+		}
 	' "$1"
 }
 
-# Emit `<source>\t<model>\t<sibling-level>` for every model pinned in settings.
-# Select by TYPE: the fork accepts a literal `false` for a model, a fallback list
-# and a thinking level alike, and a `false` clears the value rather than setting
-# one, so a null check would hand a boolean to the string concatenation below.
+# Emit `<source>\t<model>\t<level>` for every model pinned in settings, with the
+# level already resolved the way the fork resolves it. Select by TYPE: the fork
+# accepts a literal `false` for a model, a fallback list and a thinking level
+# alike, and a `false` clears the value rather than setting one, so a null check
+# would hand a boolean to the string concatenation below.
 settings_pins() {
 	jq -r '
 		def level($v): if ($v | type) == "string" then $v else "" end;
-		def row($source; $model; $thinking):
+		# Mirrors applySubagentDefaultThinking, which fills `thinking` on any agent
+		# that has none and runs BEFORE the overrides are applied: an entry that
+		# declares the key owns its level (a `false` clears it outright), and only
+		# an entry that declares nothing inherits subagents.defaultThinking.
+		def declared($entry; $default):
+			if ($entry | type) == "object" and ($entry | has("thinking"))
+			then level($entry.thinking) else level($default) end;
+		def row($source; $model; $level):
 			select(($model | type) == "string" and ($model | length) > 0)
-			| $source + "\t" + $model + "\t" + level($thinking);
+			| $source + "\t" + $model + "\t" + $level;
 		def fallbacks($v): if ($v | type) == "array" then $v[] else empty end;
 		(.subagents // {}) as $s
-		| row("subagents.defaultModel"; $s.defaultModel; $s.defaultThinking),
+		| row("subagents.defaultModel"; $s.defaultModel; level($s.defaultThinking)),
 		  ($s.agentOverrides // {} | to_entries[] | . as $entry
+			| declared($entry.value; $s.defaultThinking) as $level
 			| row("subagents.agentOverrides." + $entry.key + ".model";
-				$entry.value.model; $entry.value.thinking),
+				$entry.value.model; $level),
 			  (fallbacks($entry.value.fallbackModels)
 				| row("subagents.agentOverrides." + $entry.key + ".fallbackModels";
-					.; $entry.value.thinking))),
+					.; $level)),
+			  # An override that names a level but no model applies that level to
+			  # the model it inherits, which is subagents.defaultModel: no builtin
+			  # the fork ships pins a model of its own.
+			  (select(($entry.value | type) == "object"
+					and ($entry.value | has("model") | not) and $level != "")
+				| row("subagents.agentOverrides." + $entry.key
+					+ ".thinking (on inherited subagents.defaultModel)";
+					$s.defaultModel; $level))),
 		  ($s.watchdog.main // {}
-			| row("subagents.watchdog.main.model"; .model; .thinking)),
+			| row("subagents.watchdog.main.model"; .model; level(.thinking))),
 		  ($s.watchdog.children // {}
-			| row("subagents.watchdog.children.model"; .model; .thinking)),
+			| row("subagents.watchdog.children.model"; .model; level(.thinking))),
 		  ($s.watchdog.children.overrides // {} | to_entries[] | . as $entry
 			| row("subagents.watchdog.children.overrides." + $entry.key + ".model";
-				$entry.value.model; $entry.value.thinking))
+				$entry.value.model; level($entry.value.thinking)))
 	' "$1"
 }
 
@@ -211,6 +235,9 @@ thinking_supported() {
 	' "$STORE" 2>/dev/null | head -1
 }
 
+DEFAULT_MODEL="$(jq -r '.subagents.defaultModel // "" | if type == "string" then . else "" end' "$SETTINGS" 2>/dev/null)"
+DEFAULT_THINKING="$(jq -r '.subagents.defaultThinking // "" | if type == "string" then . else "" end' "$SETTINGS" 2>/dev/null)"
+
 rc=0
 checked=0
 thinking_checked=0
@@ -261,6 +288,11 @@ for def in "$AGENTS_DIR"/*.md; do
 		exit 2
 	fi
 	while IFS=$'\t' read -r pin level; do
+		[[ -n "$pin" ]] || continue
+		# A definition file inherits the settings-level defaults for whichever of
+		# the two it does not name, exactly as applySubagentDefaults fills them.
+		[[ "$pin" != "-" ]] || pin="$DEFAULT_MODEL"
+		[[ "$level" != "-" ]] || level="$DEFAULT_THINKING"
 		[[ -n "$pin" ]] || continue
 		check_pin "$(basename "$def")" "$pin" "$level"
 	done <<<"$fm_pins"

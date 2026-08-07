@@ -1,0 +1,58 @@
+SUBAGENT ROUTING UNDER THE NICOBAILON FORK
+==========================================
+
+Resolved by the installed fork itself: discoverAgents() from
+  pi-subagents v0.42.1  (git+https://github.com/nicobailon/pi-subagents.git)
+reading the committed dot_pi/agent/settings.json + dot_pi/agent/agents/.
+Thinking support is resolved against this machine's real pi models store
+(~/.pi/agent/models-store.json) with the fork's own getSupportedThinkingLevels.
+
+SUBAGENT ROUTING pi will actually launch
+--------------------------------------------------------------------------------------------
+agent            origin   model                          thinking  does that level apply?
+--------------------------------------------------------------------------------------------
+context-builder  builtin  openai-codex/gpt-5.6-sol       high      yes, runs at "high"
+delegate         builtin  openai-codex/gpt-5.6-terra     medium    yes, runs at "medium"
+oracle           builtin  openai-codex/gpt-5.6-sol       high      yes, runs at "high"
+planner          builtin  openai-codex/gpt-5.6-sol       high      yes, runs at "high"
+researcher       builtin  openai-codex/gpt-5.6-terra     medium    yes, runs at "medium"
+reviewer         builtin  openai-codex/gpt-5.6-terra     medium    yes, runs at "medium"
+scout            builtin  openai-codex/gpt-5.6-luna      low       yes, runs at "low"
+shaper           user     opencode-go/minimax-m3         medium    yes, runs at "medium"
+  -> fallback             openai-codex/gpt-5.6-sol:high  high      yes, runs at "high"
+worker           builtin  openai-codex/gpt-5.6-terra     medium    yes, runs at "medium"
+--------------------------------------------------------------------------------------------
+builtin agents the fork ships and this config tiers: 8 of 8
+Anthropic models routed anywhere: 0
+pins whose thinking level would silently resolve to OFF: 0
+
+ANTHROPIC BAN AT RUNTIME - checkModelScope(), the fork's own gate,
+fed the committed subagents.modelScope. This is the path a per-run
+[model=...] override or a fuzzy id match would take.
+--------------------------------------------------------------------------------------------
+  configured: enforce=true  allow=[openai-codex/*, opencode-go/*]
+  anthropic/claude-opus-5               explicit   REJECTED (error)
+  anthropic/claude-sonnet-5             explicit   REJECTED (error)
+  anthropic/claude-haiku-4-5-20251001   inherited  REJECTED (warn)
+  openai-codex/gpt-5.6-sol              explicit   allowed
+  opencode-go/kimi-k3                   explicit   allowed
+
+THE RETIRED DEFINITIONS THE FORK WOULD IGNORE
+--------------------------------------------------------------------------------------------
+Base commit's Explore.md and Plan.md dropped back into the agent dir beside the
+committed settings: the fork registers neither (loadAgentsFromDir skips any file
+without a frontmatter 'name:' key, and both carry only 'display_name:'). A leftover
+copy in $HOME would therefore read as live configuration while doing nothing.
+
+  context-builder  builtin  openai-codex/gpt-5.6-sol
+  delegate         builtin  openai-codex/gpt-5.6-terra
+  oracle           builtin  openai-codex/gpt-5.6-sol
+  planner          builtin  openai-codex/gpt-5.6-sol
+  researcher       builtin  openai-codex/gpt-5.6-terra
+  reviewer         builtin  openai-codex/gpt-5.6-terra
+  scout            builtin  openai-codex/gpt-5.6-luna
+  shaper           user     opencode-go/minimax-m3
+  worker           builtin  openai-codex/gpt-5.6-terra
+
+  Explore and Plan are absent. scout and planner - the fork builtins that supersede
+  them - carry the tier pins instead.

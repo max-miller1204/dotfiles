@@ -1,0 +1,90 @@
+THE CI GUARDS: WHAT THEY ACCEPT AND WHAT THEY REJECT
+====================================================
+
+#### 1. The committed configuration, through both guards as CI runs them
+$ bash .github/scripts/check-pi-subagent-config.sh dot_pi/agent/settings.json
+check-pi-subagent-config: pi subagent configuration invariants hold
+exit=0
+$ bash .github/scripts/check-pi-model-pins.sh dot_pi/agent/agents dot_pi/agent/settings.json
+check-pi-model-pins: 12 pinned model(s), all present in enabledModels, 10 level name(s) valid
+exit=0
+
+#### 2. The configuration this branch replaced (base commit 6cc14cf, the @tintinweb
+     package) through the new structural guard - every invariant the switch adds:
+$ bash .github/scripts/check-pi-subagent-config.sh <settings @ 6cc14cf>
+  packages must declare npm:pi-subagents (the nicobailon fork)
+  packages must NOT declare the superseded npm:@tintinweb/pi-subagents
+  every builtin subagent must carry a capability-tier model override
+  watchdog must be enabled with both a model and a thinking level
+  defaultProvider must be set and the watchdog must review from another provider
+  modelScope must be enforced with a non-empty allow list
+  no modelScope allow pattern may match an Anthropic model
+exit=1
+
+#### 3. The guards themselves, against fixtures that violate exactly one invariant each
+$ bash .github/scripts/test-pi-config-checks.sh
+== the committed configuration passes ==
+PASS: committed settings satisfy every structural invariant
+PASS: committed pins resolve, with thinking checked
+PASS: committed pins resolve in CI mode, with no models store
+== modelScope must not readmit the banned provider ==
+PASS: a bare * allow pattern reopens the Anthropic ban
+PASS: a cross-provider */claude-* pattern reopens it
+PASS: an empty allow list disarms enforcement
+PASS: enforcement turned off
+== the Anthropic ban itself ==
+PASS: an Anthropic model named anywhere in settings
+== the package the fork switch is about ==
+PASS: the fork package dropped from packages
+PASS: the superseded @tintinweb package reintroduced
+== builtin tier coverage ==
+PASS: a builtin left without a tier override
+PASS: a typo in a builtin key
+PASS: an override whose model is cleared with false
+PASS: an override that leaves its thinking level to upstream
+== watchdog presence and independence ==
+PASS: a watchdog turned off
+PASS: a watchdog with no thinking level
+PASS: a watchdog with no model
+PASS: a watchdog sharing defaultProvider with the session
+PASS: a missing defaultProvider makes the comparison vacuous
+== thinking levels a model does not support ==
+PASS: a primary pin at an unsupported level
+PASS: a level carried as a :<level> suffix on the model
+PASS: a fallback inheriting the entry's own level
+PASS: defaultThinking reaching the one builtin that declares no level
+PASS: defaultThinking reaching defaultModel
+PASS: a definition file's level reaching its fallback
+PASS: a definition file inheriting defaultThinking
+PASS: a definition file that pins a level but no model
+== an override on an agent that ships a definition file ==
+PASS: an override level landing on the definition file's own model
+PASS: an override fallback landing on the definition file's own level
+PASS: an override the definition file overrides back is inert
+== a level name the fork does not know, caught without a models store ==
+PASS: a misspelled level in an override
+PASS: an empty level in an override
+PASS: a misspelled level on the watchdog
+PASS: a misspelled subagents.defaultThinking
+PASS: a misspelled level in a definition file
+PASS: an empty level in an override also fails the config checker
+== levels the fork treats as no level at all ==
+PASS: thinking cleared with false stays valid, not a typo
+PASS: thinking as the STRING false is a typo, not the opt-out
+PASS: a definition file clearing thinking with false stays valid
+PASS: thinking cleared with false is not a level to resolve
+PASS: an explicit suffix wins over an unsupported sibling key
+== the inherit sentinel is a legal value, not a model id ==
+PASS: an inherit model is not looked up in enabledModels
+PASS: an inherit model still leaves that builtin without a tier
+PASS: an inherit watchdog model is not a model the watchdog can resolve
+== enabledModels remains the curated allowlist ==
+PASS: a pin outside enabledModels
+PASS: a fallback outside enabledModels
+== bad input is reported, never mistaken for a pass ==
+PASS: a malformed settings file fails the config checker
+PASS: a malformed settings file fails the pin checker
+PASS: a missing models store is bad input, not a silent skip
+
+test-pi-config-checks: 49 case(s) passed
+exit=0

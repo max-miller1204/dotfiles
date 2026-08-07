@@ -1,0 +1,30 @@
+RETIRED AGENT DEFINITIONS ARE ACTUALLY DELETED FROM $HOME
+=========================================================
+
+chezmoi version v2.72.0 run against a throwaway destination that starts out
+holding the two retired files, exactly as a machine that applied the previous
+configuration does. Scripts are excluded; only the ~/.pi/agent target is applied.
+
+### this branch, .chezmoiremove present
+before apply:  Explore.md Plan.md
+after apply:   shaper.md
+
+### this branch with .chezmoiremove DELETED (the mechanism removed)
+before apply:  Explore.md Plan.md
+after apply:   Explore.md Plan.md shaper.md
+
+chezmoi never deletes a target just because its source file was deleted, so without
+the .chezmoiremove entries the retired definitions survive in $HOME beside the new
+shaper.md. With them, the applied agent dir holds shaper.md alone.
+
+The entries themselves:
+  # Targets chezmoi must delete on every apply, one glob per line.
+  # chezmoi does not remove a target just because its source file was deleted, so
+  # a retired managed file lingers in $HOME forever without an entry here.
+  #
+  # Retired with the switch to the nicobailon `npm:pi-subagents` fork: the fork
+  # ships `scout` and `planner` builtins that supersede these, and it silently
+  # skips any agent definition without a frontmatter `name:` key, so leaving the
+  # old files in place looks like configuration that does nothing.
+  .pi/agent/agents/Explore.md
+  .pi/agent/agents/Plan.md

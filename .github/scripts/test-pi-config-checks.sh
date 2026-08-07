@@ -89,21 +89,24 @@ JSON
 
 PASS=0
 FAIL=0
-CASE=0
+
+# Both helpers run inside `$( )`, so a shared counter would increment in a
+# subshell and never reach here: every fixture would reuse one path, and a case
+# needing two of them would silently hand the checker the same file twice.
+# mktemp keeps them distinct and names the fixture a failing case used.
 
 # settings_from '<jq filter>' -> path to a mutated copy of the committed settings
 settings_from() {
-	CASE=$((CASE + 1))
-	local out="$WORK/settings-$CASE.json"
+	local out
+	out="$(mktemp "$WORK/settings-XXXXXX.json")"
 	jq "$1" "$SETTINGS" >"$out" || return 1
 	printf '%s' "$out"
 }
 
 # agents_from '<frontmatter body>' -> path to an agents dir holding one definition
 agents_from() {
-	CASE=$((CASE + 1))
-	local dir="$WORK/agents-$CASE"
-	mkdir -p "$dir"
+	local dir
+	dir="$(mktemp -d "$WORK/agents-XXXXXX")"
 	printf '%s\n' "$1" >"$dir/fixture.md"
 	printf '%s' "$dir"
 }
@@ -159,6 +162,12 @@ echo "== the Anthropic ban itself =="
 expect "an Anthropic model named anywhere in settings" 1 "no Anthropic model" \
 	-- config "$(settings_from '.enabledModels += ["anthropic/claude-opus-5"]')"
 
+echo "== the package the fork switch is about =="
+expect "the fork package dropped from packages" 1 "must declare npm:pi-subagents" \
+	-- config "$(settings_from '.packages -= ["npm:pi-subagents"]')"
+expect "the superseded @tintinweb package reintroduced" 1 "superseded npm:@tintinweb/pi-subagents" \
+	-- config "$(settings_from '.packages += ["npm:@tintinweb/pi-subagents"]')"
+
 echo "== builtin tier coverage =="
 expect "a builtin left without a tier override" 1 "capability-tier model override" \
 	-- config "$(settings_from 'del(.subagents.agentOverrides.oracle)')"
@@ -169,7 +178,13 @@ expect "an override whose model is cleared with false" 1 "capability-tier model 
 expect "an override that leaves its thinking level to upstream" 1 "declare its own thinking level" \
 	-- config "$(settings_from 'del(.subagents.agentOverrides.scout.thinking)')"
 
-echo "== watchdog independence =="
+echo "== watchdog presence and independence =="
+expect "a watchdog turned off" 1 "enabled with both a model and a thinking level" \
+	-- config "$(settings_from '.subagents.watchdog.enabled = false')"
+expect "a watchdog with no thinking level" 1 "enabled with both a model and a thinking level" \
+	-- config "$(settings_from 'del(.subagents.watchdog.main.thinking)')"
+expect "a watchdog with no model" 1 "enabled with both a model and a thinking level" \
+	-- config "$(settings_from 'del(.subagents.watchdog.main.model)')"
 expect "a watchdog sharing defaultProvider with the session" 1 "review from another provider" \
 	-- config "$(settings_from '.subagents.watchdog.main.model = "openai-codex/gpt-5.6-sol"')"
 expect "a missing defaultProvider makes the comparison vacuous" 1 "defaultProvider must be set" \
@@ -212,6 +227,36 @@ thinking: high
 ---
 body')" "$(settings_from '.subagents.defaultModel = "opencode-go/kimi-k3"')"
 
+echo "== an override on an agent that ships a definition file =="
+# applyCustomAgentOverride fills only the fields the file leaves out, so the
+# override's level lands on the FILE's model, not on subagents.defaultModel.
+expect "an override level landing on the definition file's own model" 1 "would run with thinking OFF" \
+	-- pins "$(agents_from '---
+name: fixture
+description: d
+model: opencode-go/minimax-m3
+---
+body')" "$(settings_from '.subagents.agentOverrides.fixture = {"thinking": "max"}')"
+expect "an override fallback landing on the definition file's own level" 1 "would run with thinking OFF" \
+	-- pins "$(agents_from '---
+name: fixture
+description: d
+model: openai-codex/gpt-5.6-terra
+thinking: medium
+---
+body')" "$(settings_from '.subagents.agentOverrides.fixture = {"fallbackModels": ["opencode-go/kimi-k3"]}')"
+# The file already declares the field, so the override never reaches the agent
+# and must not be resolved against anything.
+expect "an override the definition file overrides back is inert" 0 "" \
+	-- pins "$(agents_from '---
+name: fixture
+description: d
+model: openai-codex/gpt-5.6-terra
+thinking: medium
+---
+body')" "$(settings_from '.subagents.defaultModel = "opencode-go/kimi-k3"
+		| .subagents.agentOverrides.fixture = {"thinking": "high"}')"
+
 echo "== levels the fork treats as no level at all =="
 expect "thinking cleared with false is not a level to resolve" 0 "" \
 	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.model = "opencode-go/kimi-k3"
@@ -232,7 +277,7 @@ echo "== bad input is reported, never mistaken for a pass =="
 printf 'not json' >"$WORK/malformed.json"
 expect "a malformed settings file fails the config checker" 2 "not valid JSON" \
 	-- config "$WORK/malformed.json"
-expect "a malformed settings file fails the pin checker" 2 "could not read settings pins" \
+expect "a malformed settings file fails the pin checker" 2 "not valid JSON" \
 	-- pins "$AGENTS" "$WORK/malformed.json"
 expect "a missing models store is bad input, not a silent skip" 2 "models store not found" \
 	-- bash "$PINS" "$AGENTS" "$SETTINGS" "$WORK/absent-store.json"

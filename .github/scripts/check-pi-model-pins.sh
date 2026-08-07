@@ -58,20 +58,41 @@ if [[ ! -f "$SETTINGS" ]]; then
 	echo "check-pi-model-pins: settings file not found: $SETTINGS" >&2
 	exit 2
 fi
+# Fail here rather than wherever the first jq happens to run, so a malformed
+# file always reports the same cause instead of an extractor's error.
+if ! jq empty "$SETTINGS" 2>/dev/null; then
+	echo "check-pi-model-pins: settings file is not valid JSON: $SETTINGS" >&2
+	exit 2
+fi
 
-# Every pin is enumerated as `<model>\t<sibling-level>`, because a model and the
-# thinking level that will be applied to it are only meaningful together. The
-# sibling level reaches EVERY candidate, not just the primary: buildModelCandidates
-# builds `[model, ...fallbackModels]` and each candidate is mapped through
+# Every pin is enumerated together with the thinking level that will be applied
+# to it, because neither means anything without the other. The level reaches
+# EVERY candidate, not just the primary: buildModelCandidates builds
+# `[model, ...fallbackModels]` and each candidate is mapped through
 # applyThinkingSuffix, which appends `:<level>` to any candidate that does not
 # already carry one. Enumerating models and levels separately is what let a
 # fallback inherit an unsupported level unchecked.
+#
+# Which side of the configuration owns a field decides the pairing, so the two
+# sources are resolved separately rather than uniformly:
+#
+#   - an agent with a definition file goes through applyCustomAgentOverride,
+#     whose `fill` SKIPS any field the frontmatter declares, so the file wins
+#     field by field and its settings override supplies only the rest
+#   - a builtin goes through applyBuiltinOverride, where the override always
+#     wins, and none of the definitions the fork ships pins a model of its own
+#
+# Both then fall back to `subagents.defaultModel` and `subagents.defaultThinking`,
+# which applySubagentDefaults fills in before either applier runs.
 
-# Read pins from the leading `---` frontmatter block ONLY, so a prompt-body line
-# that happens to start with `model:` is never mistaken for a pin. Both the
-# inline comma-separated and the `- item` block form of `fallbackModels:` are
-# emitted, one model per line, each paired with the file's `thinking:` key.
-frontmatter_pins() {
+# Read the leading `---` frontmatter block ONLY, so a prompt-body line that
+# happens to start with `model:` is never mistaken for a pin. Emits one
+# `<field>\t<value>` row per DECLARED key of interest - `name`, `model`,
+# `thinking`, and one `fallback` row per entry in either the inline
+# comma-separated or the `- item` block form of `fallbackModels:`. Which keys a
+# file declares is itself load-bearing, not just their values: the fork fills a
+# settings override into a definition file only where the file is silent.
+frontmatter_fields() {
 	awk '
 		BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34) }
 		NR == 1 && $0 == "---" { in_fm = 1; next }
@@ -79,16 +100,22 @@ frontmatter_pins() {
 		!in_fm { next }
 		# Any new top-level key closes an open block list.
 		/^[A-Za-z_]/ { list = "" }
+		/^name:[[:space:]]*/ {
+			value = $0
+			sub(/^name:[[:space:]]*/, "", value)
+			print "name\t" value
+			next
+		}
 		/^model:[[:space:]]*/ {
 			value = $0
 			sub(/^model:[[:space:]]*/, "", value)
-			if (value != "") pins[++n] = value
+			print "model\t" value
 			next
 		}
 		/^thinking:[[:space:]]*/ {
 			value = $0
 			sub(/^thinking:[[:space:]]*/, "", value)
-			think = value
+			print "thinking\t" value
 			next
 		}
 		/^fallbackModels:[[:space:]]*/ {
@@ -103,24 +130,29 @@ frontmatter_pins() {
 				value = substr(value, 2, length(value) - 2)
 			}
 			count = split(value, parts, ",")
-			for (i = 1; i <= count; i++) pins[++n] = parts[i]
+			for (i = 1; i <= count; i++) print "fallback\t" parts[i]
 			next
 		}
 		list != "" && /^[[:space:]]+-[[:space:]]*/ {
 			value = $0
 			sub(/^[[:space:]]+-[[:space:]]*/, "", value)
-			if (value != "") pins[++n] = value
+			if (value != "") print "fallback\t" value
 			next
 		}
-		# The `thinking:` key may follow the pins it applies to, so pair at the end.
-		# `-` marks a field the file does not name and inherits from settings; it
-		# is neither a model id nor a level, and an empty field cannot serve as the
-		# marker because the reader strips leading and trailing tabs.
-		END {
-			lvl = (think == "" ? "-" : think)
-			if (n == 0) { if (think != "") print "-\t" lvl }
-			else for (i = 1; i <= n; i++) print pins[i] "\t" lvl
-		}
+	' "$1"
+}
+
+# The settings override that applies to a definition file, flattened to
+# `<field>\t<value>` rows for the keys it DECLARES, so the caller can apply the
+# fork's fill semantics without re-reading the settings per field.
+override_fields() {
+	jq -r --arg n "$2" '
+		(.subagents.agentOverrides[$n] // {}) | select(type == "object")
+		| (if has("model") then "model\t" + (if (.model | type) == "string" then .model else "" end) else empty end),
+		  (if has("thinking") then "thinking\t" + (if (.thinking | type) == "string" then .thinking else "" end) else empty end),
+		  (if has("fallbackModels") then
+			(if (.fallbackModels | type) == "array" then (.fallbackModels[] | "fallback\t" + (if type == "string" then . else "" end)) else "fallback\t" end)
+		   else empty end)
 	' "$1"
 }
 
@@ -130,7 +162,7 @@ frontmatter_pins() {
 # alike, and a `false` clears the value rather than setting one, so a null check
 # would hand a boolean to the string concatenation below.
 settings_pins() {
-	jq -r '
+	jq -r --argjson owned "$2" '
 		def level($v): if ($v | type) == "string" then $v else "" end;
 		# Mirrors applySubagentDefaultThinking, which fills `thinking` on any agent
 		# that has none and runs BEFORE the overrides are applied: an entry that
@@ -145,16 +177,19 @@ settings_pins() {
 		def fallbacks($v): if ($v | type) == "array" then $v[] else empty end;
 		(.subagents // {}) as $s
 		| row("subagents.defaultModel"; $s.defaultModel; level($s.defaultThinking)),
+		  # An override whose key names a definition file is applied by
+		  # applyCustomAgentOverrides, which fills only the fields the file leaves
+		  # out, so the caller resolves those against the file and they are skipped
+		  # here. What remains are the builtins, where the override always wins and
+		  # none of the shipped definitions pins a model of its own.
 		  ($s.agentOverrides // {} | to_entries[] | . as $entry
+			| select(($owned | index($entry.key)) == null)
 			| declared($entry.value; $s.defaultThinking) as $level
 			| row("subagents.agentOverrides." + $entry.key + ".model";
 				$entry.value.model; $level),
 			  (fallbacks($entry.value.fallbackModels)
 				| row("subagents.agentOverrides." + $entry.key + ".fallbackModels";
 					.; $level)),
-			  # An override that names a level but no model applies that level to
-			  # the model it inherits, which is subagents.defaultModel: no builtin
-			  # the fork ships pins a model of its own.
 			  (select(($entry.value | type) == "object"
 					and ($entry.value | has("model") | not) and $level != "")
 				| row("subagents.agentOverrides." + $entry.key
@@ -281,24 +316,96 @@ check_pin() {
 # from a process substitution discards the extractor's exit code, so a malformed
 # agent file or a settings file whose subagents block has an unexpected shape
 # would emit nothing and let the loop report that every pin passed.
+owned_names='[]'
 for def in "$AGENTS_DIR"/*.md; do
 	[[ -e "$def" ]] || continue
-	if ! fm_pins="$(frontmatter_pins "$def")"; then
-		echo "check-pi-model-pins: could not read frontmatter pins from $def" >&2
+	if ! fm_rows="$(frontmatter_fields "$def")"; then
+		echo "check-pi-model-pins: could not read frontmatter from $def" >&2
 		exit 2
 	fi
-	while IFS=$'\t' read -r pin level; do
-		[[ -n "$pin" ]] || continue
-		# A definition file inherits the settings-level defaults for whichever of
-		# the two it does not name, exactly as applySubagentDefaults fills them.
-		[[ "$pin" != "-" ]] || pin="$DEFAULT_MODEL"
-		[[ "$level" != "-" ]] || level="$DEFAULT_THINKING"
-		[[ -n "$pin" ]] || continue
-		check_pin "$(basename "$def")" "$pin" "$level"
-	done <<<"$fm_pins"
+	fm_name=""
+	fm_model=""
+	fm_level=""
+	fm_has_model=0
+	fm_has_level=0
+	fm_fallbacks=()
+	while IFS=$'\t' read -r field value; do
+		case "$field" in
+		name) fm_name="$(unquote_pin "$value")" ;;
+		model)
+			fm_model="$value"
+			fm_has_model=1
+			;;
+		thinking)
+			fm_level="$value"
+			fm_has_level=1
+			;;
+		fallback) fm_fallbacks+=("$value") ;;
+		esac
+	done <<<"$fm_rows"
+
+	# applyCustomAgentOverride fills a settings override into this agent ONLY
+	# where the file itself is silent, so the file wins field by field and the
+	# override supplies the rest before applySubagentDefaults' values apply.
+	ov_model=""
+	ov_level=""
+	ov_has_model=0
+	ov_has_level=0
+	ov_fallbacks=()
+	ov_has_fallbacks=0
+	if [[ -n "$fm_name" ]]; then
+		owned_names="$(jq -c --arg n "$fm_name" '. + [$n]' <<<"$owned_names")"
+		if ! ov_rows="$(override_fields "$SETTINGS" "$fm_name")"; then
+			echo "check-pi-model-pins: could not read the settings override for $fm_name" >&2
+			exit 2
+		fi
+		while IFS=$'\t' read -r field value; do
+			case "$field" in
+			model)
+				ov_model="$value"
+				ov_has_model=1
+				;;
+			thinking)
+				ov_level="$value"
+				ov_has_level=1
+				;;
+			fallback)
+				ov_has_fallbacks=1
+				[[ -z "$value" ]] || ov_fallbacks+=("$value")
+				;;
+			esac
+		done <<<"$ov_rows"
+	fi
+
+	if [[ "$fm_has_model" -eq 1 ]]; then
+		def_model="$fm_model"
+	elif [[ "$ov_has_model" -eq 1 ]]; then
+		def_model="$ov_model"
+	else
+		def_model="$DEFAULT_MODEL"
+	fi
+	if [[ "$fm_has_level" -eq 1 ]]; then
+		def_level="$fm_level"
+	elif [[ "$ov_has_level" -eq 1 ]]; then
+		def_level="$ov_level"
+	else
+		def_level="$DEFAULT_THINKING"
+	fi
+	if [[ "${#fm_fallbacks[@]}" -gt 0 ]]; then
+		def_fallbacks=("${fm_fallbacks[@]}")
+	elif [[ "$ov_has_fallbacks" -eq 1 ]]; then
+		def_fallbacks=("${ov_fallbacks[@]}")
+	else
+		def_fallbacks=()
+	fi
+
+	[[ -z "$def_model" ]] || check_pin "$(basename "$def")" "$def_model" "$def_level"
+	for fallback in ${def_fallbacks[@]+"${def_fallbacks[@]}"}; do
+		check_pin "$(basename "$def") fallbackModels" "$fallback" "$def_level"
+	done
 done
 
-if ! settings_pin_rows="$(settings_pins "$SETTINGS")"; then
+if ! settings_pin_rows="$(settings_pins "$SETTINGS" "$owned_names")"; then
 	echo "check-pi-model-pins: could not read settings pins from $SETTINGS" >&2
 	exit 2
 fi

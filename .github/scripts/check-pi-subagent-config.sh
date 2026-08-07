@@ -86,7 +86,7 @@ check "every builtin subagent must carry a capability-tier model override" \
 # key (a level, or `false` for none) keeps the pairing local and checkable.
 check "every builtin subagent override must declare its own thinking level" \
 	'all(.subagents.agentOverrides // {} | .[];
-		type == "object" and has("thinking"))'
+		type == "object" and ((.thinking | usable) or .thinking == false))'
 
 check "watchdog must be enabled with both a model and a thinking level" \
 	'.subagents.watchdog.enabled == true

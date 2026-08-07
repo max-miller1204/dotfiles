@@ -223,17 +223,30 @@ unquote_pin() {
 	printf '%s' "$pin"
 }
 
+# The fork's THINKING_LEVELS (src/shared/model-info.ts), which is the whole set
+# of names that mean anything: `parseBuiltinOverrideEntry` accepts ANY string
+# for `thinking` and then resolveEffectiveThinking silently finds nothing, so a
+# name outside this list is a pin that never applies.
+THINKING_LEVELS="off minimal low medium high xhigh max"
+is_thinking_level() {
+	local candidate
+	for candidate in $THINKING_LEVELS; do
+		[[ "$candidate" != "$1" ]] || return 0
+	done
+	return 1
+}
+
 # enabledModels holds bare `provider/id` entries, while a pin may carry the
-# `:<level>` thinking suffix pi-subagents appends at runtime. The recognized
-# suffixes are exactly the fork's THINKING_LEVELS (src/shared/model-info.ts):
-# splitKnownThinkingSuffix leaves anything else as part of the model id, so
-# stripping a level the fork does not know would hide a broken pin.
+# `:<level>` thinking suffix pi-subagents appends at runtime. Only a known level
+# counts as a suffix: splitKnownThinkingSuffix leaves anything else as part of
+# the model id, so stripping a level the fork does not know would hide a broken
+# pin.
 normalize_pin() {
 	local pin
 	pin="$(unquote_pin "$1")"
 	case "$pin" in
-	*/*:off | */*:minimal | */*:low | */*:medium | */*:high | */*:xhigh | */*:max)
-		pin="${pin%:*}"
+	*/*:*)
+		if is_thinking_level "${pin##*:}"; then pin="${pin%:*}"; fi
 		;;
 	esac
 	printf '%s' "$pin"
@@ -246,10 +259,31 @@ pin_thinking_level() {
 	local pin
 	pin="$(unquote_pin "$1")"
 	case "$pin" in
-	*/*:off | */*:minimal | */*:low | */*:medium | */*:high | */*:xhigh | */*:max)
-		printf '%s' "${pin##*:}"
+	*/*:*)
+		if is_thinking_level "${pin##*:}"; then printf '%s' "${pin##*:}"; fi
 		;;
 	esac
+	return 0
+}
+
+# Every thinking level DECLARED in the settings, whether or not a model sits
+# beside it. Whether a name IS a level needs no machine state, unlike whether a
+# model supports it, so this runs in CI too - where a typo is cheapest to catch.
+# A literal `false` is the documented opt-out rather than a level, and drops out
+# here by not being a string.
+settings_levels() {
+	jq -r '
+		def row($source; $v): select(($v | type) == "string") | $source + "\t" + $v;
+		(.subagents // {}) as $s
+		| row("subagents.defaultThinking"; $s.defaultThinking),
+		  ($s.agentOverrides // {} | to_entries[] | . as $entry
+			| row("subagents.agentOverrides." + $entry.key + ".thinking"; $entry.value.thinking)),
+		  ($s.watchdog.main // {} | row("subagents.watchdog.main.thinking"; .thinking)),
+		  ($s.watchdog.children // {} | row("subagents.watchdog.children.thinking"; .thinking)),
+		  ($s.watchdog.children.overrides // {} | to_entries[] | . as $entry
+			| row("subagents.watchdog.children.overrides." + $entry.key + ".thinking";
+				$entry.value.thinking))
+	' "$1"
 }
 
 # Mirrors getSupportedThinkingLevels in the fork's src/shared/model-info.ts: an
@@ -276,6 +310,23 @@ DEFAULT_THINKING="$(jq -r '.subagents.defaultThinking // "" | if type == "string
 rc=0
 checked=0
 thinking_checked=0
+levels_checked=0
+
+# A level the fork does not know is worse than an unsupported one: the watchdog
+# parser throws on it, but everywhere else the fork takes the string and then
+# quietly drops it - resolveEffectiveThinking finds no match, and the raw value
+# is appended as a `:<name>` suffix that resolves to no model at all.
+check_level_name() {
+	local source="$1" level
+	level="$(unquote_pin "$2")"
+	# `false` is the documented opt-out, an explicit disable rather than a level.
+	[[ "$level" != "false" ]] || return 0
+	levels_checked=$((levels_checked + 1))
+	if ! is_thinking_level "$level"; then
+		echo "  $source is \"$level\", which is not one of the fork's thinking levels ($THINKING_LEVELS), so it would never apply"
+		rc=1
+	fi
+}
 
 check_thinking() {
 	local source="$1" model level suffix supported
@@ -285,10 +336,11 @@ check_thinking() {
 	# Mirror resolveEffectiveThinking: a `:<level>` suffix on the model wins over
 	# whatever a sibling key says, so validate the level that really runs.
 	[[ -z "$suffix" ]] || level="$suffix"
-	[[ -n "$STORE" && -n "$model" && -n "$level" ]] || return 0
-	# `false` is the documented opt-out and `inherit` defers to the session, so
-	# neither is a level to resolve against the model.
-	[[ "$level" != "false" && "$level" != "inherit" ]] || return 0
+	# `false` is the documented opt-out, and a name that is not a level at all is
+	# check_level_name's finding, reported there without needing a models store.
+	[[ -n "$level" && "$level" != "false" ]] || return 0
+	is_thinking_level "$level" || return 0
+	[[ -n "$STORE" && -n "$model" ]] || return 0
 	supported="$(thinking_supported "$model" "$level")"
 	# An unknown model is check_pin's finding, not this one's.
 	[[ -n "$supported" ]] || return 0
@@ -399,6 +451,7 @@ for def in "$AGENTS_DIR"/*.md; do
 		def_fallbacks=()
 	fi
 
+	[[ "$fm_has_level" -eq 0 ]] || check_level_name "$(basename "$def") thinking" "$fm_level"
 	[[ -z "$def_model" ]] || check_pin "$(basename "$def")" "$def_model" "$def_level"
 	for fallback in ${def_fallbacks[@]+"${def_fallbacks[@]}"}; do
 		check_pin "$(basename "$def") fallbackModels" "$fallback" "$def_level"
@@ -414,16 +467,25 @@ while IFS=$'\t' read -r source pin level; do
 	check_pin "$source" "$pin" "$level"
 done <<<"$settings_pin_rows"
 
+if ! settings_level_rows="$(settings_levels "$SETTINGS")"; then
+	echo "check-pi-model-pins: could not read settings thinking levels from $SETTINGS" >&2
+	exit 2
+fi
+while IFS=$'\t' read -r source level; do
+	[[ -n "$source" ]] || continue
+	check_level_name "$source" "$level"
+done <<<"$settings_level_rows"
+
 if [[ "$rc" -eq 0 ]]; then
 	if [[ -n "$STORE" && "$thinking_checked" -eq 0 ]]; then
 		# A store pi wrote without provider credentials holds no catalog, so every
 		# pinned model is unknown to it and every level goes unresolved. Say so
 		# rather than reporting a pass for a check that examined nothing.
-		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels; NO thinking level could be resolved against $STORE, so thinking support went unchecked"
+		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels, $levels_checked level name(s) valid; NO thinking level could be resolved against $STORE, so thinking support went unchecked"
 	elif [[ -n "$STORE" ]]; then
-		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels, $thinking_checked thinking level(s) supported by their model"
+		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels, $levels_checked level name(s) valid, $thinking_checked thinking level(s) supported by their model"
 	else
-		echo "check-pi-model-pins: $checked pinned model(s), all present in enabledModels"
+		echo "check-pi-model-pins: $checked pinned model(s), all present in enabledModels, $levels_checked level name(s) valid"
 	fi
 fi
 exit "$rc"

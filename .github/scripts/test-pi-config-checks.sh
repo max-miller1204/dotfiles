@@ -197,9 +197,13 @@ expect "a level carried as a :<level> suffix on the model" 1 "would run with thi
 	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.model = "opencode-go/kimi-k3:high"')"
 expect "a fallback inheriting the entry's own level" 1 "would run with thinking OFF" \
 	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.fallbackModels = ["opencode-go/kimi-k3"]')"
-expect "defaultThinking reaching an override that declares no level" 1 "would run with thinking OFF" \
+# `delegate` is the only builtin the fork ships without its own `thinking:`, so
+# it is the one whose level can actually come from defaultThinking. Assert the
+# level by name: with any other builtin the case would pass on the builtin's own
+# level instead, proving nothing about the inheritance it claims to cover.
+expect "defaultThinking reaching the one builtin that declares no level" 1 'pins thinking "high" on "opencode-go/kimi-k3"' \
 	-- pins "$AGENTS" "$(settings_from '.subagents.defaultThinking = "high"
-		| .subagents.agentOverrides.scout = {"model": "opencode-go/kimi-k3"}')"
+		| .subagents.agentOverrides.delegate = {"model": "opencode-go/kimi-k3"}')"
 expect "defaultThinking reaching defaultModel" 1 "would run with thinking OFF" \
 	-- pins "$AGENTS" "$(settings_from '.subagents.defaultModel = "opencode-go/kimi-k3"
 		| .subagents.defaultThinking = "high"')"
@@ -257,7 +261,39 @@ thinking: medium
 body')" "$(settings_from '.subagents.defaultModel = "opencode-go/kimi-k3"
 		| .subagents.agentOverrides.fixture = {"thinking": "high"}')"
 
+echo "== a level name the fork does not know, caught without a models store =="
+# The fork accepts any string here and then silently never applies it, so these
+# must fail in the CI invocation too, where no store argument is passed.
+expect "a misspelled level in an override" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.thinking = "mediun"')"
+expect "an empty level in an override" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.thinking = ""')"
+expect "a misspelled level on the watchdog" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.watchdog.main.thinking = "maxx"')"
+expect "a misspelled subagents.defaultThinking" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.defaultThinking = "mediun"')"
+expect "a misspelled level in a definition file" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$(agents_from '---
+name: fixture
+description: d
+model: openai-codex/gpt-5.6-terra
+thinking: mediun
+---
+body')" "$SETTINGS"
+expect "an empty level in an override also fails the config checker" 1 "declare its own thinking level" \
+	-- config "$(settings_from '.subagents.agentOverrides.worker.thinking = ""')"
+
 echo "== levels the fork treats as no level at all =="
+expect "thinking cleared with false stays valid, not a typo" 0 "" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.thinking = false')"
+expect "a definition file clearing thinking with false stays valid" 0 "" \
+	-- pins_no_store "$(agents_from '---
+name: fixture
+description: d
+model: openai-codex/gpt-5.6-terra
+thinking: false
+---
+body')" "$SETTINGS"
 expect "thinking cleared with false is not a level to resolve" 0 "" \
 	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.model = "opencode-go/kimi-k3"
 		| .subagents.agentOverrides.worker.thinking = false

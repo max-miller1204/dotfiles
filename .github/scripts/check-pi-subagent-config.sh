@@ -33,9 +33,12 @@ if ! jq empty "$SETTINGS" 2>/dev/null; then
 	exit 2
 fi
 
-# The builtin roster the fork ships. A builtin missing a tier override silently
-# falls back to subagents.defaultModel instead of the tier it was assigned.
-BUILTINS='["advisor","context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"]'
+# The builtin roster the fork ships, one name per definition file in its agents/
+# directory. A builtin missing a tier override silently falls back to
+# subagents.defaultModel instead of the tier it was assigned. `advisor` is NOT a
+# member: it is an alias on oracle.md, and both override appliers key off
+# agent.name, so an override under that key would never match anything.
+BUILTINS='["context-builder","delegate","oracle","planner","researcher","reviewer","scout","worker"]'
 
 # Every string-valued invariant below asserts a USABLE value, not mere presence.
 # The fork accepts a literal `false` wherever it accepts a model or a thinking

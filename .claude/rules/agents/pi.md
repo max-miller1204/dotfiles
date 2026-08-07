@@ -4,7 +4,7 @@ paths:
   - ".chezmoiscripts/run_onchange_before_17-install-hunk.sh.tmpl"
   - ".chezmoiscripts/run_onchange_before_18-install-pi.sh.tmpl"
   - ".github/e2e/verify.sh"
-  - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
+  - ".github/scripts/{check-agent-tool-ownership.py,check-pi-model-pins.sh,check-pi-subagent-config.sh,test-pi-nix-runtime.sh,test-worktree-guard.mjs}"
 ---
 
 <!-- markdownlint-disable MD013 -->
@@ -37,7 +37,8 @@ paths:
   `verify.sh` hard-gates that the package remains declared and that the obsolete local extension directory does not materialize on the E2E box.
   Subagents come from the published `npm:pi-subagents` package, the nicobailon fork (<https://github.com/nicobailon/pi-subagents>), NOT the `npm:@tintinweb/pi-subagents` scope this repository used before.
   Both packages exist on npm under confusingly similar names and their configuration surfaces are incompatible, so check `repository.url` on the registry entry rather than trusting the bare name.
-  The fork ships nine built-in agents - `scout`, `researcher`, `worker`, `reviewer`, `delegate`, `context-builder`, `planner`, `oracle`, and `advisor` - and does NOT ship `general-purpose`, `Explore`, or `Plan`.
+  The fork ships eight built-in agents - `scout`, `researcher`, `worker`, `reviewer`, `delegate`, `context-builder`, `planner`, and `oracle` - and does NOT ship `general-purpose`, `Explore`, or `Plan`.
+  `advisor` is an ALIAS of `oracle`, not a ninth agent: it appears in `BUILTIN_AGENT_NAMES` and as `aliases: advisor` on the fork's `oracle.md`, but no agent is named `advisor` and both override appliers key strictly off `agent.name`, so an `agentOverrides.advisor` entry is dead config that CI must not require - `oracle`'s pin already governs everything invoked as `advisor`.
   Routing lives in the `subagents.agentOverrides` block of `agent/settings.json`, which this fork does read; that is the reverse of the `@tintinweb` package's rule, and it is why the hand-maintained `Explore.md` and `Plan.md` definitions were retired rather than ported.
   Prefer an override to a definition file: an override changes only the fields it names, while a definition file replaces the built-in wholesale and freezes a copy of an upstream prompt that will not track package updates.
   `.chezmoiremove` deletes the retired `Explore.md` and `Plan.md` from `~/.pi/agent/agents/`, because the fork silently skips any definition without a frontmatter `name:` key and those files have only `display_name:`, so a leftover copy reads as live configuration while doing nothing.
@@ -45,7 +46,7 @@ paths:
   ANTHROPIC MODELS ARE OFF LIMITS in every pi config: they bill against the API rather than a subscription, unlike `openai-codex` and `opencode-go`.
   That constraint is why `subagents.modelScope` is worth enforcing rather than decorative - its `allow` list of `openai-codex/*` and `opencode-go/*` is the mechanism that rejects an Anthropic model reached by a per-run override or a fuzzy id match, and `verify.sh` separately gates that no string anywhere in the settings names Anthropic.
   The fork's README recommends specific Anthropic models for the intent tier and the watchdog; substitute, never adopt them.
-  Models are routed by the four capability tiers the fork's README recommends, using task shape rather than one model everywhere: `openai-codex/gpt-5.6-luna:low` for recon (`scout`), `openai-codex/gpt-5.6-terra:medium` for well-scoped implementation and review (`worker`, `reviewer`, `delegate`, `researcher`, and `subagents.defaultModel`), `openai-codex/gpt-5.6-sol:high` for hard work that arrives with explicit completion criteria (`planner`, `context-builder`, `oracle`, `advisor`), and `opencode-go/minimax-m3` for the intent tier.
+  Models are routed by the four capability tiers the fork's README recommends, using task shape rather than one model everywhere: `openai-codex/gpt-5.6-luna:low` for recon (`scout`), `openai-codex/gpt-5.6-terra:medium` for well-scoped implementation and review (`worker`, `reviewer`, `delegate`, `researcher`, and `subagents.defaultModel`), `openai-codex/gpt-5.6-sol:high` for hard work that arrives with explicit completion criteria (`planner`, `context-builder`, `oracle`), and `opencode-go/minimax-m3` for the intent tier.
   The intent tier is the only agent that needs its own definition file, `shaper.md`, because it is not a built-in; keep its `fallbackModels` pointing at a capability-tier model on the OTHER provider so an `opencode-go` limit degrades instead of failing the run.
   The README's intent tier assumes a model chosen for reading human intent, which no `openai-codex` or `opencode-go` model is specifically known for, so treat this pin as a substitution to re-evaluate rather than a considered match.
   `subagents.watchdog` is enabled with `opencode-go/kimi-k3` at thinking max.

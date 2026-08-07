@@ -286,6 +286,10 @@ expect "an empty level in an override also fails the config checker" 1 "declare 
 echo "== levels the fork treats as no level at all =="
 expect "thinking cleared with false stays valid, not a typo" 0 "" \
 	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.thinking = false')"
+# The opt-out is the JSON boolean. Quoted, it is just a string the fork appends
+# as a `:false` suffix, so it is a typo like any other unrecognized name.
+expect "thinking as the STRING false is a typo, not the opt-out" 1 "not one of the fork's thinking levels" \
+	-- pins_no_store "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.thinking = "false"')"
 expect "a definition file clearing thinking with false stays valid" 0 "" \
 	-- pins_no_store "$(agents_from '---
 name: fixture
@@ -302,6 +306,17 @@ expect "an explicit suffix wins over an unsupported sibling key" 0 "" \
 	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.model = "opencode-go/kimi-k3:max"
 		| .subagents.agentOverrides.worker.thinking = "high"
 		| .enabledModels += ["opencode-go/kimi-k3"]')"
+
+echo "== the inherit sentinel is a legal value, not a model id =="
+# resolveSubagentModelOverride reads `inherit` as "use the parent session's
+# model", so there is nothing to look up and no model for a level to be
+# supported by - but it pins no tier either, which the config checker owns.
+expect "an inherit model is not looked up in enabledModels" 0 "" \
+	-- pins "$AGENTS" "$(settings_from '.subagents.agentOverrides.worker.model = "inherit"')"
+expect "an inherit model still leaves that builtin without a tier" 1 "capability-tier model override" \
+	-- config "$(settings_from '.subagents.agentOverrides.worker.model = "inherit"')"
+expect "an inherit watchdog model is not a model the watchdog can resolve" 1 "enabled with both a model and a thinking level" \
+	-- config "$(settings_from '.subagents.watchdog.main.model = "inherit"')"
 
 echo "== enabledModels remains the curated allowlist =="
 expect "a pin outside enabledModels" 1 "absent from enabledModels" \

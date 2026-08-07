@@ -47,6 +47,11 @@ BUILTINS='["context-builder","delegate","oracle","planner","researcher","reviewe
 # field the invariant is about; an absent key and an empty string read the same
 # way. One predicate, applied everywhere, keeps that from being re-decided.
 JQ_PRELUDE='def usable: type == "string" and length > 0;
+	# A model value that actually names a model. `inherit` is the fork'"'"'s
+	# INHERIT_MODEL sentinel for "use the parent session'"'"'s model", so it is a
+	# usable string that pins no tier at all - counting it would satisfy the very
+	# checks that exist to require a real one.
+	def routable_model: usable and . != "inherit";
 	# Mirrors globToRegExp in the fork: every RegExp special except `*` is
 	# escaped, `*` becomes `.*`, the result is anchored, and matching is
 	# case-insensitive against the full provider/id.
@@ -77,7 +82,7 @@ check "no Anthropic model may be named anywhere in pi settings" \
 	'[.. | strings | select(test("anthropic"; "i"))] | length == 0'
 
 check "every builtin subagent must carry a capability-tier model override" \
-	"([.subagents.agentOverrides // {} | to_entries[] | select(.value.model | usable) | .key] | sort) == ($BUILTINS | sort)"
+	"([.subagents.agentOverrides // {} | to_entries[] | select(.value.model | routable_model) | .key] | sort) == ($BUILTINS | sort)"
 
 # An override that omits `thinking` inherits the level from the builtin's own
 # upstream definition, falling back to subagents.defaultThinking - neither of
@@ -88,9 +93,13 @@ check "every builtin subagent override must declare its own thinking level" \
 	'all(.subagents.agentOverrides // {} | .[];
 		type == "object" and ((.thinking | usable) or .thinking == false))'
 
+# The watchdog resolves its model directly rather than through
+# resolveSubagentModelOverride, so `inherit` is not even a sentinel there - it
+# would be a literal id that matches nothing, and it would slip past the
+# provider-independence check below by not starting with defaultProvider.
 check "watchdog must be enabled with both a model and a thinking level" \
 	'.subagents.watchdog.enabled == true
-		and (.subagents.watchdog.main.model | usable)
+		and (.subagents.watchdog.main.model | routable_model)
 		and (.subagents.watchdog.main.thinking | usable)'
 
 # The watchdog reviews what the session just wrote, so sharing defaultProvider

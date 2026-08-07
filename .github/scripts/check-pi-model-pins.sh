@@ -319,13 +319,23 @@ levels_checked=0
 check_level_name() {
 	local source="$1" level
 	level="$(unquote_pin "$2")"
-	# `false` is the documented opt-out, an explicit disable rather than a level.
-	[[ "$level" != "false" ]] || return 0
 	levels_checked=$((levels_checked + 1))
 	if ! is_thinking_level "$level"; then
 		echo "  $source is \"$level\", which is not one of the fork's thinking levels ($THINKING_LEVELS), so it would never apply"
 		rc=1
 	fi
+}
+
+# The `false` opt-out is a level name only in agent frontmatter, where every
+# value parses as a string and the fork coerces the literal `false` back to the
+# boolean (quoted or not - parseFrontmatter strips the quotes first). In
+# settings that opt-out is a JSON boolean, already dropped by type before the
+# name check, so a `"false"` arriving from there is an ordinary unrecognized
+# string: applyBuiltinOverride clears `thinking` only for the boolean, and the
+# string is then appended as a `:false` suffix that resolves to no model.
+check_frontmatter_level_name() {
+	[[ "$(unquote_pin "$2")" != "false" ]] || return 0
+	check_level_name "$1" "$2"
 }
 
 check_thinking() {
@@ -356,6 +366,11 @@ check_pin() {
 	pin="$(normalize_pin "$2")"
 	# No pin means the agent inherits a default model, which needs no entry.
 	[[ -n "$pin" ]] || return 0
+	# `inherit` is the fork's INHERIT_MODEL sentinel, not a model id:
+	# resolveSubagentModelOverride reads it as "use the parent session's model",
+	# so there is nothing to look up in enabledModels and no fixed model for a
+	# level to be supported by. Both checks skip it, rather than disagreeing.
+	[[ "$pin" != "inherit" ]] || return 0
 	checked=$((checked + 1))
 	if ! jq -e --arg m "$pin" '.enabledModels | index($m) != null' "$SETTINGS" >/dev/null; then
 		echo "  $source pins \"$pin\", absent from enabledModels in $SETTINGS"
@@ -451,7 +466,7 @@ for def in "$AGENTS_DIR"/*.md; do
 		def_fallbacks=()
 	fi
 
-	[[ "$fm_has_level" -eq 0 ]] || check_level_name "$(basename "$def") thinking" "$fm_level"
+	[[ "$fm_has_level" -eq 0 ]] || check_frontmatter_level_name "$(basename "$def") thinking" "$fm_level"
 	[[ -z "$def_model" ]] || check_pin "$(basename "$def")" "$def_model" "$def_level"
 	for fallback in ${def_fallbacks[@]+"${def_fallbacks[@]}"}; do
 		check_pin "$(basename "$def") fallbackModels" "$fallback" "$def_level"

@@ -1,34 +1,90 @@
 {
-  "lastChangelogVersion": "0.80.10",
+  "lastChangelogVersion": "0.83.0",
   "theme": "dark",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-sol",
   "defaultThinkingLevel": "high",
   "enabledModels": [
     "openai-codex/gpt-5.6-sol",
+    "openai-codex/gpt-5.6-terra",
     "openai-codex/gpt-5.6-luna",
     "opencode-go/deepseek-v4-flash",
     "opencode-go/deepseek-v4-pro",
     "opencode-go/glm-5.1",
     "opencode-go/glm-5.2",
+    "opencode-go/grok-4.5",
+    "opencode-go/hy3",
     "opencode-go/kimi-k2.6",
     "opencode-go/kimi-k2.7-code",
+    "opencode-go/kimi-k3",
     "opencode-go/mimo-v2.5",
     "opencode-go/mimo-v2.5-pro",
     "opencode-go/minimax-m2.7",
     "opencode-go/minimax-m3",
     "opencode-go/qwen3.6-plus",
     "opencode-go/qwen3.7-max",
-    "opencode-go/qwen3.7-plus"
+    "opencode-go/qwen3.7-plus",
+    "opencode-go/qwen3.8-max"
   ],
   "packages": [
     "npm:pi-web-access",
-    "npm:@tintinweb/pi-subagents",
+    "npm:pi-subagents",
     "npm:pi-mcp-adapter",
     "npm:pi-lens",
     "npm:pi-worklist",
     "npm:pi-git-diff"
   ],
+  "subagents": {
+    "defaultModel": "openai-codex/gpt-5.6-terra",
+    "modelScope": {
+      "enforce": true,
+      "allow": [
+        "openai-codex/*",
+        "opencode-go/*"
+      ]
+    },
+    "agentOverrides": {
+      "scout": {
+        "model": "openai-codex/gpt-5.6-luna",
+        "thinking": "low"
+      },
+      "researcher": {
+        "model": "openai-codex/gpt-5.6-terra",
+        "thinking": "medium"
+      },
+      "worker": {
+        "model": "openai-codex/gpt-5.6-terra",
+        "thinking": "medium"
+      },
+      "reviewer": {
+        "model": "openai-codex/gpt-5.6-terra",
+        "thinking": "medium"
+      },
+      "delegate": {
+        "model": "openai-codex/gpt-5.6-terra",
+        "thinking": "medium"
+      },
+      "context-builder": {
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking": "high"
+      },
+      "planner": {
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking": "high"
+      },
+      "oracle": {
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking": "high"
+      }
+    },
+    "watchdog": {
+      "enabled": true,
+      "main": {
+        "model": "opencode-go/kimi-k3",
+        "thinking": "max"
+      }
+    }
+  },
   "skills": [
     "~/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"
   ],

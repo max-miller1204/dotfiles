@@ -1,0 +1,88 @@
+PI STARTS ON THE COMMITTED SETTINGS AND THE FORK REGISTERS
+=========================================================
+
+pi 0.84.0 launched in RPC mode against an isolated agent dir seeded with the
+committed dot_pi/agent/settings.json, dot_pi/agent/agents/shaper.md and the machine's
+installed pi npm packages. No model call is made; the request is get_commands.
+
+$ PI_OFFLINE=1 PI_CODING_AGENT_DIR=<seeded dir> pi --mode rpc --no-session
+  <<< '{"id":"commands","type":"get_commands"}'
+
+pi exit status: 0
+extension_error events: 0
+
+installed subagents package (the point of the switch):
+  {
+    "name": "pi-subagents",
+    "version": "0.42.1",
+    "repository": "git+https://github.com/nicobailon/pi-subagents.git"
+  }
+
+slash commands the fork contributes, as pi reports them to a client:
+  /curator
+  /gather-context-and-clarify
+  /parallel-cleanup
+  /parallel-context-build
+  /parallel-handoff-plan
+  /parallel-research
+  /parallel-review
+  /prompt-workflow
+  /review-loop
+  /skill:pi-subagents
+  /subagent-cost
+  /subagents
+  /subagents-check-profile
+  /subagents-detach
+  /subagents-doctor
+  /subagents-fleet
+  /subagents-generate-profiles
+  /subagents-load-profile
+  /subagents-models
+  /subagents-profiles
+  /subagents-refresh-provider-models
+  /subagents-stop
+  /subagents-watchdog
+
+every command pi registered in this session:
+  curator diff gather-context-and-clarify google-account lens-allow-edit 
+  lens-context-toggle lens-health lens-map lens-perf lens-tdi lens-toggle lens-tools 
+  lens-widget-toggle llama mcp mcp-auth parallel-cleanup parallel-context-build 
+  parallel-handoff-plan parallel-research parallel-review prompt-workflow review-loop 
+  run search skill:brev-cli skill:html-artifacts skill:hunk-review skill:mcp-scripting 
+  skill:no-mistakes skill:pi-lens-ast-grep skill:pi-lens-lsp-navigation 
+  skill:pi-lens-write-ast-grep-rule skill:pi-lens-write-tree-sitter-rule 
+  skill:pi-subagents subagent-cost subagents subagents-check-profile subagents-detach 
+  subagents-doctor subagents-fleet subagents-generate-profiles subagents-load-profile 
+  subagents-models subagents-profiles subagents-refresh-provider-models subagents-stop 
+  subagents-watchdog tasks websearch
+
+stderr from this run:
+  Warning: No models match pattern "openai-codex/gpt-5.6-sol"
+  Warning: No models match pattern "openai-codex/gpt-5.6-terra"
+  Warning: No models match pattern "openai-codex/gpt-5.6-luna"
+  Warning: No models match pattern "opencode-go/deepseek-v4-flash"
+  Warning: No models match pattern "opencode-go/deepseek-v4-pro"
+  Warning: No models match pattern "opencode-go/glm-5.1"
+  Warning: No models match pattern "opencode-go/glm-5.2"
+  Warning: No models match pattern "opencode-go/grok-4.5"
+  Warning: No models match pattern "opencode-go/hy3"
+  Warning: No models match pattern "opencode-go/kimi-k2.6"
+  Warning: No models match pattern "opencode-go/kimi-k2.7-code"
+  Warning: No models match pattern "opencode-go/kimi-k3"
+  Warning: No models match pattern "opencode-go/mimo-v2.5"
+  Warning: No models match pattern "opencode-go/mimo-v2.5-pro"
+  Warning: No models match pattern "opencode-go/minimax-m2.7"
+  Warning: No models match pattern "opencode-go/minimax-m3"
+  Warning: No models match pattern "opencode-go/qwen3.6-plus"
+  Warning: No models match pattern "opencode-go/qwen3.7-max"
+  Warning: No models match pattern "opencode-go/qwen3.7-plus"
+  Warning: No models match pattern "opencode-go/qwen3.8-max"
+  Subagent result watcher for '/tmp/pi-subagents-uid-1000/async-subagent-results' fell back to polling because native fs.watch is unavailable (EMFILE).
+
+  NOTE: those warnings are an artifact of the isolated dir, not of the settings.
+  pi matches enabledModels against the catalogs of AUTHENTICATED providers, and the
+  throwaway agent dir deliberately carries no auth.json (credentials are never copied
+  into a scratch dir for a test), so no provider catalog is available and every
+  curated entry reports as unmatched. Nothing in the subagents block is rejected:
+  the fork's strict loaders parsed it (see 02-watchdog-thinking.txt) and no
+  extension_error was emitted.

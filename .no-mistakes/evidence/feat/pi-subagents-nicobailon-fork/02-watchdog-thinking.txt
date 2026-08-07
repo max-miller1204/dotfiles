@@ -1,0 +1,66 @@
+WATCHDOG THINKING: WHY "max" AND NOT "high"
+===========================================
+
+The pin is on opencode-go/kimi-k3, whose thinkingLevelMap in this machine's real pi
+models store maps every level to null except max. The fork's getSupportedThinkingLevels
+treats an explicit null as unsupported, so "high" resolves to nothing and the watchdog
+would review with thinking OFF. Both configurations below are resolved by the fork's own
+strict loader, not by re-implementing its rules.
+
+kimi-k3 as the real store describes it:
+  {
+    "id": "kimi-k3",
+    "reasoning": true,
+    "thinkingLevelMap": {
+      "off": null,
+      "minimal": null,
+      "low": null,
+      "medium": null,
+      "high": null,
+      "xhigh": null,
+      "max": "max"
+    }
+  }
+
+#### THIS CHANGE (HEAD, thinking "max")
+settings under test: /tmp/pi-fork-evidence-UPZn/agent/settings.json
+resolved by the fork's own strict loader, resolveWatchdogConfigStrict()
+--------------------------------------------------------------------------------------------
+  enabled                     true (main.enabled true, inherited)
+  model                       opencode-go/kimi-k3
+  thinking as configured      "max"
+  levels opencode-go/kimi-k3  really supports: [max]
+  => the watchdog reviews at  thinking "max"
+  reviews from another provider than defaultProvider (openai-codex): true
+
+  fork defaults deliberately NOT restated in settings, shown as resolved:
+    scope tracking        true
+    LSP diagnostics       true
+    blocker auto-follow   true (maxAttempts 3)
+
+#### THE STATE THIS CHANGE FIXED (commit 1cc291e, thinking "high")
+settings under test: /tmp/pi-fork-evidence-UPZn/prefix-agent/settings.json
+resolved by the fork's own strict loader, resolveWatchdogConfigStrict()
+--------------------------------------------------------------------------------------------
+  enabled                     true (main.enabled true, inherited)
+  model                       opencode-go/kimi-k3
+  thinking as configured      "high"
+  levels opencode-go/kimi-k3  really supports: [max]
+  => the watchdog reviews at  thinking OFF - the pinned level resolves to nothing
+  reviews from another provider than defaultProvider (openai-codex): true
+
+  fork defaults deliberately NOT restated in settings, shown as resolved:
+    scope tracking        true
+    LSP diagnostics       true
+    blocker auto-follow   true (maxAttempts 3)
+
+#### THE SAME TWO THROUGH check-pi-model-pins.sh WITH THE REAL MODELS STORE
+(the invocation the native E2E performs, models store passed as the third argument)
+--------------------------------------------------------------------------------------------
+$ check-pi-model-pins.sh dot_pi/agent/agents dot_pi/agent/settings.json ~/.pi/agent/models-store.json
+check-pi-model-pins: 12 pinned model(s) in enabledModels, 10 level name(s) valid, 11 thinking level(s) supported by their model
+exit=0
+
+$ check-pi-model-pins.sh dot_pi/agent/agents <settings @ 1cc291e> ~/.pi/agent/models-store.json
+  subagents.watchdog.main.model pins thinking "high" on "opencode-go/kimi-k3", which does not support it (it would run with thinking OFF)
+exit=1

@@ -32,7 +32,7 @@ Read [`.claude/rules/bootstrap/scripts-and-config.md`](.claude/rules/bootstrap/s
 - shell partials, path resolution, apt repositories, or Codex sync helpers
 - `.chezmoidata/mcp.yaml` or any generated Claude, Codex, OpenCode, or pi MCP target
 - Claude or Codex MCP synchronization scripts
-- `.chezmoi.toml.tmpl`, `.chezmoiignore`, GUI package gating, `headless`, or WSL behavior
+- `.chezmoi.toml.tmpl`, `.chezmoiignore`, `.chezmoiremove`, GUI package gating, `headless`, or WSL behavior
 
 Also read [`.claude/rules/bootstrap/packages.md`](.claude/rules/bootstrap/packages.md) when a script change affects package installation semantics.
 
@@ -43,7 +43,7 @@ Read [`.claude/rules/agents/pi.md`](.claude/rules/agents/pi.md) for changes invo
 - any managed file under `dot_pi/`
 - pi installation, packages, extensions, prompts, web search, MCP configuration, or runtime drift
 - the native Hunk and Pi installers (`.chezmoiscripts/run_onchange_before_{17-install-hunk,18-install-pi}.sh.tmpl`) or Pi's Hunk review skill path
-- pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/` pi checks (`check-pi-model-pins.sh`, `check-agent-tool-ownership.py`, `test-pi-nix-runtime.sh`, `test-worktree-guard.mjs`)
+- pi-related checks in `.github/e2e/verify.sh`, and the shared `.github/scripts/` pi checks (`check-pi-model-pins.sh`, `check-pi-subagent-config.sh`, `test-pi-config-checks.sh`, `check-agent-tool-ownership.py`, `test-pi-nix-runtime.sh`, `test-worktree-guard.mjs`)
 
 ## CI and native Ubuntu E2E
 

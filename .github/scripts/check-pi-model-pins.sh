@@ -25,7 +25,9 @@
 # to nothing and the agent silently runs with thinking OFF. A level counts
 # whether it is written as a `thinking:` key or as a `:<level>` suffix on the
 # model, and the suffix wins where both appear, as resolveEffectiveThinking
-# resolves it.
+# resolves it. A sibling key is checked against EVERY model it reaches - the
+# primary pin, each fallback, and `defaultModel` for `defaultThinking` - because
+# the fork appends it to whichever candidate it ends up launching.
 # Thinking lives beside the model in both frontmatter and settings, so it is
 # validated here rather than in a second script that would have to re-parse the
 # same frontmatter.
@@ -57,10 +59,18 @@ if [[ ! -f "$SETTINGS" ]]; then
 	exit 2
 fi
 
+# Every pin is enumerated as `<model>\t<sibling-level>`, because a model and the
+# thinking level that will be applied to it are only meaningful together. The
+# sibling level reaches EVERY candidate, not just the primary: buildModelCandidates
+# builds `[model, ...fallbackModels]` and each candidate is mapped through
+# applyThinkingSuffix, which appends `:<level>` to any candidate that does not
+# already carry one. Enumerating models and levels separately is what let a
+# fallback inherit an unsupported level unchecked.
+
 # Read pins from the leading `---` frontmatter block ONLY, so a prompt-body line
 # that happens to start with `model:` is never mistaken for a pin. Both the
 # inline comma-separated and the `- item` block form of `fallbackModels:` are
-# emitted, one model per line.
+# emitted, one model per line, each paired with the file's `thinking:` key.
 frontmatter_pins() {
 	awk '
 		BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34) }
@@ -72,7 +82,13 @@ frontmatter_pins() {
 		/^model:[[:space:]]*/ {
 			value = $0
 			sub(/^model:[[:space:]]*/, "", value)
-			if (value != "") print value
+			if (value != "") pins[++n] = value
+			next
+		}
+		/^thinking:[[:space:]]*/ {
+			value = $0
+			sub(/^thinking:[[:space:]]*/, "", value)
+			think = value
 			next
 		}
 		/^fallbackModels:[[:space:]]*/ {
@@ -87,29 +103,46 @@ frontmatter_pins() {
 				value = substr(value, 2, length(value) - 2)
 			}
 			count = split(value, parts, ",")
-			for (i = 1; i <= count; i++) print parts[i]
+			for (i = 1; i <= count; i++) pins[++n] = parts[i]
 			next
 		}
 		list != "" && /^[[:space:]]+-[[:space:]]*/ {
 			value = $0
 			sub(/^[[:space:]]+-[[:space:]]*/, "", value)
-			if (value != "") print value
+			if (value != "") pins[++n] = value
 			next
 		}
+		# The `thinking:` key may follow the pins it applies to, so pair at the end.
+		END { for (i = 1; i <= n; i++) print pins[i] "\t" think }
 	' "$1"
 }
 
-# Emit `<source>\t<model>` for every model pinned in the settings file.
+# Emit `<source>\t<model>\t<sibling-level>` for every model pinned in settings.
+# Select by TYPE: the fork accepts a literal `false` for a model, a fallback list
+# and a thinking level alike, and a `false` clears the value rather than setting
+# one, so a null check would hand a boolean to the string concatenation below.
 settings_pins() {
 	jq -r '
-		(.subagents.defaultModel // empty | "subagents.defaultModel\t" + .),
-		(.subagents.agentOverrides // {} | to_entries[] | . as $entry
-			| ($entry.value.model // empty | "subagents.agentOverrides." + $entry.key + ".model\t" + .),
-			  ($entry.value.fallbackModels // [] | .[] | "subagents.agentOverrides." + $entry.key + ".fallbackModels\t" + .)),
-		(.subagents.watchdog.main.model // empty | "subagents.watchdog.main.model\t" + .),
-		(.subagents.watchdog.children.model // empty | "subagents.watchdog.children.model\t" + .),
-		(.subagents.watchdog.children.overrides // {} | to_entries[] | . as $entry
-			| ($entry.value.model // empty | "subagents.watchdog.children.overrides." + $entry.key + ".model\t" + .))
+		def level($v): if ($v | type) == "string" then $v else "" end;
+		def row($source; $model; $thinking):
+			select(($model | type) == "string" and ($model | length) > 0)
+			| $source + "\t" + $model + "\t" + level($thinking);
+		def fallbacks($v): if ($v | type) == "array" then $v[] else empty end;
+		(.subagents // {}) as $s
+		| row("subagents.defaultModel"; $s.defaultModel; $s.defaultThinking),
+		  ($s.agentOverrides // {} | to_entries[] | . as $entry
+			| row("subagents.agentOverrides." + $entry.key + ".model";
+				$entry.value.model; $entry.value.thinking),
+			  (fallbacks($entry.value.fallbackModels)
+				| row("subagents.agentOverrides." + $entry.key + ".fallbackModels";
+					.; $entry.value.thinking))),
+		  ($s.watchdog.main // {}
+			| row("subagents.watchdog.main.model"; .model; .thinking)),
+		  ($s.watchdog.children // {}
+			| row("subagents.watchdog.children.model"; .model; .thinking)),
+		  ($s.watchdog.children.overrides // {} | to_entries[] | . as $entry
+			| row("subagents.watchdog.children.overrides." + $entry.key + ".model";
+				$entry.value.model; $entry.value.thinking))
 	' "$1"
 }
 
@@ -160,20 +193,6 @@ pin_thinking_level() {
 	esac
 }
 
-# Emit `<model>\t<thinking>` for an agent definition that pins both. A thinking
-# level with no model pin inherits the model, whose support cannot be resolved
-# from this file alone, so those are left to the settings-level default.
-frontmatter_model_thinking() {
-	awk '
-		NR == 1 && $0 == "---" { in_fm = 1; next }
-		in_fm && $0 == "---" { exit }
-		!in_fm { next }
-		/^model:[[:space:]]*/ { v = $0; sub(/^model:[[:space:]]*/, "", v); model = v; next }
-		/^thinking:[[:space:]]*/ { v = $0; sub(/^thinking:[[:space:]]*/, "", v); think = v; next }
-		END { if (model != "" && think != "") print model "\t" think }
-	' "$1"
-}
-
 # Mirrors getSupportedThinkingLevels in the fork's src/shared/model-info.ts: an
 # explicit null means unsupported, an ABSENT key means supported (it is
 # undefined, not null), a missing map means every level except max, and
@@ -218,15 +237,6 @@ check_thinking() {
 	fi
 }
 
-# A sibling `thinking:` key takes effect only when the model pin carries no
-# `:<level>` suffix. Where it does carry one, check_pin already validated that
-# suffix - the level that actually runs - and the key is dead config, so
-# checking it too would report the wrong level and report it twice.
-check_sibling_thinking() {
-	[[ -z "$(pin_thinking_level "$2")" ]] || return 0
-	check_thinking "$1" "$2" "$3"
-}
-
 check_pin() {
 	local source="$1" pin
 	pin="$(normalize_pin "$2")"
@@ -237,7 +247,7 @@ check_pin() {
 		echo "  $source pins \"$pin\", absent from enabledModels in $SETTINGS"
 		rc=1
 	fi
-	check_thinking "$source" "$2" ""
+	check_thinking "$source" "$2" "$3"
 }
 
 # Capture each extractor's output AND status before iterating. Reading straight
@@ -250,50 +260,20 @@ for def in "$AGENTS_DIR"/*.md; do
 		echo "check-pi-model-pins: could not read frontmatter pins from $def" >&2
 		exit 2
 	fi
-	while IFS= read -r pin; do
-		check_pin "$(basename "$def")" "$pin"
+	while IFS=$'\t' read -r pin level; do
+		[[ -n "$pin" ]] || continue
+		check_pin "$(basename "$def")" "$pin" "$level"
 	done <<<"$fm_pins"
-	if ! fm_thinking="$(frontmatter_model_thinking "$def")"; then
-		echo "check-pi-model-pins: could not read frontmatter thinking from $def" >&2
-		exit 2
-	fi
-	while IFS=$'\t' read -r fm_model fm_level; do
-		[[ -n "$fm_model" ]] || continue
-		check_sibling_thinking "$(basename "$def")" "$fm_model" "$fm_level"
-	done <<<"$fm_thinking"
 done
 
 if ! settings_pin_rows="$(settings_pins "$SETTINGS")"; then
 	echo "check-pi-model-pins: could not read settings pins from $SETTINGS" >&2
 	exit 2
 fi
-while IFS=$'\t' read -r source pin; do
+while IFS=$'\t' read -r source pin level; do
 	[[ -n "$source" ]] || continue
-	check_pin "$source" "$pin"
+	check_pin "$source" "$pin" "$level"
 done <<<"$settings_pin_rows"
-
-# Select on TYPE, not on non-null: the fork accepts a literal `false` for both
-# `model` and `thinking` (it clears the inherited value), so a null check lets a
-# boolean reach the string concatenation and aborts jq on a legal config. A
-# cleared model has nothing to resolve a level against and a cleared level is
-# thinking deliberately off, so neither is a row worth emitting.
-if ! settings_thinking_rows="$(jq -r '
-	def rows($source): select((.model | type) == "string" and (.thinking | type) == "string")
-		| $source + "\t" + .model + "\t" + .thinking;
-	(.subagents.watchdog.main // {} | rows("subagents.watchdog.main")),
-	(.subagents.watchdog.children // {} | rows("subagents.watchdog.children")),
-	(.subagents.watchdog.children.overrides // {} | to_entries[]
-		| ("subagents.watchdog.children.overrides." + .key) as $source | .value | rows($source)),
-	(.subagents.agentOverrides // {} | to_entries[]
-		| ("subagents.agentOverrides." + .key) as $source | .value | rows($source))
-' "$SETTINGS")"; then
-	echo "check-pi-model-pins: could not read settings thinking levels from $SETTINGS" >&2
-	exit 2
-fi
-while IFS=$'\t' read -r source s_model s_level; do
-	[[ -n "$source" ]] || continue
-	check_sibling_thinking "$source" "$s_model" "$s_level"
-done <<<"$settings_thinking_rows"
 
 if [[ "$rc" -eq 0 ]]; then
 	if [[ -n "$STORE" && "$thinking_checked" -eq 0 ]]; then

@@ -46,7 +46,13 @@ BUILTINS='["context-builder","delegate","oracle","planner","researcher","reviewe
 # non-null test reports an invariant as met by a config that unsets the very
 # field the invariant is about; an absent key and an empty string read the same
 # way. One predicate, applied everywhere, keeps that from being re-decided.
-JQ_PRELUDE='def usable: type == "string" and length > 0;'
+JQ_PRELUDE='def usable: type == "string" and length > 0;
+	# Mirrors globToRegExp in the fork: every RegExp special except `*` is
+	# escaped, `*` becomes `.*`, the result is anchored, and matching is
+	# case-insensitive against the full provider/id.
+	def scope_regex: "^" + (gsub("(?<c>[.+^${}()|\\[\\]\\\\])"; "\\" + .c) | gsub("\\*"; ".*")) + "$";
+	def banned_models: ["anthropic/claude-opus-5", "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4-5-20251001"];
+	def matches_banned: scope_regex as $re | any(banned_models[]; test($re; "i"));'
 
 rc=0
 fail() {
@@ -93,6 +99,13 @@ check "modelScope must be enforced with a non-empty allow list" \
 		and (.subagents.modelScope.allow | type) == "array"
 		and (.subagents.modelScope.allow | length) > 0
 		and all(.subagents.modelScope.allow[]; usable)'
+
+# An allow list disarms the Anthropic ban just as thoroughly by being too broad
+# as by being empty: `*` admits every provider. The sibling scan above cannot see
+# it, because the banned name never appears in the file - it arrives at runtime -
+# so the patterns are matched against Anthropic ids the way the fork would.
+check "no modelScope allow pattern may match an Anthropic model" \
+	'all(.subagents.modelScope.allow[]; matches_banned | not)'
 
 if [[ "$rc" -eq 0 ]]; then
 	echo "check-pi-subagent-config: pi subagent configuration invariants hold"

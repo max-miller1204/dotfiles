@@ -190,9 +190,8 @@ hard "pi retired Plan subagent definition removed" test ! -e "$HOME/.pi/agent/ag
 hard "pi shaper subagent definition materialized" test -f "$HOME/.pi/agent/agents/shaper.md"
 # Package name, the Anthropic ban, tier coverage, and the watchdog invariants are
 # shared with the CI job of the same name so a regression fails a PR instead of
-# waiting for this dispatch-only workflow. Passing the generated models store
-# additionally validates every pinned thinking level against what the model
-# really supports - a level it does not support runs with thinking OFF.
+# waiting for this dispatch-only workflow. These need no machine state, so unlike
+# the model pin check further down they run here, beside the files they describe.
 # Run outside `hard` so the per-invariant diagnostic survives (hard discards both
 # of its command's output streams).
 SUBAGENT_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-subagent-config.sh" \
@@ -200,17 +199,6 @@ SUBAGENT_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-subag
 SUBAGENT_RC=$?
 [[ -n "$SUBAGENT_REPORT" ]] && echo "$SUBAGENT_REPORT"
 hard "pi subagent configuration invariants hold" test "$SUBAGENT_RC" -eq 0
-# Shared with the CI job of the same name; run outside `hard` so its per-file
-# diagnostic survives (hard discards both of its command's output streams).
-# The models store is machine-only state, so only this caller can pass it; with
-# it the script also proves every pinned thinking level is one its model really
-# supports, rather than a level that silently resolves to thinking OFF.
-PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \
-	"$HOME/.pi/agent/agents" "$HOME/.pi/agent/settings.json" \
-	"$HOME/.pi/agent/models-store.json" 2>&1)
-PIN_RC=$?
-[[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
-hard "pi subagent model and thinking pins are valid" test "$PIN_RC" -eq 0
 hard "pi Hunk review skill declared" \
 	jq -e '.skills == ["~/.local/share/npm-hunkdiff/lib/node_modules/hunkdiff/skills/hunk-review/SKILL.md"]' \
 	"$HOME/.pi/agent/settings.json"
@@ -272,6 +260,27 @@ PI_RUNTIME_RC=$?
 [[ -n "$PI_RUNTIME_REPORT" ]] && echo "$PI_RUNTIME_REPORT"
 hard "Native Pi loads managed extensions and npm packages through fnm npm" \
 	test "$PI_RUNTIME_RC" -eq 0
+
+# Shared with the CI job of the same name; run outside `hard` so its per-file
+# diagnostic survives (hard discards both of its command's output streams).
+# The models store is machine-only state, so only this caller can pass it; with
+# it the script also proves every pinned thinking level is one its model really
+# supports, rather than a level that silently resolves to thinking OFF. pi writes
+# that store only when a configured provider refreshes its catalog, which is why
+# this runs AFTER the smoke above - the first real pi invocation of the whole
+# apply - and still treats the store as optional: a runner with no provider
+# credentials never gets one, and the model pins must stay checked regardless.
+PIN_ARGS=("$HOME/.pi/agent/agents" "$HOME/.pi/agent/settings.json")
+if [[ -f "$HOME/.pi/agent/models-store.json" ]]; then
+	PIN_ARGS+=("$HOME/.pi/agent/models-store.json")
+else
+	echo "INFO: no pi models store on this box, so thinking levels were not checked against real model support"
+fi
+PIN_REPORT=$(bash "$(dirname "${BASH_SOURCE[0]}")/../scripts/check-pi-model-pins.sh" \
+	"${PIN_ARGS[@]}" 2>&1)
+PIN_RC=$?
+[[ -n "$PIN_REPORT" ]] && echo "$PIN_REPORT"
+hard "pi subagent model and thinking pins are valid" test "$PIN_RC" -eq 0
 
 hard "generated no-mistakes skills synchronized" \
 	bash -c 'test -f "$HOME/.agents/skills/no-mistakes/SKILL.md" && cmp -s "$HOME/.agents/skills/no-mistakes/SKILL.md" "$HOME/.claude/skills/no-mistakes/SKILL.md"'

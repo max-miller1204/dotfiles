@@ -122,6 +122,7 @@ jobs:
           shellcheck --severity=warning -s bash \
             dot_claude/executable_statusline.sh \
             .github/scripts/check-pi-model-pins.sh \
+            .github/scripts/check-pi-subagent-config.sh \
             .github/scripts/create-direnv-flake-fixture.sh \
             .github/scripts/test-nix-profile.sh \
             .github/scripts/test-pi-nix-runtime.sh \

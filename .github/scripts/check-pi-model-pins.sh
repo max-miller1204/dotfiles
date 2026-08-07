@@ -19,9 +19,13 @@
 # source tree in CI and against the applied ~/.pi tree in the native E2E.
 #
 # The optional third input is pi's generated models store, which only exists on
-# a real machine. Given it, every pinned THINKING level is additionally checked
-# against what its model actually supports, because a level the model does not
-# support resolves to nothing and the agent silently runs with thinking OFF.
+# a real machine and only once a configured provider has refreshed its catalog.
+# Given it, every pinned THINKING level is additionally checked against what its
+# model actually supports, because a level the model does not support resolves
+# to nothing and the agent silently runs with thinking OFF. A level counts
+# whether it is written as a `thinking:` key or as a `:<level>` suffix on the
+# model, and the suffix wins where both appear, as resolveEffectiveThinking
+# resolves it.
 # Thinking lives beside the model in both frontmatter and settings, so it is
 # validated here rather than in a second script that would have to re-parse the
 # same frontmatter.
@@ -109,9 +113,8 @@ settings_pins() {
 	' "$1"
 }
 
-# enabledModels holds bare `provider/id` entries, while a pin may be quoted and
-# may carry the `:<level>` thinking suffix pi-subagents appends at runtime.
-normalize_pin() {
+# A pin may be quoted in YAML; strip surrounding whitespace and one quote layer.
+unquote_pin() {
 	local pin="$1"
 	pin="${pin#"${pin%%[![:space:]]*}"}"
 	pin="${pin%"${pin##*[![:space:]]}"}"
@@ -125,12 +128,36 @@ normalize_pin() {
 		pin="${pin%\'}"
 		;;
 	esac
+	printf '%s' "$pin"
+}
+
+# enabledModels holds bare `provider/id` entries, while a pin may carry the
+# `:<level>` thinking suffix pi-subagents appends at runtime. The recognized
+# suffixes are exactly the fork's THINKING_LEVELS (src/shared/model-info.ts):
+# splitKnownThinkingSuffix leaves anything else as part of the model id, so
+# stripping a level the fork does not know would hide a broken pin.
+normalize_pin() {
+	local pin
+	pin="$(unquote_pin "$1")"
 	case "$pin" in
-	*/*:none | */*:off | */*:minimal | */*:low | */*:medium | */*:high | */*:xhigh | */*:max)
+	*/*:off | */*:minimal | */*:low | */*:medium | */*:high | */*:xhigh | */*:max)
 		pin="${pin%:*}"
 		;;
 	esac
 	printf '%s' "$pin"
+}
+
+# The thinking level a pin carries in suffix form, empty when it carries none.
+# resolveEffectiveThinking returns this suffix ahead of any sibling `thinking:`
+# key, so it - not the key - is the level that actually runs.
+pin_thinking_level() {
+	local pin
+	pin="$(unquote_pin "$1")"
+	case "$pin" in
+	*/*:off | */*:minimal | */*:low | */*:medium | */*:high | */*:xhigh | */*:max)
+		printf '%s' "${pin##*:}"
+		;;
+	esac
 }
 
 # Emit `<model>\t<thinking>` for an agent definition that pins both. A thinking
@@ -170,12 +197,17 @@ checked=0
 thinking_checked=0
 
 check_thinking() {
-	local source="$1" model level supported
+	local source="$1" model level suffix supported
 	model="$(normalize_pin "$2")"
 	level="$(normalize_pin "$3")"
+	suffix="$(pin_thinking_level "$2")"
+	# Mirror resolveEffectiveThinking: a `:<level>` suffix on the model wins over
+	# whatever a sibling key says, so validate the level that really runs.
+	[[ -z "$suffix" ]] || level="$suffix"
 	[[ -n "$STORE" && -n "$model" && -n "$level" ]] || return 0
-	# A bare `thinking: false` is the documented opt-out, not a level.
-	[[ "$level" != "false" ]] || return 0
+	# `false` is the documented opt-out and `inherit` defers to the session, so
+	# neither is a level to resolve against the model.
+	[[ "$level" != "false" && "$level" != "inherit" ]] || return 0
 	supported="$(thinking_supported "$model" "$level")"
 	# An unknown model is check_pin's finding, not this one's.
 	[[ -n "$supported" ]] || return 0
@@ -184,6 +216,15 @@ check_thinking() {
 		echo "  $source pins thinking \"$level\" on \"$model\", which does not support it (it would run with thinking OFF)"
 		rc=1
 	fi
+}
+
+# A sibling `thinking:` key takes effect only when the model pin carries no
+# `:<level>` suffix. Where it does carry one, check_pin already validated that
+# suffix - the level that actually runs - and the key is dead config, so
+# checking it too would report the wrong level and report it twice.
+check_sibling_thinking() {
+	[[ -z "$(pin_thinking_level "$2")" ]] || return 0
+	check_thinking "$1" "$2" "$3"
 }
 
 check_pin() {
@@ -196,6 +237,7 @@ check_pin() {
 		echo "  $source pins \"$pin\", absent from enabledModels in $SETTINGS"
 		rc=1
 	fi
+	check_thinking "$source" "$2" ""
 }
 
 # Capture each extractor's output AND status before iterating. Reading straight
@@ -217,7 +259,7 @@ for def in "$AGENTS_DIR"/*.md; do
 	fi
 	while IFS=$'\t' read -r fm_model fm_level; do
 		[[ -n "$fm_model" ]] || continue
-		check_thinking "$(basename "$def")" "$fm_model" "$fm_level"
+		check_sibling_thinking "$(basename "$def")" "$fm_model" "$fm_level"
 	done <<<"$fm_thinking"
 done
 
@@ -243,11 +285,16 @@ if ! settings_thinking_rows="$(jq -r '
 fi
 while IFS=$'\t' read -r source s_model s_level; do
 	[[ -n "$source" ]] || continue
-	check_thinking "$source" "$s_model" "$s_level"
+	check_sibling_thinking "$source" "$s_model" "$s_level"
 done <<<"$settings_thinking_rows"
 
 if [[ "$rc" -eq 0 ]]; then
-	if [[ -n "$STORE" ]]; then
+	if [[ -n "$STORE" && "$thinking_checked" -eq 0 ]]; then
+		# A store pi wrote without provider credentials holds no catalog, so every
+		# pinned model is unknown to it and every level goes unresolved. Say so
+		# rather than reporting a pass for a check that examined nothing.
+		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels; NO thinking level could be resolved against $STORE, so thinking support went unchecked"
+	elif [[ -n "$STORE" ]]; then
 		echo "check-pi-model-pins: $checked pinned model(s) in enabledModels, $thinking_checked thinking level(s) supported by their model"
 	else
 		echo "check-pi-model-pins: $checked pinned model(s), all present in enabledModels"

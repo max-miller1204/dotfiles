@@ -2,9 +2,11 @@
        ~/.config/opencode/opencode.json, which opencode MERGES with the user's
        hand-owned ~/.config/opencode/opencode.jsonc; chezmoi never owns the .jsonc,
        so settings the user keeps there (e.g. `model`, `provider`) stay hand-owned
-       and are never overwritten. LSP enablement (`lsp: true`) lives here, not in
-       the hand-owned .jsonc, so it is tracked across machines. The merge is verified live (opencode 1.17.13 loads both
-       files and the resolved config carries both `lsp: true` and the MCP servers);
+       and are never overwritten. Language tooling enablement (`formatter: true`
+       and `lsp: true`) and compaction policy live here, not in the hand-owned
+       .jsonc, so they are tracked across machines. The merge is verified live
+       (opencode 1.17.13 loads both files and the resolved config carries the
+       managed settings and MCP servers);
        the first-match resolveConfigPath in opencode's cli/cmd/mcp.ts is the write
        target for `opencode mcp add`, not the runtime loader, which merges every
        config in the dir. Unlike Claude (~/.claude.json) and Codex
@@ -23,7 +25,13 @@
 {{- end -}}
 {
   "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
   "lsp": true,
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "tail_turns": 4
+  },
   "mcp": {
 {{- range $i, $s := $ocServers }}
 {{-   $rel := get $s "command_rel" }}

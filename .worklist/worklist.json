@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "revision": 21,
+  "goals": [
+    {
+      "id": "drop-the-unused-claude-code-fork",
+      "title": "Drop the unused CLAUDE_CODE_FORK_SUBAGENT env var",
+      "description": "dot_claude/settings.json:4 sets \"CLAUDE_CODE_FORK_SUBAGENT\": \"1\" alongside CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS and CLAUDE_CODE_SCROLL_SPEED.\nForked subagents are no longer gated behind that flag, so the entry is dead config that survives into every session.\nRemove it, confirm no rule, script, or E2E check in .github/e2e/verify.sh asserts on it, and re-run chezmoi apply to land the change in $HOME.",
+      "status": "open",
+      "createdAt": "2026-08-05T20:25:42.380Z",
+      "updatedAt": "2026-08-07T06:37:10.429Z"
+    },
+    {
+      "id": "switch-pi-subagents-to-the-nicobailon",
+      "title": "Switch pi-subagents to the nicobailon fork",
+      "description": "Replace the published npm:@tintinweb/pi-subagents package with https://github.com/nicobailon/pi-subagents in the pi extension list.\nTouch points: dot_pi/agent/settings.json:26 (the packages array), .github/e2e/verify.sh:189 and :219 (the jq assertion and the install line), README.md:326 and :334, and .claude/rules/agents/pi.md:38 and :41, which both name the tintinweb package by hand.\nConfirm what package spec pi accepts for a git source before editing, since the settings entry is a package string and not a URL field.\nRe-check the managed Explore and Plan definitions in dot_pi/agent/agents/ against the fork built-ins, because pi.md flags those as hand-maintained restatements of upstream defaults that do not track package updates.",
+      "status": "done",
+      "createdAt": "2026-08-05T20:25:50.860Z",
+      "updatedAt": "2026-08-07T06:37:10.429Z",
+      "completedAt": "2026-08-05T21:04:52.569Z"
+    },
+    {
+      "id": "wipe-pi-and-html-artifacts-skill",
+      "title": "Wipe html-artifacts, git-diff, worktree-guard, codex-review skill",
+      "status": "open",
+      "createdAt": "2026-08-07T05:44:43.082Z",
+      "updatedAt": "2026-08-09T20:27:12.904Z"
+    },
+    {
+      "id": "clean-up-readme-split-it-up",
+      "title": "Clean up README (split it up)",
+      "status": "open",
+      "createdAt": "2026-08-07T06:35:49.135Z",
+      "updatedAt": "2026-08-07T06:36:31.319Z",
+      "description": "Look at https://github.com/nicobailon/pi-subagents and how he refactored his README"
+    },
+    {
+      "id": "remove-claude-lsp-s",
+      "title": "Remove Claude LSP's",
+      "status": "open",
+      "createdAt": "2026-08-09T20:27:27.618Z",
+      "updatedAt": "2026-08-18T08:50:28.694Z",
+      "description": "I want to audit the Claude LSPs. I'm not sure if they're contributing or hurting my context. You can run an audit. Let me know what you think.\n\nAudit result (2026-08-11): keeping all five LSP plugins. They are not a context cost. Each plugin ships only a README and LICENSE; the whole payload is one lspServers block in the marketplace catalog, with no skills, agents, commands, hooks, or MCP servers. Total context is one LSP tool (~400 tokens of schema, deferred in current builds), and zero LSP diagnostics are injected: 0 hits across all 556 transcripts. They are also not contributing: the LSP tool has been called 23 times ever, all 23 in the single session that explicitly tested them. The real costs are RAM (~1.03 GB resident per session in this repo alone: tsserver 523 MB + 144 MB, typescript-language-server 72 MB, pyright 290 MB, spawned eagerly and never queried), 432 MB of disk, and ~516 lines of repo infrastructure across 18 files. Decision was to accept those and keep the current set."
+    }
+  ],
+  "retiredIds": [
+    "re-capture-local-dotfile-drift-into-the",
+    "start-claude-with-the-chrome"
+  ]
+}
